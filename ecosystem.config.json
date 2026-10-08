@@ -1,0 +1,16 @@
+{
+  "apps": [
+    {
+      "name": "hashtag_billionaire",
+      "script": "index.js",
+      "exec_mode": "fork",
+      "instances": 1,
+      "autorestart": true,
+      "watch": false,
+      "time": true,
+      "env": {
+        "NODE_ENV": "development"
+      }
+    }
+  ]
+}

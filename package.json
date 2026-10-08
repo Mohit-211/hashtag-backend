@@ -1,0 +1,70 @@
+{
+  "name": "hashtag-billionaire-node",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "engines": {
+    "node": ">=16.20.1"
+  },
+ "nodemonConfig": {
+  "ignore": [
+    "**/public/uploads/**",
+    "**/uploads/**",
+    "src/services/public/uploads/**"
+  ]
+},
+  "scripts": {
+    "start": "pm2 start ecosystem.config.json --no-daemon",
+    "staging": "pm2 start ecosystem.staging-config.json --no-daemon",
+    "dev": "cross-env NODE_ENV=development nodemon --ext js,mjs,json,yaml index.js",
+    "auth": "cross-env NODE_ENV=development node src/config/createSuperAdmin.js",
+    "migrate": "cross-env NODE_ENV=development node src/config/migrateTable.js"
+  },
+  "author": "CA",
+  "license": "",
+  "dependencies": {
+    "axios": "^1.4.0",
+    "bcryptjs": "^2.4.3",
+    "body-parser": "^1.20.1",
+    "compression": "^1.7.4",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "cross-env": "^7.0.3",
+    "dotenv": "^16.0.3",
+    "express": "^4.18.2",
+    "express-jwt": "^8.4.1",
+    "express-rate-limit": "^6.7.0",
+    "firebase-admin": "^11.10.1",
+    "he": "^1.2.0",
+    "helmet": "^6.0.1",
+    "http-status": "^1.6.2",
+    "joi": "^17.7.1",
+    "jsonwebtoken": "^9.0.0",
+    "moment": "^2.29.4",
+    "moment-timezone": "^0.5.43",
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.1",
+    "mysql2": "^3.1.2",
+    "node-cron": "^3.0.2",
+    "nodemailer": "^6.9.1",
+    "p-limit": "^7.3.0",
+    "passport": "^0.6.0",
+    "password-validator": "^5.3.0",
+    "pm2": "^5.3.0",
+    "randomatic": "^3.1.1",
+    "rootpath": "^0.1.2",
+    "sequelize": "^6.28.0",
+    "slugify": "^1.6.6",
+    "socket.io": "^4.7.2",
+    "square": "^44.0.1",
+    "stripe": "^12.17.0",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.0",
+    "uuid": "^9.0.1",
+    "winston": "^3.8.2",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  }
+}
