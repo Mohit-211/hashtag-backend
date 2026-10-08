@@ -3,7 +3,6 @@ const catchAsync = require("../../utils/catchAsync");
 const responseWrapper = require("../../config/responseWrapper");
 const { ottoCapService } = require("../../services");
 const { ImportBatch, ProductVariant } = require("../../models");
-const ApiError = require("../../utils/ApiError");
 
 const importOttoCapInventory = catchAsync(async (req, res) => {
   const data = await ottoCapService.importOttoCapInventory();

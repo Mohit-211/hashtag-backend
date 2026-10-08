@@ -1,15 +1,11 @@
-const axios = require("axios");
 const {
   ImportBatch,
-  Brand,
   SourceRawData,
   Product,
   ProductAttachment,
   ProductVariant,
   VariantAttachment,
-  ProductCategory,
   ProductCategoryMapping,
-  Size,
   Ottocap,
   OttocapCatalog,
 } = require("../../models");

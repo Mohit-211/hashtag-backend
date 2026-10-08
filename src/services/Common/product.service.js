@@ -10,7 +10,6 @@ const {
   ProductCategoryMapping,
   Size,
   VariantAttachment,
-  ImportBatch,
   SourceRawData,
   VariantWarehouse,
   Cart,
@@ -23,10 +22,8 @@ const {
   ProductAddOn,
 } = require("../../models");
 const ApiError = require("../../utils/ApiError");
-const { Op, Sequelize } = require("sequelize");
+const { Op } = require("sequelize");
 const ssClient = require("../../config/ssClient");
-const pLimit = require("p-limit").default;
-const { mapSSProduct } = require("../../config/ss.adapter");
 const sequelize = require("../../config/central.db");
 const { calculatePricing, getMarkupPercent } = require("../../config/pricing");
 const { downloadSupplierImage } = require("./supplierImage.service");
@@ -38,9 +35,6 @@ const {
   resolveTierProductIds,
   resolveAllTierProductIds,
 } = require("./tier.service");
-const limit = pLimit(5);
-
-const BASE_URL = "https://www.ssactivewear.com/";
 
 const createSkuGenerator = async (productId, requestVariants) => {
   const normalize = (sku) => String(sku).trim().toUpperCase();
@@ -1377,141 +1371,6 @@ const duplicateProduct = async (productId) => {
     throw error;
   }
 };
-
-// const addProductVariants = async (body, files) => {
-//   try {
-//     let { product_id, variants } = body;
-
-//     if (variants && typeof variants === "string") {
-//       variants = JSON.parse(variants);
-//     }
-
-//     if (!Array.isArray(variants) || !variants.length) {
-//       throw new Error("variants required");
-//     }
-
-//     const createdVariants = [];
-
-//     let imageIndex = 0;
-
-//     const sizes = await Size.findAll({
-//       where: { product_id },
-//     });
-
-//     const sizeMap = new Map(sizes.map((s) => [s.id, s]));
-
-//     for (const v of variants) {
-//       if (!v.sku) {
-//         throw new Error("sku required");
-//       }
-
-//       let selectedSize = null;
-
-//       if (v.size_id) {
-//         selectedSize = sizeMap.get(Number(v.size_id));
-//       } else if (v.size) {
-//         const sizeName = String(v.size).trim();
-
-//         selectedSize = await Size.findOne({
-//           where: {
-//             product_id,
-//             name: sizeName,
-//           },
-//         });
-
-//         if (!selectedSize) {
-//           selectedSize = await Size.create({
-//             product_id,
-//             name: sizeName,
-//             type: v.option_name || "Size",
-//           });
-
-//           sizeMap.set(selectedSize.id, selectedSize);
-//         }
-//       }
-
-//       // ✅ Use first bulk pricing tier as variant price
-//       let variantPrice = Number(v.price || 0);
-
-//       if (
-//         Array.isArray(v.bulk_pricing) &&
-//         v.bulk_pricing.length > 0 &&
-//         v.bulk_pricing[0].price !== undefined
-//       ) {
-//         variantPrice = Number(v.bulk_pricing[0].price);
-//       }
-
-//       const variant = await ProductVariant.create({
-//         product_id,
-
-//         sku: v.sku,
-
-//         price: variantPrice,
-
-//         case_price: Number(v.case_price || 0),
-
-//         stock: Number(v.stock || 0),
-
-//         color: v.color || null,
-
-//         color_code: v.color_code || null,
-
-//         size_id: selectedSize?.id || null,
-
-//         size: selectedSize?.name || null,
-
-//         supplier: "MANUAL",
-
-//         last_supplier_sync_at: new Date(),
-
-//         meta: {
-//           bulk_pricing: Array.isArray(v.bulk_pricing) ? v.bulk_pricing : [],
-//         },
-//       });
-
-//       const variantImages = [];
-
-//       if (files?.variant_images?.length) {
-//         const count = Number(v.image_count || 1);
-
-//         for (let j = 0; j < count; j++) {
-//           const file = files.variant_images[imageIndex];
-
-//           if (!file) break;
-
-//           variantImages.push({
-//             variant_id: variant.id,
-//             file_name: file.filename,
-//             file_uri: `${process.env.IMAGE_BASE_URL}/images/${file.filename}`,
-//             file_size: file.size,
-//             is_primary: j === 0,
-//             supplier: "MANUAL",
-//             source_url: null,
-//             file_type: "image",
-//           });
-
-//           imageIndex++;
-//         }
-//       }
-
-//       if (variantImages.length) {
-//         await VariantAttachment.bulkCreate(variantImages);
-//       }
-
-//       createdVariants.push(variant);
-//     }
-
-//     return createdVariants;
-//   } catch (error) {
-//     console.error(error);
-//     console.error(error.message);
-//     console.error(error.stack);
-//     console.error(error.parent);
-//     console.error(error.original);
-
-//     throw error;
-//   }
-// };
 
 const getSearchVariants = (search) => {
   if (!search) return [];
@@ -4337,7 +4196,7 @@ const saveSSProductToDB = async (data, batchId) => {
       // 🔥 VARIANT IMAGES
       // =====================================
 
-      for (const [index, img] of (v.images || []).entries()) {
+      for (const img of v.images || []) {
         const localImage = downloadedVariantImages[`${v.sku}-${img}`];
 
         if (!localImage) continue;

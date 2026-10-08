@@ -7,12 +7,11 @@ const {
   ProductCategory,
   ImportBatch,
   ParentCategory,
-  GrandCategory,
   Product,
   Brand,
 } = require("../../models");
 const ssClient = require("../../config/ssClient");
-const { Op, Sequelize } = require("sequelize");
+const { Op } = require("sequelize");
 
 const createCategory = async (reqBody) => {
   try {

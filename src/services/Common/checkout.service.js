@@ -9,18 +9,13 @@ const {
   Payment,
   Order,
   OrderItem,
-  Address,
   Profile,
   VariantAttachment,
   Product,
   Size,
   ProductAttachment,
 } = require("../../models");
-const { calculatePricing } = require("../../config/pricing");
-const {
-  createShipmentForOrder,
-  cancelShipstationShipment,
-} = require("../../config/shipstation");
+const { cancelShipstationShipment } = require("../../config/shipstation");
 
 const { SquareClient, SquareEnvironment } = require("square");
 const decodeHtmlEntities = require("../../utils/decodeHtmlEntities");
@@ -165,7 +160,6 @@ const createPayment = async (body) => {
     let actualPaymentMode = payment_mode || "CARD";
     // CARD
     if (payment.sourceType === "CARD") {
-      const brand = payment.cardDetails?.card?.cardBrand;
       const cardType = payment.cardDetails?.card?.cardType;
 
       if (actualPaymentMode === "CARD") {
@@ -1201,97 +1195,6 @@ const getAllPayments = async (query) => {
 
       /*
        |--------------------------------------------------------------------------
-       | ORDER PRICING BREAKDOWN
-       |--------------------------------------------------------------------------
-       */
-
-      let orderPricingBreakdown = null;
-
-      if (pricingSnapshot) {
-        if (isManual) {
-          orderPricingBreakdown = {
-            actual_product_price: Number(
-              pricingSnapshot?.product_price?.base_price || 0,
-            ),
-
-            supplier_markup: 0,
-
-            final_product_price: Number(
-              pricingSnapshot?.product_price?.final_product_price || 0,
-            ),
-
-            product_total: Number(
-              pricingSnapshot?.totals?.product_total ||
-                pricingSnapshot?.product_price?.total ||
-                0,
-            ),
-
-            customization_price: Number(
-              pricingSnapshot?.totals?.customization_total ||
-                pricingSnapshot?.customization?.total ||
-                0,
-            ),
-
-            addon_price: Number(
-              pricingSnapshot?.totals?.addon_total ||
-                pricingSnapshot?.addon_total ||
-                0,
-            ),
-
-            final_price_per_item: Number(
-              pricingSnapshot?.final_price_per_item || 0,
-            ),
-
-            final_total: Number(
-              pricingSnapshot?.total_price ||
-                pricingSnapshot?.totals?.grand_total ||
-                0,
-            ),
-
-            customization: pricingSnapshot?.customization || null,
-
-            addons: pricingSnapshot?.addons || [],
-
-            pricing_table: [],
-          };
-        } else {
-          /*
-           |--------------------------------------------------------------------------
-           | EXISTING SUPPLIER PRICING
-           |--------------------------------------------------------------------------
-           */
-
-          orderPricingBreakdown = {
-            actual_product_price:
-              pricingSnapshot?.product_price?.actual_price,
-
-            supplier_markup:
-              pricingSnapshot?.product_price?.supplier_markup,
-
-            final_product_price:
-              pricingSnapshot?.product_price?.final_product_price,
-
-            customization_price:
-              pricingSnapshot?.customization_price
-                ?.total_customization_price,
-
-            setup_fee:
-              pricingSnapshot?.customization_price?.setup_fee,
-
-            final_price_per_item:
-              pricingSnapshot?.final_price_per_item,
-
-            final_total:
-              pricingSnapshot?.total_price,
-
-            pricing_table:
-              pricingSnapshot?.pricing_table || [],
-          };
-        }
-      }
-
-      /*
-       |--------------------------------------------------------------------------
        | RESPONSE
        |--------------------------------------------------------------------------
        */
@@ -2004,7 +1907,7 @@ const paypalWebhook = async (body) => {
       // CREATE PAYMENT RECORD
       // ==================================================
 
-      const payment = await Payment.create({
+      await Payment.create({
         transaction_id: captureId,
 
         payment_provider: "PAYPAL",

@@ -48,24 +48,11 @@ const envVarsSchema = Joi.object()
     ACCESSDOMAINS: Joi.string().description(
       "All allow origin URL coma seprated",
     ),
-    STORY_VALIDATION_TIME_SPAN_HOURS: Joi.string().description(
-      "How much time a story is valid to show",
-    ),
     API_BASE_URL: Joi.string().description("Base url for apis"),
     ADMIN_BASE_URL: Joi.string().description("Base url for Admin apis"),
     DEFAULT_TIMEZONE: Joi.string()
       .default("UTC")
       .description("Default Timezone for application"),
-    STRIPE_PUBLISHABLE_KEY: Joi.string().description(
-      "Stripe Secret Credential",
-    ),
-    STRIPE_SECRET_KEY: Joi.string().description("Stripe Secret Credential"),
-    STRIPE_WEBHOOK_SECRET_INTENT_CHARGE: Joi.string().description(
-      "Stripe Secret Credential",
-    ),
-    STRIPE_WEBHOOK_SECRET_CUSTOMER_INVOICE_PRICE: Joi.string().description(
-      "Stripe Secret Credential",
-    ),
     SQUARE_ENVIRONMENT: Joi.string()
       .valid("production", "sandbox")
       .description("Square environment"),
@@ -86,7 +73,6 @@ const envVarsSchema = Joi.object()
     SP_ROLE_ID: Joi.string(),
     ADM_DEPT_ID: Joi.string(),
     DEFAULT_AMOUNT: Joi.number().default(5),
-    DEFAULT_CATEGORY_ID: Joi.number().default(1),
     SUPER_ADMIN_NAME: Joi.string(),
     SUPER_ADMIN_PASSWORD: Joi.string(),
     SUPER_ADMIN_EMAIL: Joi.string(),
@@ -140,14 +126,6 @@ module.exports = {
   API_BASE_URL: envVars.API_BASE_URL,
   ADMIN_BASE_URL: envVars.ADMIN_BASE_URL,
   DEFAULT_TIMEZONE: envVars.DEFAULT_TIMEZONE,
-  STORY_VALIDATION_TIME_SPAN_HOURS: envVars.STORY_VALIDATION_TIME_SPAN_HOURS,
-
-  STRIPE_PUBLISHABLE_KEY: envVars.STRIPE_PUBLISHABLE_KEY,
-  STRIPE_SECRET_KEY: envVars.STRIPE_SECRET_KEY,
-  STRIPE_WEBHOOK_SECRET_INTENT_CHARGE:
-    envVars.STRIPE_WEBHOOK_SECRET_INTENT_CHARGE,
-  STRIPE_WEBHOOK_SECRET_CUSTOMER_INVOICE_PRICE:
-    envVars.STRIPE_WEBHOOK_SECRET_CUSTOMER_INVOICE_PRICE,
 
   SQUARE_ENVIRONMENT: envVars.SQUARE_ENVIRONMENT,
   SQUARE_ACCESS_TOKEN: envVars.SQUARE_ACCESS_TOKEN,
@@ -167,7 +145,6 @@ module.exports = {
   SP_ROLE_ID: envVars.SP_ROLE_ID,
   ADM_DEPT_ID: envVars.ADM_DEPT_ID,
   DEFAULT_AMOUNT: envVars.DEFAULT_AMOUNT,
-  DEFAULT_CATEGORY_ID: envVars.DEFAULT_CATEGORY_ID,
   SUPER_ADMIN_NAME: envVars.SUPER_ADMIN_NAME,
   SUPER_ADMIN_PASSWORD: envVars.SUPER_ADMIN_PASSWORD,
   SUPER_ADMIN_EMAIL: envVars.SUPER_ADMIN_EMAIL,

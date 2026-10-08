@@ -72,19 +72,6 @@ const sendForgotPasswordOTP = async (to, otp) => {
     }
 };
 
-const sendResetPasswordConfirmationMail = async (to) => {
-    try {
-        const subject = 'Successfully Changed password';
-        const text = `Dear user,
-        Your Password Has Been changed Successfully
-        If you did not request any password resets, then ignore this email.`;
-        return await sendEmail(to, subject, text);
-
-    } catch (error) {
-        throw new ApiError(error.statusCode ? error.statusCode : httpStatus.INTERNAL_SERVER_ERROR, error.message);
-    }
-};
-
 const sendAdminCredentials = async (to, password) => {
 	const subject = "Welcome to Hashtag Billionaire: Your Login Credentials";
 	const text = `Dear User,
@@ -150,7 +137,6 @@ const sendSourcingRequestStatusEmail = async (to, name, requestedName, status, a
 
 module.exports = {
     sendForgotPasswordOTP,
-    sendResetPasswordConfirmationMail,
     sendEmailVerification,
     sendAdminCredentials,
     sendUserCredentials,

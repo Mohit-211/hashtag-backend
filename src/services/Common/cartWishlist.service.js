@@ -2,7 +2,7 @@
 
 const sequelize = require("../../config/central.db");
 const { calculatePricing } = require("../../config/pricing");
-const { Sequelize, Op } = require("sequelize");
+const { Op } = require("sequelize");
 const path = require("path");
 const {
   Wishlist,
@@ -1173,7 +1173,6 @@ const addToCart = async (body, files) => {
       type,
       variants = [],
       customization = null,
-      addons = [],
     } = body;
 
     console.log("REQUEST BODY", body);
@@ -3273,7 +3272,7 @@ const decrementCart = async (body) => {
 
 const updateCartQuantity = async (body) => {
   try {
-    const { user, cart_id, quantity } = body;
+    const { cart_id, quantity } = body;
 
     const cart = await Cart.findByPk(cart_id);
 

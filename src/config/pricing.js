@@ -1,14 +1,5 @@
 const { PricingMarkup } = require("../models");
 
-const DEFAULT_MARKUP = 66.67;
-
-const MARKUP_BY_SUPPLIER = {
-  SS: 66.67,
-  SANMAR: 66.67,
-  OTTOCAP: 66.67,
-  SAGE: 49.25,
-};
-
 const getMarkupPercent = async (supplier) => {
   // ✅ Manual products don't use markup
   if (supplier === "MANUAL") {

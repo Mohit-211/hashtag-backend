@@ -1,7 +1,7 @@
 /** @format */
 
 const axios = require("axios");
-const { Op, Sequelize } = require("sequelize");
+const { Op } = require("sequelize");
 const sequelize = require("../../config/central.db");
 const {
   SourceRawData,

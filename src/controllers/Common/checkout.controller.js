@@ -32,7 +32,7 @@ const getSquarePaymentStatus = catchAsync(async (req, res) => {
 });
 
 const squareWebhook = catchAsync(async (req, res) => {
-  const data = await checkoutService.squareWebhook(req.body);
+  await checkoutService.squareWebhook(req.body);
 
   return res.status(200).json({
     success: true,

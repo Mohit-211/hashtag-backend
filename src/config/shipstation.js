@@ -4,7 +4,6 @@ const {
   OrderItem,
   Carrier,
   ProductVariant,
-  Order,
 } = require("../models");
 const { calculatePricing } = require("./pricing");
 

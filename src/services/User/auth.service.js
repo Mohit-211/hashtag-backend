@@ -18,7 +18,6 @@ const ApiError = require("../../utils/ApiError");
 const {
 	sendForgotPasswordOTP,
 	sendEmailVerification,
-	sendOTPMails,
 } = require("../Common/email.service");
 const { generateAuthTokens } = require("../Common/token.service");
 const { otpTypes, userStatusTypes } = require("../../config/types");
@@ -129,7 +128,7 @@ const verifyOTP = async (email, otp, type, role_id) => {
 
 const register = async (body, files, headers) => {
 	try {
-		const { name, email, mobile, password, confirm_password } = body;
+		const { name, email, mobile, password } = body;
 		const { role_id } = headers;
 		let salt = bcrypt.genSaltSync(10);
 		const userObj = {
@@ -300,8 +299,7 @@ const login = async (reqBody, headers) => {
 
 const resetPassword = async (reqBody) => {
 	try {
-		const { old_password, new_password, confirm_password, user, tokenDoc } =
-			reqBody;
+		const { old_password, confirm_password, user, tokenDoc } = reqBody;
 
 		const validPass = await bcrypt.compare(old_password, user?.password);
 		if (!validPass) {
@@ -335,7 +333,7 @@ const resetPassword = async (reqBody) => {
 
 const forgotPassword = async (reqBody) => {
 	try {
-		const { email, password, confirm_password, token, user, otpDoc } = reqBody;
+		const { password, confirm_password, user, otpDoc } = reqBody;
 
 		if (password !== confirm_password) {
 			throw new ApiError(

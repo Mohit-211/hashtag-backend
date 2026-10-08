@@ -3,24 +3,14 @@
 const httpStatus = require("http-status");
 const bcrypt = require("bcryptjs");
 
-const {
-  User,
-  Profile,
-  UserPackage,
-  Package,
-  Payment,
-  ContactUs,
-} = require("../../models");
+const { User, Profile } = require("../../models");
 const ApiError = require("../../utils/ApiError");
 const { sendUserCredentials } = require("../Common/email.service");
 
 const sequelize = require("../../config/central.db");
-const { Op } = require("sequelize");
-const { stat } = require("node:fs");
 
 const getAllUsers = async (param, query) => {
   try {
-    const { roleId } = param;
     const { limit, sortBy, offset } = query;
     let result = "";
     let where = { is_active: true, status: "ACCEPTED" };

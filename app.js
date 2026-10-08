@@ -30,13 +30,6 @@ const {
 const {
   syncImportedSageProducts,
 } = require("./src/services/Common/sageSync.service.js");
-const {
-  updateSanmarColors,
-  backfillSanmarColorCodes,
-} = require("./src/utils/sanmarColor.util.js");
-const { backfillOttoCapColorCodes } = require("./src/utils/ottoColor.util.js");
-const { backfillSageColorCodes } = require("./src/utils/sageColor.util.js");
-const { updateBrandSlugs } = require("./src/services/Common/brand.service.js");
 require("./src/models");
 const PUBLIC_DIR = path.resolve(__dirname, "./public");
 
@@ -98,25 +91,6 @@ cron.schedule(
   },
 );
 
-// cron.schedule(
-//   "* * * * *",
-//   async () => {
-//     try {
-//       console.log("🚀 STARTING MONTHLY SAGE SYNC");
-
-//       await syncImportedSageProducts();
-
-//       console.log("✅ MONTHLY SAGE SYNC COMPLETED");
-//     } catch (err) {
-//       console.error("❌ MONTHLY SAGE SYNC FAILED", err);
-//     }
-//   },
-//   {
-//     timezone: "America/New_York",
-//   },
-// );
-
-
 cron.schedule(
   "0 2 10 * *",
   async () => {
@@ -135,35 +109,6 @@ cron.schedule(
   },
 );
 
-// updateBrandSlugs()
-//   .then(() => {
-//     console.log("✅ Brand slug backfill completed");
-//   })
-//   .catch((err) => {
-//     console.error("❌ Brand slug backfill failed:", err);
-//   });
-
-// backfillSanmarColorCodes()
-//   .then(() => {
-//     console.log("✅ Sanmar backfill completed");
-//   })
-//   .catch((err) => {
-//     console.error("❌ Sanmar backfill failed:", err);
-//   });
-
-// backfillOttoCapColorCodes()
-//   .then(() => console.log("✅ OTTOCAP backfill completed"))
-//   .catch((err) => {
-//     console.error("❌ OTTOCAP backfill failed:", err);
-//   });
-
-// backfillSageColorCodes()
-//   .then(() => console.log("✅ SAGE backfill completed"))
-//   .catch((err) => {
-//     console.error("❌ SAGE backfill failed:", err);
-//   });
-
-// app.use(helmet());
 // set security HTTP headers
 app.use(
   helmet({
@@ -185,7 +130,6 @@ if (config.env !== "test") {
   app.use(morgan.errorHandler);
 }
 
-// app.use(express.static(PUBLIC_DIR));
 app.use(
   express.static(PUBLIC_DIR, {
     setHeaders: (res) => {
@@ -207,16 +151,6 @@ app.use(function (req, res, next) {
 app.use(credentials);
 app.use(cors(corsConfigs));
 
-// Custom cors configuration
-// let corsOptions = {
-//   origin: ['http://localhost:5173', 'http://localhost:8081', 'http://192.168.1.35:8081','http://localhost:3000'],
-//   methods: 'GET,POST,PUT,DELETE',
-//   allowedHeaders: '*',
-//   optionsSuccessStatus: 200,
-// };
-
-// app.use(cors(corsOptions));
-
 // limit repeated failed requests to auth endpoints
 if (config.env === "production") {
   app.use("/v1/auth", authLimiter);
@@ -237,7 +171,6 @@ app.get("/test", (req, res, next) => {
 app.use("/api/v1", upload, routes);
 
 // All File Apis
-// app.use('/images', express.static(`${PUBLIC_DIR}/uploads/images`));
 app.use(
   "/images",
   express.static(`${PUBLIC_DIR}/uploads/images`, {

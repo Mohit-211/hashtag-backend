@@ -4,7 +4,6 @@ const httpStatus = require("http-status");
 const catchAsync = require("../../utils/catchAsync");
 const responseWrapper = require("../../config/responseWrapper");
 const { productService } = require("../../services");
-const ssClient = require("../../config/ssClient");
 const { ImportBatch } = require("../../models");
 const ApiError = require("../../utils/ApiError");
 

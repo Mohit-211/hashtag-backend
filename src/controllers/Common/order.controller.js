@@ -4,11 +4,6 @@ const responseWrapper = require("../../config/responseWrapper");
 const { orderService } = require("../../services");
 const {
   getShippingRates,
-  listAvailableCarriers,
-  createCheapTestLabel,
-  testCarriers,
-  createManualTestOrder,
-  createShipmentForOrder,
   purchaseLabelForOrder,
 } = require("../../config/shipstation");
 const {

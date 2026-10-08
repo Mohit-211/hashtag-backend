@@ -4,7 +4,6 @@ const sequelize = require("../../config/central.db");
 const { calculatePricing } = require("../../config/pricing");
 const {
   createShipmentForOrder,
-  getShippingRates,
   cancelShipstationShipment,
 } = require("../../config/shipstation");
 const {

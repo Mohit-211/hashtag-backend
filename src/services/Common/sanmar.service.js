@@ -1,6 +1,4 @@
-const httpStatus = require("http-status");
-const ApiError = require("../../utils/ApiError");
-const { Op, Sequelize } = require("sequelize");
+const { Op } = require("sequelize");
 const {
   Sanmar,
   Brand,
@@ -17,7 +15,6 @@ const {
 const { BRAND_LOGO_MAP, getBrandLogo } = require("../../config/sanmarBrand");
 const sequelize = require("../../config/central.db");
 const { downloadSupplierImage } = require("./supplierImage.service");
-const { getSanmarColorCodes } = require("../../utils/sanmarColor.util");
 const { getOrCreateColorCode } = require("./colorService");
 
 const syncSanmarBrands = async () => {

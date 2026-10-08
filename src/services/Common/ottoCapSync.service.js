@@ -7,7 +7,6 @@ const {
   Ottocap,
 } = require("../../models");
 
-const sequelize = require("../../config/central.db");
 const { saveOttoProductToDB } = require("./ottoCap.service");
 
 const syncImportedOttoProducts = async () => {

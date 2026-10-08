@@ -1,5 +1,4 @@
 const { Product, ImportBatch } = require("../../models");
-const { Op } = require("sequelize");
 
 const { getSSProductByStyle, saveSSProductToDB } = require("./product.service");
 const sequelize = require("../../config/central.db");

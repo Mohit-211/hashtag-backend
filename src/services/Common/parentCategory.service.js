@@ -406,7 +406,6 @@ module.exports = {
   deleteParentCategory,
   mapCategoriesToParent,
   addCategoryToParent,
-    getParentCategoriesForCategories,
-  addCategoryToParent,
+  getParentCategoriesForCategories,
   removeCategoryFromParent
 };

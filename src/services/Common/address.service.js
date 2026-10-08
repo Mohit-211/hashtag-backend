@@ -8,7 +8,7 @@ const httpStatus = require("http-status");
 
 const addAddress = async (body) => {
   try {
-    const { user, country_id, state_id, city_id, is_default } = body;
+    const { user, country_id, state_id, city_id } = body;
 
     // ✅ 1. Fetch geo data
     const [country, state, city] = await Promise.all([

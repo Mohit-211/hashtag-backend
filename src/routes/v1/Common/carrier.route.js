@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 
 const {CarrierController } = require('../../../controllers');
-const {userAuthMiddleware} = require('../../../middlewares');
 
 
 router.post('/sync', CarrierController.syncCarriers);

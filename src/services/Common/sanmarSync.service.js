@@ -1,7 +1,5 @@
 const { Product, ImportBatch, Brand } = require("../../models");
 
-const { Op } = require("sequelize");
-
 const sequelize = require("../../config/central.db");
 
 const {

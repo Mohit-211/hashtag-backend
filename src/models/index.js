@@ -4,7 +4,6 @@ const Country = require("./country.model");
 const State = require("./state.model");
 const City = require("./city.model");
 const Timezone = require("./timezone.model");
-const Category = require("./category.model");
 
 const Role = require("./role.model");
 const Department = require("./departmenat.model");
@@ -21,9 +20,6 @@ const Faq = require("./faq.model");
 const OTP = require("./otp.model");
 
 const Payment = require("./payment.model");
-const Package = require("./package.model");
-const UserPackage = require("./userPackage.model");
-const Video = require("./video.model");
 
 const Product = require("./product.model");
 const ProductVariant = require("./productVariant.model");
@@ -82,7 +78,6 @@ module.exports = {
   State,
   City,
   Timezone,
-  Category,
 
   Role,
   Department,
@@ -99,9 +94,6 @@ module.exports = {
   OTP,
 
   Payment,
-  Package,
-  UserPackage,
-  Video,
 
   Product,
   ProductVariant,

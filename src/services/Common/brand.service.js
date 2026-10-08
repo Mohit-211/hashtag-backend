@@ -1,9 +1,8 @@
-const slugify = require("../../config/slugify");
 const ssClient = require("../../config/ssClient");
 const { Brand, ImportBatch } = require("../../models");
 const ApiError = require("../../utils/ApiError");
 const httpStatus = require("http-status");
-const { Op, Sequelize } = require("sequelize");
+const { Op } = require("sequelize");
 
 const createBrand = async (body, files) => {
   let brandObj = { ...body };
@@ -349,44 +348,6 @@ const syncSSBrands = async () => {
 };
 
 
-async function updateBrandSlugs() {
-  const brands = await Brand.findAll({
-    order: [["id", "ASC"]],
-  });
-
-  for (const brand of brands) {
-    let baseSlug = slugify(brand.name);
-    let slug = baseSlug;
-    let counter = 1;
-
-    while (true) {
-      const exists = await Brand.findOne({
-        where: {
-          slug,
-          id: {
-            [Op.ne]: brand.id,
-          },
-        },
-      });
-
-      if (!exists) break;
-
-      slug = `${baseSlug}-${counter++}`;
-    }
-
-    await brand.update(
-      { slug },
-      {
-        hooks: false,
-      },
-    );
-
-    console.log(`${brand.name} -> ${slug}`);
-  }
-
-  console.log("Brand slugs updated successfully.");
-}
-
 module.exports = {
   createBrand,
   getAllBrands,
@@ -398,5 +359,4 @@ module.exports = {
   publishBrand,
   createManualBrand,
   syncSSBrands,
-  updateBrandSlugs,
 };

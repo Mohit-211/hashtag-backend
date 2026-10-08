@@ -2,7 +2,6 @@ const {
   Product,
   ProductVariant,
   ProductAttachment,
-  VariantAttachment,
   ImportBatch,
 } = require("../../models");
 

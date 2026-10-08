@@ -1,7 +1,7 @@
 const slugify = require("../../config/slugify");
 const ApiError = require("../../utils/ApiError");
 const httpStatus = require("http-status");
-const { Op, Sequelize } = require("sequelize");
+const { Op } = require("sequelize");
 const {
   Industry,
   UseCase,
