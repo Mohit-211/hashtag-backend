@@ -115,8 +115,6 @@ const verifyOTP = async (email, otp, type, role_id) => {
 			otpDoc.code = token;
 		}
 		await otpDoc.save();
-
-		// await sendOTPMails(email);
 		return token ? { token } : isUpdate;
 	} catch (error) {
 		throw new ApiError(
@@ -285,9 +283,6 @@ const login = async (reqBody, headers) => {
 			role_id: headers.role_id,
 		};
 
-		
-		
-        console.log("LOGIN API HIT - NEW CODE");
 		return userObj;
 	} catch (error) {
 		throw new ApiError(
@@ -405,7 +400,6 @@ const saveLoginTiming = async (user, token, reqBody, timezone) => {
 		};
 
 		const timingDetails = await userLoginTiming.create(obj);
-		// console.log('SQL Query:', timingDetails.get({ plain: true }));  // To see the query
 		return timingDetails;
 	} catch (error) {
 		throw new ApiError(

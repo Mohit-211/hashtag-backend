@@ -2,6 +2,7 @@
 
 const { Sequelize, DataTypes, Model } = require("sequelize");
 const sequelize = require("../config/central.db");
+const { touchUpdatedAt, markDeleted } = require("./hooks");
 
 class GrandCategoryMapping extends Model {}
 
@@ -62,20 +63,8 @@ GrandCategoryMapping.init(
   }
 );
 
-GrandCategoryMapping.beforeUpdate(async (mapping) => {
-  mapping.updated_at = new Date()
-    .toISOString()
-    .replace(/T/, " ")
-    .replace(/\..+/g, "");
-});
+GrandCategoryMapping.beforeUpdate(touchUpdatedAt);
 
-GrandCategoryMapping.beforeDestroy(async (mapping) => {
-  mapping.deleted_at = new Date()
-    .toISOString()
-    .replace(/T/, " ")
-    .replace(/\..+/g, "");
-
-  mapping.is_active = false;
-});
+GrandCategoryMapping.beforeDestroy(markDeleted);
 
 module.exports = GrandCategoryMapping;

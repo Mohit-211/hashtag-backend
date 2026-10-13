@@ -23,7 +23,6 @@ const syncImportedSageProducts = async () => {
 
       raw: true,
     });
-    console.log(importedStyles, "importedStyles");
     const styleIds = [
       ...new Set(
         importedStyles.map((p) => p.external_style_id).filter(Boolean),
@@ -46,8 +45,6 @@ const syncImportedSageProducts = async () => {
 
     for (const prodEId of styleIds) {
       try {
-        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━");
-
         console.log(`🔄 Syncing product ${prodEId}`);
 
         const sageProduct = await getProductDetails(prodEId, true);

@@ -159,7 +159,6 @@ const callSageAPI = async (payload) => {
       throw new Error(data.errMsg || `SAGE Error ${data.errNum || "unknown"}`);
     }
 
-    console.log(`✅ SAGE ${payload.serviceId} call successful`);
     return data;
   } catch (error) {
     console.error(
@@ -400,26 +399,6 @@ const productsWithImportFlag = paginatedProducts.map((p) => ({
   importedProductId: importedMap.get(String(p.prodEId)) || null, // ← new field
 }));
 
-//  const importedProducts = await Product.findAll({
-//   where: {
-//     supplier: "SAGE",
-//     external_style_id: {
-//       [Op.in]: paginatedProducts.map((p) => String(p.prodEId)),
-//     },
-//   },
-//   attributes: ["external_style_id"],
-//   raw: true,
-// });
-
-// const importedSet = new Set(
-//   importedProducts.map((p) => String(p.external_style_id)),
-// );
-
-// const productsWithImportFlag = paginatedProducts.map((p) => ({
-//   ...p,
-//   imported: importedSet.has(String(p.prodEId)),
-// }));
-
   return {
     totalFound: total,
     products: productsWithImportFlag,
@@ -655,8 +634,6 @@ const restoreSageProduct = async (productId, transaction) => {
       transaction,
     });
   }
-
-  console.log(`♻️ Fully restored product ${productId}`);
 };
 
 const saveSageProductToDB = async (sageProduct, batchId) => {
@@ -735,15 +712,7 @@ const saveSageProductToDB = async (sageProduct, batchId) => {
       transaction,
     });
 
-    console.log("======== PRODUCT CHECK ========");
-    console.log("prodEid:", prodEid);
-    console.log("product found:", !!existingProduct);
-    console.log("deleted_at:", existingProduct?.deleted_at);
-    console.log("===============================");
-
     if (existingProduct) {
-      console.log("♻️ Running restore for:", existingProduct.id);
-
       await restoreSageProduct(existingProduct.id, transaction);
     }
 
@@ -762,8 +731,6 @@ const saveSageProductToDB = async (sageProduct, batchId) => {
         transaction,
       },
     );
-
-    console.log(`♻️ Restored product if existed: ${prodEid}`);
 
     // ====================== PRODUCT UPSERT ======================
     const [product] = await Product.upsert(
@@ -1133,9 +1100,6 @@ const saveSageProductToDB = async (sageProduct, batchId) => {
         );
       });
 
-      console.log("VARIANT:", variant.id, variant.color);
-      console.log("MATCH:", matchingPic?.caption);
-
       if (!matchingPic?.url) continue;
 
       const sourceUrl = matchingPic.url.startsWith("http")
@@ -1149,7 +1113,6 @@ const saveSageProductToDB = async (sageProduct, batchId) => {
         sku: variant.sku,
         imageType: "variant",
       });
-      console.log("LOCAL URL:", localUrl);
 
       if (!localUrl) continue;
 
@@ -1161,12 +1124,6 @@ const saveSageProductToDB = async (sageProduct, batchId) => {
         transaction,
         paranoid: false,
       });
-
-      console.log("VARIANT:", variant.id, variant.color);
-
-      console.log("MATCH:", matchingPic?.caption);
-
-      console.log("LOCAL URL:", localUrl);
 
       if (!existingVariantImage) {
         await VariantAttachment.create(

@@ -30,13 +30,8 @@ const downloadSupplierImage = async ({
   sku,
   imageType = "front",
 }) => {
-  let localPath = "";
-
   try {
     if (!imageUrl) return null;
-
-    console.log("⬇️ Downloading Supplier Image");
-    console.log("🌐 URL:", imageUrl);
 
     // 🔥 IMAGE EXTENSION
     const ext = path.extname(imageUrl.split("?")[0])?.toLowerCase() || ".jpg";
@@ -57,7 +52,7 @@ const downloadSupplierImage = async ({
     const fileName = `${supplier.toLowerCase()}-${safeSku}-${imageType}${ext}`;
 
     // 🔥 ABSOLUTE SERVER PATH
-    localPath = path.join(folder, fileName);
+    const localPath = path.join(folder, fileName);
 
     // 🔥 RELATIVE PATH
     const relativePath = `/uploads/suppliers/${supplier.toLowerCase()}/${styleId}/${fileName}`;
@@ -65,13 +60,8 @@ const downloadSupplierImage = async ({
     // 🔥 FULL PUBLIC URL SAVED IN DB
     const dbPath = `${BASE_URL}${relativePath}`;
 
-    console.log("📁 Saving To:", localPath);
-    console.log("🌍 Public URL:", dbPath);
-
     // 🔥 SKIP IF EXISTS
     if (fs.existsSync(localPath)) {
-      console.log("✅ Image already exists");
-
       return dbPath;
     }
 
@@ -92,11 +82,9 @@ const downloadSupplierImage = async ({
 
     // 🔥 CONVERT BUFFER
     const buffer = Buffer.from(response.data);
-    console.log("Image Size:", buffer.length);
     // 🔥 SKIP INVALID / PLACEHOLDER IMAGES
     if (buffer.length < 5000) {
-      console.log("⚠️ Placeholder or invalid image skipped");
-      console.log("🌐 URL:", imageUrl);
+      console.log("⚠️ Placeholder or invalid image skipped:", imageUrl);
 
       return null;
     }
@@ -104,16 +92,9 @@ const downloadSupplierImage = async ({
     // 🔥 SAVE FILE
     await fs.promises.writeFile(localPath, buffer);
 
-    console.log("✅ Supplier image saved successfully");
-
     return dbPath;
   } catch (err) {
-    console.error("❌ Supplier image download failed");
-    console.error("🌐 URL:", imageUrl);
-    console.error("📁 Path:", localPath);
-    console.error(err);
-    console.error(err?.errors);
-    console.error("🚨 Error:", err?.response?.status || err.message);
+    console.error("❌ Supplier image download failed:", imageUrl, err?.response?.status || err.message);
 
     return null;
   }

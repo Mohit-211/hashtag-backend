@@ -2,6 +2,7 @@
 
 const { Sequelize, DataTypes, Model } = require("sequelize");
 const sequelize = require("../config/central.db");
+const { touchUpdatedAt, markDeleted } = require("./hooks");
 
 class Product extends Model {}
 
@@ -139,19 +140,8 @@ Product.init(
   },
 );
 
-Product.beforeUpdate(async (product) => {
-  product.updated_at = new Date()
-    .toISOString()
-    .replace(/T/, " ")
-    .replace(/\..+/g, "");
-});
+Product.beforeUpdate(touchUpdatedAt);
 
-Product.beforeDestroy(async (product) => {
-  product.deleted_at = new Date()
-    .toISOString()
-    .replace(/T/, " ")
-    .replace(/\..+/g, "");
-  product.is_active = false;
-});
+Product.beforeDestroy(markDeleted);
 
 module.exports = Product;

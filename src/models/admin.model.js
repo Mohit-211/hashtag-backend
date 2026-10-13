@@ -1,5 +1,6 @@
 const { Sequelize, DataTypes, Model } = require('sequelize');
 const sequelize = require('../config/central.db');
+const { touchUpdatedAt, markDeleted } = require('./hooks');
 
 class Admin extends Model { }
 Admin.init({
@@ -38,10 +39,6 @@ Admin.init({
     },
     password: {
         type: DataTypes.STRING,
-        allowNull: true
-    },
-    socket_id: {
-        type: DataTypes.STRING(150),
         allowNull: true
     },
     remember_token: {
@@ -100,24 +97,13 @@ Admin.init({
     deletedAt: 'deleted_at'
 });
 
-Admin.afterCreate(async (admin) => {
-    const socketId = `${admin.role_id}-${admin.id}-${admin.department_id}-socketId`;
-    admin.socket_id = socketId;
-    await admin.save();
-});
-
 Admin.isEmailTaken = async function (email) {
     let u = await this.findOne({ where: { email: email, is_active: true } })
     return !!u
 };
 
-Admin.beforeUpdate(async (admin) => {
-    admin.updated_at = new Date().toISOString().replace(/T/, ' ').replace(/\..+/g, '');
-});
+Admin.beforeUpdate(touchUpdatedAt);
 
-Admin.beforeDestroy(async (admin) => {
-    admin.deleted_at = new Date().toISOString().replace(/T/, ' ').replace(/\..+/g, '');
-    admin.is_active = false;
-});
+Admin.beforeDestroy(markDeleted);
 
 module.exports = Admin;

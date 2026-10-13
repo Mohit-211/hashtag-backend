@@ -70,27 +70,6 @@ const syncImportedSSProducts = async () => {
       }
     }
 
-    // 🔥 AUTO DISCONTINUE AFTER 30 DAYS
-    // await Product.update(
-    //   {
-    //     is_discontinued: true,
-    //     discontinued_at: new Date(),
-    //     is_active: false,
-    //   },
-    //   {
-    //     where: {
-    //       supplier: "SS",
-    //       is_discontinued: false,
-    //       supplier_missing_since: {
-    //         [Op.not]: null,
-    //         [Op.lte]: new Date(
-    //           Date.now() - 30 * 24 * 60 * 60 * 1000
-    //         ),
-    //       },
-    //     },
-    //   }
-    // );
-
     await batch.update({
       status: "success",
       processed_records: success,

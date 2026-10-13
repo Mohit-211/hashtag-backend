@@ -1,5 +1,6 @@
 const { Sequelize, DataTypes, Model } = require('sequelize');
 const sequelize = require('../config/central.db');
+const { touchUpdatedAt, markDeleted } = require('./hooks');
 
 class Timezone extends Model { }
 Timezone.init({
@@ -61,12 +62,7 @@ Timezone.init({
     deletedAt: 'deleted_at'
 });
 
-Timezone.beforeUpdate(async (Timezone) => {
-    Timezone.updated_at = new Date().toISOString().replace(/T/, ' ').replace(/\..+/g, '');
-});
-Timezone.beforeDestroy(async (Timezone) => {
-    Timezone.deleted_at = new Date().toISOString().replace(/T/, ' ').replace(/\..+/g, '');
-    Timezone.is_active = false;
-});
+Timezone.beforeUpdate(touchUpdatedAt);
+Timezone.beforeDestroy(markDeleted);
 
 module.exports = Timezone;

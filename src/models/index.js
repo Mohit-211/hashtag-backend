@@ -185,9 +185,6 @@ async function initTableRelation() {
   User.hasMany(UserToken, { foreignKey: "user_id", as: "user_tokens" });
   UserToken.belongsTo(User, { foreignKey: "user_id", as: "token_user" });
 
-  Role.hasMany(Admin, { foreignKey: "role_id", as: "role_users" });
-  Admin.belongsTo(Role, { foreignKey: "role_id", as: "user_role" });
-
   // associations
 
   Product.hasMany(ProductVariant, {
@@ -548,7 +545,4 @@ async function initTableRelation() {
   });
 }
 
-/* Only Uncomment when data migration will complete */
 initTableRelation();
-
-// make sure to comment sanmar when migrate

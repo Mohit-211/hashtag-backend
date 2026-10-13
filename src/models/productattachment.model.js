@@ -2,6 +2,7 @@
 
 const { Sequelize, DataTypes, Model } = require("sequelize");
 const sequelize = require("../config/central.db");
+const { touchUpdatedAt, markDeleted } = require("./hooks");
 
 class ProductAttachment extends Model {}
 ProductAttachment.init(
@@ -74,25 +75,8 @@ ProductAttachment.init(
   },
 );
 
-indexes: ([
-  {
-    unique: true,
-    fields: ["product_id", "source_url"],
-  },
-],
-  ProductAttachment.beforeUpdate(async (productAttachment) => {
-    productAttachment.updated_at = new Date()
-      .toISOString()
-      .replace(/T/, " ")
-      .replace(/\..+/g, "");
-  }));
+ProductAttachment.beforeUpdate(touchUpdatedAt);
 
-ProductAttachment.beforeDestroy(async (productAttachment) => {
-  productAttachment.deleted_at = new Date()
-    .toISOString()
-    .replace(/T/, " ")
-    .replace(/\..+/g, "");
-  productAttachment.is_active = false;
-});
+ProductAttachment.beforeDestroy(markDeleted);
 
 module.exports = ProductAttachment;

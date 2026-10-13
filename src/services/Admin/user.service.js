@@ -15,7 +15,6 @@ const getAllUsers = async (param, query) => {
     let result = "";
     let where = { is_active: true, status: "ACCEPTED" };
 
-    // Find and count users with reels count included in user_profile
     result = await User.findAndCountAll({
       attributes: [
         "id",
@@ -37,20 +36,6 @@ const getAllUsers = async (param, query) => {
             "created_at",
           ],
         },
-        // {
-        //   model: UserAddress,
-        //   as: "user_attachments",
-        //   attributes: [
-        //     "id",
-        //     "title",
-        //     "file_type",
-        //     "file_name",
-        //     "file_uri",
-        //     "role_id",
-        //   ],
-        //   order: [["id", "desc"]],
-        //   limit: 1,
-        // },
       ],
       where: where,
       limit: parseInt(limit),

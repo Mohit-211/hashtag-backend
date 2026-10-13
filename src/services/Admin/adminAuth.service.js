@@ -37,11 +37,6 @@ const createAdminUser = async (userBody) => {
 					as: "admin_role",
 					attributes: ["id", "name", "abbreviation"],
 				},
-				// {
-				// 	model: Department,
-				// 	as: "admin_department",
-				// 	attributes: ["id", "name"],
-				// },
 			],
 
 			where: { id: user?.id, is_active: true },

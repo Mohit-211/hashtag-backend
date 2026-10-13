@@ -52,10 +52,6 @@ const syncImportedOttoProducts = async () => {
     for (const styleId of styleIds) {
       try {
         console.log(
-          "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        );
-
-        console.log(
           `🔄 Checking style ${styleId}`,
         );
 

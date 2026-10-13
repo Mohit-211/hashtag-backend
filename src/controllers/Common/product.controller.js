@@ -100,8 +100,6 @@ const updateProduct = catchAsync(async (req, res) => {
 const deleteProduct = catchAsync(async (req, res) => {
   const { styleId, supplier, product_id } = req.body;
 
-  console.log("BODY:", req.body);
-
   if (!product_id && (!styleId || !supplier)) {
     throw new ApiError(
       400,
@@ -149,7 +147,6 @@ const syncSingleStyle = async (req, res) => {
     source_name: "SS_PRODUCT",
     status: "processing",
   });
-  console.log(batch, "batch");
 
   try {
     // 🔥 STEP 1: FETCH
@@ -158,7 +155,6 @@ const syncSingleStyle = async (req, res) => {
     if (!data) {
       return res.json({ message: "No data found" });
     }
-    console.log(data, "data");
 
     // 🔥 STEP 2: SAVE
     await productService.saveSSProductToDB(data, batch.id);

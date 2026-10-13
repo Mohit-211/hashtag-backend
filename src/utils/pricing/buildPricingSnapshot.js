@@ -352,11 +352,6 @@ const buildPricingSnapshot = async ({
 
     const locations = customization.locations || [];
 
-    console.log(
-      "STEP 4 - SNAPSHOT LOCATIONS",
-      JSON.stringify(locations, null, 2),
-    );
-
     /*
      |--------------------------------------------------------------------------
      | EMBROIDERY
@@ -368,13 +363,6 @@ const buildPricingSnapshot = async ({
         const locationKey = location.location?.toUpperCase().replace(/-/g, "_");
 
         const table = EMBROIDERY_PRICING[locationKey];
-        console.log({
-          original: location.location,
-          normalized: locationKey,
-          found: !!table,
-        });
-
-        console.log("PROCESSING LOCATION", location.location);
 
         let locationPrice = getEmbroideryPrice(table, quantity);
 
@@ -391,7 +379,6 @@ const buildPricingSnapshot = async ({
         }
 
         customization_total += locationPrice;
-        console.log("LOCATION PRICE", locationPrice);
 
         pricing_table.push({
           type: "EMBROIDERY",
@@ -596,14 +583,6 @@ const buildSagePricingSnapshot = async ({
     );
   }
 
-  // const priceTiers = (meta.priceTiers || [])
-  //   .map((p) => Number(p))
-  //   .filter((p) => !isNaN(p) && p > 0);
-
-  // if (!qtyTiers.length || !priceTiers.length) {
-  //   throw new Error(`SAGE pricing tiers not found for variant ${variant.id}`);
-  // }
-
   /*
    |--------------------------------------------------------------------------
    | MINIMUM QUANTITY CHECK
@@ -621,20 +600,6 @@ const buildSagePricingSnapshot = async ({
    | FIND MATCHING PRICE TIER
    |--------------------------------------------------------------------------
    */
-
-  // let supplierPrice = Number(priceTiers[0]);
-  // let tierQuantity = Number(qtyTiers[0]);
-
-  // for (let i = 0; i < qtyTiers.length; i++) {
-  //   if (
-  //     quantity >= Number(qtyTiers[i]) &&
-  //     priceTiers[i] !== undefined &&
-  //     !isNaN(Number(priceTiers[i]))
-  //   ) {
-  //     supplierPrice = Number(priceTiers[i]);
-  //     tierQuantity = Number(qtyTiers[i]);
-  //   }
-  // }
 
   let supplierPrice = Number(netTiers[0]);
   let tierQuantity = Number(qtyTiers[0]);
@@ -684,12 +649,6 @@ const buildSagePricingSnapshot = async ({
           .toLowerCase() === "drinkware",
     ),
   );
-
-  console.log("SAGE DRINKWARE DEBUG", {
-    isDrinkware,
-    customization,
-    categories: product?.categories,
-  });
 
   if (
     isDrinkware &&

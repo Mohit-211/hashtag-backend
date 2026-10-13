@@ -2,6 +2,7 @@
 
 const { Sequelize, DataTypes, Model } = require("sequelize");
 const sequelize = require("../config/central.db");
+const { touchUpdatedAt, markDeleted } = require("./hooks");
 
 class Size extends Model {}
 Size.init(
@@ -69,18 +70,7 @@ Size.init(
   },
 );
 
-Size.beforeUpdate(async (Size) => {
-  Size.updated_at = new Date()
-    .toISOString()
-    .replace(/T/, " ")
-    .replace(/\..+/g, "");
-});
-Size.beforeDestroy(async (Size) => {
-  Size.deleted_at = new Date()
-    .toISOString()
-    .replace(/T/, " ")
-    .replace(/\..+/g, "");
-  Size.is_active = false;
-});
+Size.beforeUpdate(touchUpdatedAt);
+Size.beforeDestroy(markDeleted);
 
 module.exports = Size;

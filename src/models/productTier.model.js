@@ -2,6 +2,7 @@
 
 const { Sequelize, DataTypes, Model } = require("sequelize");
 const sequelize = require("../config/central.db");
+const { touchUpdatedAt, markDeleted } = require("./hooks");
 
 class ProductTier extends Model {}
 
@@ -67,20 +68,8 @@ ProductTier.init(
   }
 );
 
-ProductTier.beforeUpdate(async (tier) => {
-  tier.updated_at = new Date()
-    .toISOString()
-    .replace(/T/, " ")
-    .replace(/\..+/g, "");
-});
+ProductTier.beforeUpdate(touchUpdatedAt);
 
-ProductTier.beforeDestroy(async (tier) => {
-  tier.deleted_at = new Date()
-    .toISOString()
-    .replace(/T/, " ")
-    .replace(/\..+/g, "");
-
-  tier.is_active = false;
-});
+ProductTier.beforeDestroy(markDeleted);
 
 module.exports = ProductTier;

@@ -48,7 +48,6 @@ const addAddress = async (body) => {
       postal_code: body.postal_code,
       country_code: country.iso2 || "US",
     };
-    console.log(addressForValidation, "addressForValidation");
 
     // ✅ 4. Validate address (ONLY ONCE)
     const cleaned = await validateAddress(addressForValidation);

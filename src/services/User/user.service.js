@@ -12,7 +12,7 @@ const getProfile = async (body, headers) => {
         let result = '';
 
         result = await User.findOne({
-            attributes: ['id', 'user_name', 'email', 'role_id', 'square_customer_id', 'socket_id', 'fcm_token', 'status', 'notification_status'],
+            attributes: ['id', 'user_name', 'email', 'role_id', 'square_customer_id', 'status', 'notification_status'],
             include: [
                 {
                     model: Profile,

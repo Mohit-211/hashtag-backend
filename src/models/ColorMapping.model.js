@@ -1,5 +1,6 @@
 const { Sequelize, DataTypes, Model } = require("sequelize");
 const sequelize = require("../config/central.db");
+const { utcNow, markDeleted } = require("./hooks");
 
 class ColorMapping extends Model {}
 
@@ -91,31 +92,9 @@ ColorMapping.beforeUpdate(async (mapping) => {
         .replace(/\s+/g, " ")
         .replace(/[^a-z0-9\s/-]/g, "") || "";
   }
-  mapping.updated_at = new Date()
-    .toISOString()
-    .replace(/T/, " ")
-    .replace(/\..+/g, "");
+  mapping.updated_at = utcNow();
 });
 
-ColorMapping.beforeDestroy(async (mapping) => {
-  mapping.deleted_at = new Date()
-    .toISOString()
-    .replace(/T/, " ")
-    .replace(/\..+/g, "");
-  mapping.is_active = false;
-});
-
-// ====================== STATIC METHODS ======================
-
-ColorMapping.isColorExists = async function (supplier, normalizedName) {
-  const exists = await this.findOne({
-    where: {
-      supplier,
-      normalized_color_name: normalizedName,
-      is_active: true,
-    },
-  });
-  return !!exists;
-};
+ColorMapping.beforeDestroy(markDeleted);
 
 module.exports = ColorMapping;

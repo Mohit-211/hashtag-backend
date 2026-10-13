@@ -19,13 +19,9 @@ const getLatLng = async (address) => {
 			}
 		);
 
-		console.log("🌍 GEO RESPONSE:", res.data.status);
-
 		const location = res.data.results?.[0]?.geometry?.location;
 
 		if (!location) return null;
-
-        console.log(location,"location")
 
 		return {
 			latitude: location.lat,

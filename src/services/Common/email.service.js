@@ -26,21 +26,19 @@ const sendEmail = async (to, subject, text, html) => {
     }
 };
 
-const sendEmailVerification = async (to, otp) => {
+// OTP mails are sent without waiting for delivery; a failed send is only logged.
+const sendOtpMail = async (to, subject, template, otp) => {
     try {
         const message = {
             from: `${config.email.from}`,
             to: `${to}`,
-            subject: 'Please verify your email',
+            subject,
             text: `Please click on the following link to verify your email`,
-            html: `${emailVerificationFormat(otp)}`,
+            html: `${template(otp)}`,
         };
-        transport.sendMail(message, (error, info) => {
+        transport.sendMail(message, (error) => {
             if (error) {
                 console.log('Email sent error:  ', error);
-                return false
-            } else {
-                return true;
             }
         });
 
@@ -49,28 +47,11 @@ const sendEmailVerification = async (to, otp) => {
     }
 };
 
-const sendForgotPasswordOTP = async (to, otp) => {
-    try {
-        const message = {
-            from: `${config.email.from}`,
-            to: `${to}`,
-            subject: 'Forget Password Request',
-            text: `Please click on the following link to verify your email`,
-            html: `${forgotPasswordSendOTPFormat(otp)}`,
-        };
-        transport.sendMail(message, (error, info) => {
-            if (error) {
-                console.log('Email sent error:  ', error);
-                return false
-            } else {
-                return true;
-            }
-        });
+const sendEmailVerification = (to, otp) =>
+    sendOtpMail(to, 'Please verify your email', emailVerificationFormat, otp);
 
-    } catch (error) {
-        throw new ApiError(error.statusCode ? error.statusCode : httpStatus.INTERNAL_SERVER_ERROR, error.message);
-    }
-};
+const sendForgotPasswordOTP = (to, otp) =>
+    sendOtpMail(to, 'Forget Password Request', forgotPasswordSendOTPFormat, otp);
 
 const sendAdminCredentials = async (to, password) => {
 	const subject = "Welcome to Hashtag Billionaire: Your Login Credentials";

@@ -3,6 +3,7 @@
 const { Sequelize, DataTypes, Model } = require("sequelize");
 
 const sequelize = require("../config/central.db");
+const { touchUpdatedAt, markDeleted } = require("./hooks");
 
 class TierParentCategoryMapping extends Model {}
 
@@ -73,20 +74,8 @@ TierParentCategoryMapping.init(
   },
 );
 
-TierParentCategoryMapping.beforeUpdate(async (mapping) => {
-  mapping.updated_at = new Date()
-    .toISOString()
-    .replace(/T/, " ")
-    .replace(/\..+/, "");
-});
+TierParentCategoryMapping.beforeUpdate(touchUpdatedAt);
 
-TierParentCategoryMapping.beforeDestroy(async (mapping) => {
-  mapping.deleted_at = new Date()
-    .toISOString()
-    .replace(/T/, " ")
-    .replace(/\..+/, "");
-
-  mapping.is_active = false;
-});
+TierParentCategoryMapping.beforeDestroy(markDeleted);
 
 module.exports = TierParentCategoryMapping;

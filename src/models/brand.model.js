@@ -2,6 +2,7 @@
 
 const { Sequelize, DataTypes, Model } = require("sequelize");
 const sequelize = require("../config/central.db");
+const { utcNow, markDeleted } = require("./hooks");
 const slugify = require("slugify");
 
 class Brand extends Model {}
@@ -110,10 +111,7 @@ Brand.beforeValidate((brand) => {
 });
 
 Brand.beforeUpdate((brand) => {
-  brand.updated_at = new Date()
-    .toISOString()
-    .replace(/T/, " ")
-    .replace(/\..+/g, "");
+  brand.updated_at = utcNow();
 
   if (brand.name) {
     brand.slug = slugify(brand.name, {
@@ -124,13 +122,6 @@ Brand.beforeUpdate((brand) => {
   }
 });
 
-Brand.beforeDestroy((brand) => {
-  brand.deleted_at = new Date()
-    .toISOString()
-    .replace(/T/, " ")
-    .replace(/\..+/g, "");
-
-  brand.is_active = false;
-});
+Brand.beforeDestroy(markDeleted);
 
 module.exports = Brand;

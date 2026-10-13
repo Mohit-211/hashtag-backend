@@ -27,7 +27,6 @@ const getAllFaq = async () => {
             {
                 attributes: ['id', 'question', 'answer'],
                 where: { is_active: true },
-                // order: [['created_at', 'DESC']]
             }
         );
         if (!faqDoc) {

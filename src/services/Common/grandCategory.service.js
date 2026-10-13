@@ -11,8 +11,6 @@ const {
 } = require("../../models");
 
 const createGrandCategory = async (reqBody) => {
-  console.log("GRAND CATEGORY SERVICE HIT");
-
   try {
     if (!reqBody.title || !reqBody.title.trim()) {
       throw new ApiError(httpStatus.BAD_REQUEST, "Category title is required");

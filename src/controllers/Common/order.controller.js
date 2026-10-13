@@ -67,8 +67,6 @@ const shipstationWebhook = async (req, res) => {
   try {
     console.log("📩 ShipStation Webhook Received");
 
-    console.log("📦 WEBHOOK:", JSON.stringify(req.body, null, 2));
-
     const data = req.body;
 
     const resource = data.resource || data.data || data;

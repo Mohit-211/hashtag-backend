@@ -2,6 +2,7 @@
 
 const { Sequelize, DataTypes, Model } = require("sequelize");
 const sequelize = require("../config/central.db");
+const { utcNow, markDeleted } = require("./hooks");
 const slugify = require("slugify");
 
 class ProductCategory extends Model {}
@@ -91,21 +92,12 @@ ProductCategory.beforeValidate((productCategory) => {
 });
 
 ProductCategory.beforeUpdate((productCategory) => {
-  productCategory.updated_at = new Date()
-    .toISOString()
-    .replace(/T/, " ")
-    .replace(/\..+/g, "");
+  productCategory.updated_at = utcNow();
   if (productCategory.title) {
     productCategory.slug = slugify(productCategory.title, { lower: true });
   }
 });
 
-ProductCategory.beforeDestroy((productCategory) => {
-  productCategory.deleted_at = new Date()
-    .toISOString()
-    .replace(/T/, " ")
-    .replace(/\..+/g, "");
-  productCategory.is_active = false;
-});
+ProductCategory.beforeDestroy(markDeleted);
 
 module.exports = ProductCategory;

@@ -1,5 +1,6 @@
 const { Sequelize, DataTypes, Model } = require("sequelize");
 const sequelize = require("../config/central.db");
+const { touchUpdatedAt, markDeleted } = require("./hooks");
 const {
   paymentStatusTypes,
   paymentModeTypes,
@@ -114,19 +115,8 @@ Payment.init(
   },
 );
 
-Payment.beforeUpdate((Payment) => {
-  Payment.updated_at = new Date()
-    .toISOString()
-    .replace(/T/, " ")
-    .replace(/\..+/g, "");
-});
+Payment.beforeUpdate(touchUpdatedAt);
 
-Payment.beforeDestroy((Payment) => {
-  Payment.deleted_at = new Date()
-    .toISOString()
-    .replace(/T/, " ")
-    .replace(/\..+/g, "");
-  Payment.is_active = false;
-});
+Payment.beforeDestroy(markDeleted);
 
 module.exports = Payment;

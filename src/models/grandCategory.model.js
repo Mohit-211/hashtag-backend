@@ -2,6 +2,7 @@
 
 const { Sequelize, DataTypes, Model } = require("sequelize");
 const sequelize = require("../config/central.db");
+const { utcNow, markDeleted } = require("./hooks");
 const slugify = require("slugify");
 
 class GrandCategory extends Model {}
@@ -64,23 +65,13 @@ GrandCategory.beforeValidate((category) => {
 });
 
 GrandCategory.beforeUpdate((category) => {
-  category.updated_at = new Date()
-    .toISOString()
-    .replace(/T/, " ")
-    .replace(/\..+/g, "");
+  category.updated_at = utcNow();
 
   if (category.title) {
     category.slug = slugify(category.title, { lower: true });
   }
 });
 
-GrandCategory.beforeDestroy((category) => {
-  category.deleted_at = new Date()
-    .toISOString()
-    .replace(/T/, " ")
-    .replace(/\..+/g, "");
-
-  category.is_active = false;
-});
+GrandCategory.beforeDestroy(markDeleted);
 
 module.exports = GrandCategory;

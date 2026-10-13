@@ -1,5 +1,6 @@
 const { Sequelize, DataTypes, Model } = require('sequelize');
 const sequelize = require('../config/central.db');
+const { touchUpdatedAt, markDeleted } = require('./hooks');
 
 class State extends Model { }
 State.init({
@@ -84,12 +85,7 @@ State.init({
     deletedAt: 'deleted_at'
 });
 
-State.beforeUpdate(async (state) => {
-    state.updated_at = new Date().toISOString().replace(/T/, ' ').replace(/\..+/g, '');
-});
-State.beforeDestroy(async (state) => {
-    state.deleted_at = new Date().toISOString().replace(/T/, ' ').replace(/\..+/g, '');
-    state.is_active = false;
-});
+State.beforeUpdate(touchUpdatedAt);
+State.beforeDestroy(markDeleted);
 
 module.exports = State;

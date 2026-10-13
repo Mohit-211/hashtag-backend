@@ -17,7 +17,6 @@ const credentials = require("./src/middlewares/credentials.js");
 const ApiError = require("./src/utils/ApiError.js");
 const upload = require("./src/config/multer.js");
 const errorHandler = require("./src/utils/errorHandler.js");
-const logger = require("./src/config/logger.js");
 const {
   syncImportedSSProducts,
 } = require("./src/services/Common/ssSync.service.js");
@@ -32,10 +31,6 @@ const {
 } = require("./src/services/Common/sageSync.service.js");
 require("./src/models");
 const PUBLIC_DIR = path.resolve(__dirname, "./public");
-
-cron.schedule("* * * * *", () => {
-  logger.info("Hello, I am still Running.......😊");
-});
 
 cron.schedule(
   "0 2 15 * *",
@@ -139,8 +134,6 @@ app.use(
   }),
 );
 
-process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = 1;
-
 app.use(function (req, res, next) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "*");
@@ -199,10 +192,6 @@ app.use(
   },
   express.static(path.join(PUBLIC_DIR, "uploads/suppliers")),
 );
-app.use("/videos", express.static(`${PUBLIC_DIR}/uploads/videos`));
-app.use("/gifs", express.static(`${PUBLIC_DIR}/uploads/gifs`));
-app.use("/docs", express.static(`${PUBLIC_DIR}/uploads/docs`));
-app.use("/songs", express.static(`${PUBLIC_DIR}/uploads/songs`));
 
 // send back a 404 error for any unknown api request
 app.use((req, res, next) => {

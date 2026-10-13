@@ -206,7 +206,6 @@ const getPublishedBrands = async (query) => {
     }
 
     const offset = (page - 1) * limit;
-    console.log(where);
     const { count, rows } = await Brand.findAndCountAll({
       where,
       attributes: ["id", "name","slug", "logo_url"],
@@ -298,8 +297,6 @@ const syncSSBrands = async () => {
     // ✅ 2. FETCH DATA
     const res = await ssClient.get("/brands");
     const brands = res.data;
-
-    console.log("Sample brand:", brands[0]);
 
     let processed = 0;
 

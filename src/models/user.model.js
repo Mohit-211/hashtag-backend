@@ -1,5 +1,6 @@
 const { Sequelize, DataTypes, Model } = require('sequelize');
 const sequelize = require('../config/central.db');
+const { touchUpdatedAt, markDeleted } = require('./hooks');
 const { userStatusTypes } = require('../config/types');
 
 class User extends Model { }
@@ -35,30 +36,10 @@ User.init({
         type: DataTypes.STRING(200),
         allowNull: true
     },
-    socket_id: {
-        type: DataTypes.STRING(150),
-        allowNull: true
-    },
-    fcm_token: {
-        type: DataTypes.STRING,
-        allowNull: true
-    },
-    reffral_id: {
-        type: DataTypes.STRING,
-        allowNull: true,
-    },
     status: {
         type: DataTypes.ENUM,
         values: [userStatusTypes.ACCEPTED, userStatusTypes.PENDING, userStatusTypes.REJECTED, userStatusTypes.REVIEWED, userStatusTypes.REVIEWING],
         defaultValue: userStatusTypes.PENDING,
-    },
-    remember_token: {
-        type: DataTypes.STRING,
-        allowNull: true,
-    },
-    is_proof_verify: {
-        type: DataTypes.BOOLEAN,
-        defaultValue: false
     },
     notification_status: {
         type: DataTypes.BOOLEAN,
@@ -105,8 +86,6 @@ User.init({
 });
 
 User.afterCreate(async (user) => {
-    const socketId = `${user.role_id}-${user.id}-socketId`;
-    user.socket_id = socketId;
     user.user_name = transformEmail(user.email);
     await user.save();
 });
@@ -128,18 +107,8 @@ User.isEmailTaken = async function (email, role_id) {
     return !!u;
 };
 
-User.isUserNameTaken = async function (user_name, role_id) {
-    let u_n = await this.findOne({ where: { user_name: user_name, role_id: role_id, is_active: true } });
-    return !!u_n;
-};
+User.beforeUpdate(touchUpdatedAt);
 
-User.beforeUpdate(async (user) => {
-    user.updated_at = new Date().toISOString().replace(/T/, ' ').replace(/\..+/g, '');
-});
-
-User.beforeDestroy(async (user) => {
-    user.deleted_at = new Date().toISOString().replace(/T/, ' ').replace(/\..+/g, '');
-    user.is_active = false;
-});
+User.beforeDestroy(markDeleted);
 
 module.exports = User;

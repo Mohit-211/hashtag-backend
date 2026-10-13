@@ -2,6 +2,7 @@
 
 const { Sequelize, DataTypes, Model } = require("sequelize");
 const sequelize = require("../config/central.db");
+const { touchUpdatedAt, markDeleted } = require("./hooks");
 
 class VariantAttachment extends Model {}
 VariantAttachment.init(
@@ -83,19 +84,8 @@ VariantAttachment.init(
 );
 
 
-VariantAttachment.beforeUpdate(async (variantAttachment) => {
-  variantAttachment.updated_at = new Date()
-    .toISOString()
-    .replace(/T/, " ")
-    .replace(/\..+/g, "");
-});
+VariantAttachment.beforeUpdate(touchUpdatedAt);
 
-VariantAttachment.beforeDestroy(async (variantAttachment) => {
-  variantAttachment.deleted_at = new Date()
-    .toISOString()
-    .replace(/T/, " ")
-    .replace(/\..+/g, "");
-  variantAttachment.is_active = false;
-});
+VariantAttachment.beforeDestroy(markDeleted);
 
 module.exports = VariantAttachment;

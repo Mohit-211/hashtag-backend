@@ -1,5 +1,6 @@
 const { Sequelize, DataTypes, Model } = require("sequelize");
 const sequelize = require("../config/central.db");
+const { touchUpdatedAt, markDeleted } = require("./hooks");
 
 class UseCaseParentCategoryMapping extends Model {}
 
@@ -61,20 +62,8 @@ UseCaseParentCategoryMapping.init(
   }
 );
 
-UseCaseParentCategoryMapping.beforeUpdate(async (mapping) => {
-  mapping.updated_at = new Date()
-    .toISOString()
-    .replace(/T/, " ")
-    .replace(/\..+/g, "");
-});
+UseCaseParentCategoryMapping.beforeUpdate(touchUpdatedAt);
 
-UseCaseParentCategoryMapping.beforeDestroy(async (mapping) => {
-  mapping.deleted_at = new Date()
-    .toISOString()
-    .replace(/T/, " ")
-    .replace(/\..+/g, "");
-
-  mapping.is_active = false;
-});
+UseCaseParentCategoryMapping.beforeDestroy(markDeleted);
 
 module.exports = UseCaseParentCategoryMapping;

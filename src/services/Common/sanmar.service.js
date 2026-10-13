@@ -382,9 +382,6 @@ const restoreSanmarProduct = async (styleId, transaction) => {
     );
   }
 
-  console.log("RESTORE PRODUCT:", product?.id);
-  console.log("PRODUCT DELETED:", product?.deleted_at);
-
   return product;
 };
 
@@ -655,8 +652,6 @@ const saveSanmarProductToDB = async (data, batchId) => {
       // =========================
 
       if (exists) {
-        console.log("♻️ Updating Product Attachment");
-
         await ProductAttachment.update(
           {
             file_uri: localImage,
@@ -684,8 +679,6 @@ const saveSanmarProductToDB = async (data, batchId) => {
       // ✅ CREATE NEW
       // =========================
       else {
-        console.log("🆕 Creating Product Attachment");
-
         await ProductAttachment.create(
           {
             product_id: product.id,
@@ -765,15 +758,10 @@ const saveSanmarProductToDB = async (data, batchId) => {
       ...new Set(variants.map((v) => v.color?.name).filter(Boolean)),
     ];
 
-    console.log(`🎨 Found ${uniqueColors.length} unique colors`);
-    console.log("🎨 UNIQUE COLORS");
-    console.log(uniqueColors);
     const colorMap = {};
     for (const color of uniqueColors) {
       try {
         colorMap[color] = await getOrCreateColorCode("SANMAR", color);
-
-        console.log(`🎨 ${color} -> ${colorMap[color]}`);
       } catch (err) {
         console.error(`❌ Color mapping failed: ${color}`);
 
@@ -879,9 +867,7 @@ const saveSanmarProductToDB = async (data, batchId) => {
       paranoid: false,
       transaction,
     });
-    console.log("RESTORING VARIANTS FOR:", product.id);
-
-    const restored = await ProductVariant.update(
+    await ProductVariant.update(
       {
         deleted_at: null,
         is_active: true,
@@ -894,15 +880,12 @@ const saveSanmarProductToDB = async (data, batchId) => {
         transaction,
       },
     );
-    console.log("UPDATED COUNT:", restored);
 
     const variantMap = new Map(createdVariants.map((v) => [v.sku, v]));
 
     // =========================
     // ✅ VARIANT IMAGES
     // =========================
-
-    console.log("✅ BEFORE VARIANT ATTACHMENTS");
 
     for (const v of variants) {
       const variant = variantMap.get(String(v.sku));
@@ -950,11 +933,6 @@ const saveSanmarProductToDB = async (data, batchId) => {
         .filter(Boolean)
         .slice(0, 2);
 
-      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━");
-      console.log("🖼 SKU:", v.sku);
-      console.log("📸 ORIGINAL IMAGES:", v.images?.length);
-      console.log("✅ UNIQUE IMAGES:", uniqueImages.length);
-
       /*
    |--------------------------------------------------------------------------
    | FETCH EXISTING ROWS
@@ -994,21 +972,6 @@ const saveSanmarProductToDB = async (data, batchId) => {
           const localImage = downloadedVariantImages[`${v.sku}-${img}`];
 
           if (!localImage) continue;
-
-          console.log("━━━━━━━━━━━━━━━━━━");
-          console.log("🔁 LOOP:", index);
-          console.log("🌐 SOURCE:", img);
-          console.log("📁 LOCAL:", localImage);
-
-          console.log("🧠 EXISTING ROWS");
-
-          existingRows.forEach((r) => {
-            console.log({
-              id: r.id,
-              source_url: r.source_url,
-              file_uri: r.file_uri,
-            });
-          });
 
           let exists = null;
 
@@ -1077,8 +1040,6 @@ const saveSanmarProductToDB = async (data, batchId) => {
        | CREATE
        |--------------------------------------------------------------------------
        */
-            console.log("🆕 Creating new row");
-
             await VariantAttachment.create(
               {
                 variant_id: variant.id,
@@ -1101,30 +1062,7 @@ const saveSanmarProductToDB = async (data, batchId) => {
             );
           }
         } catch (imgErr) {
-          console.error("❌ VARIANT IMAGE FAILED");
-          console.error("SKU:", v.sku);
-          console.error("IMAGE:", img);
-
-          console.error("❌ MESSAGE:");
-          console.error(imgErr.message);
-
-          console.error("❌ FULL ERROR:");
-          console.error(imgErr);
-
-          console.error("❌ ERRORS:");
-          console.error(imgErr?.errors);
-
-          console.error("❌ PARENT:");
-          console.error(imgErr?.parent);
-
-          console.error("❌ ORIGINAL:");
-          console.error(imgErr?.original);
-
-          console.error("❌ SQL MESSAGE:");
-          console.error(imgErr?.sqlMessage);
-
-          console.error("❌ SQL:");
-          console.error(imgErr?.sql);
+          console.error(`❌ Variant image failed: ${v.sku} ${img}`, imgErr);
         }
       }
 
@@ -1161,8 +1099,6 @@ const saveSanmarProductToDB = async (data, batchId) => {
         .slice(0, uniqueImages.length)
         .map((r) => r.id);
 
-      console.log("✅ KEEP IDS:", keepIds);
-
       // ✅ DELETE EVERYTHING ELSE
       await VariantAttachment.destroy({
         where: {
@@ -1176,8 +1112,6 @@ const saveSanmarProductToDB = async (data, batchId) => {
         transaction,
       });
     }
-
-    console.log("✅ AFTER VARIANT ATTACHMENTS");
 
     // =========================
     // ✅ COMMIT
@@ -1194,14 +1128,7 @@ const saveSanmarProductToDB = async (data, batchId) => {
       await transaction.rollback();
     }
 
-    console.error("❌ Sanmar save failed:", err.message);
-    console.error("❌ FULL ERROR");
-    console.error(err);
-    console.error(err?.errors);
-    console.error(err?.parent);
-    console.error(err?.original);
-    console.error(err?.sqlMessage);
-    console.error(err?.sql);
+    console.error("❌ Sanmar save failed:", err);
 
     throw err;
   }

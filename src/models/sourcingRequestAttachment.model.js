@@ -2,6 +2,7 @@
 
 const { Sequelize, DataTypes, Model } = require("sequelize");
 const sequelize = require("../config/central.db");
+const { touchUpdatedAt, markDeleted } = require("./hooks");
 
 class SourcingRequestAttachment extends Model {}
 
@@ -76,20 +77,8 @@ SourcingRequestAttachment.init(
   },
 );
 
-SourcingRequestAttachment.beforeUpdate(async (attachment) => {
-  attachment.updated_at = new Date()
-    .toISOString()
-    .replace(/T/, " ")
-    .replace(/\..+/g, "");
-});
+SourcingRequestAttachment.beforeUpdate(touchUpdatedAt);
 
-SourcingRequestAttachment.beforeDestroy(async (attachment) => {
-  attachment.deleted_at = new Date()
-    .toISOString()
-    .replace(/T/, " ")
-    .replace(/\..+/g, "");
-
-  attachment.is_active = false;
-});
+SourcingRequestAttachment.beforeDestroy(markDeleted);
 
 module.exports = SourcingRequestAttachment;

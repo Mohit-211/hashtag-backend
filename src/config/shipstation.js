@@ -168,8 +168,6 @@ const createShipstationOrderV2 = async (
       ],
     };
 
-    console.log("📦 SHIPSTATION PAYLOAD:", JSON.stringify(payload, null, 2));
-
     /*
      |--------------------------------------------------------------------------
      | CREATE SHIPMENT
@@ -234,11 +232,6 @@ const createLabel = async (order, address, totalWeight) => {
             },
           },
         ],
-        // packages: [
-        //   {
-        //     weight: { value: parseFloat(totalWeight) || 1, unit: "pound" },
-        //   },
-        // ],
       },
       validate_address: "validate_and_clean",
       label_download_type: "url",
@@ -270,13 +263,8 @@ const createShipmentForOrder = async (order) => {
       return sum + i.quantity * Number(i.variant?.unit_weight || 0.5);
     }, 0);
 
-    console.log(`⚖️ Total Weight: ${totalWeight} lbs`);
-
     // Create Order in Dashboard
     await createShipstationOrderV2(order, orderItems, address, totalWeight);
-
-    // Create Actual Label
-    // return await createLabel(order, address, totalWeight);
   } catch (error) {
     console.error("🚨 Create Shipment Failed:", error.message);
     throw error;
@@ -330,8 +318,6 @@ const purchaseLabelForOrder = async (order) => {
 
       0,
     );
-
-    console.log(`⚖️ Label Weight: ${totalWeight} lbs`);
 
     /*
      |--------------------------------------------------------------------------
@@ -401,7 +387,6 @@ const getShippingRates = async ({ address, items }) => {
       shipment: {
         ship_to: mapAddress(address),
         ship_from: getShipFromAddress(),
-        // packages: [{ weight: { value: totalWeight || 1, unit: "pound" } }],
         packages: [
           {
             weight: {
@@ -421,7 +406,6 @@ const getShippingRates = async ({ address, items }) => {
     });
 
     const allRates = res.data?.rate_response?.rates || [];
-    // ... (your existing filtering logic remains the same)
     const ALLOWED = {
       ups_ground: "UPS Ground",
       ups_2nd_day_air: "UPS 2nd Day Air",

@@ -68,12 +68,7 @@ const importOttoCapInventory = async () => {
       total_records: payload.length,
     };
   } catch (err) {
-    console.error("❌ MESSAGE:", err.message);
-    console.error("❌ NAME:", err.name);
-    console.error("❌ SQL MESSAGE:", err?.parent?.sqlMessage);
-    console.error("❌ SQL CODE:", err?.parent?.code);
-    console.error("❌ ERRNO:", err?.parent?.errno);
-    console.error(err);
+    console.error("❌ OttoCap inventory import failed:", err);
 
     throw err;
   }
@@ -179,11 +174,7 @@ const importOttoCapCatalog = async () => {
       total_records: payload.length,
     };
   } catch (err) {
-    console.error("❌ MESSAGE:", err.message);
-    console.error("❌ NAME:", err.name);
-    console.error("❌ SQL MESSAGE:", err?.parent?.sqlMessage);
-    console.error("❌ SQL CODE:", err?.parent?.code);
-    console.error("❌ ERRNO:", err?.parent?.errno);
+    console.error("❌ OttoCap catalog import failed:", err);
 
     throw err;
   }
@@ -450,9 +441,6 @@ const restoreOttoProduct = async (productId, transaction) => {
 };
 
 const saveOttoProductToDB = async (skuNo, batchId) => {
-  console.log("skuNo:", skuNo);
-  console.log("typeof:", typeof skuNo);
-
   // =====================================================
   // CHECK SYNC LOCK
   // =====================================================
@@ -643,12 +631,6 @@ const saveOttoProductBaseOnly = async ({
   });
 
   if (categoryMapping) {
-    console.log(
-      "Before restore:",
-      categoryMapping.id,
-      categoryMapping.deleted_at,
-    );
-
     if (categoryMapping.deleted_at) {
       await categoryMapping.restore({
         transaction,
@@ -668,12 +650,6 @@ const saveOttoProductBaseOnly = async ({
       paranoid: false,
       transaction,
     });
-
-    console.log(
-      "After restore:",
-      categoryMapping.id,
-      categoryMapping.deleted_at,
-    );
   } else {
     categoryMapping = await ProductCategoryMapping.create(
       {
@@ -906,18 +882,6 @@ const saveOttoVariantToDB = async ({
       },
     );
   }
-
-  console.log("deletedAt =", createdVariant.deletedAt);
-  console.log("deleted_at =", createdVariant.deleted_at);
-
-  console.log(
-    "Variant:",
-    createdVariant.id,
-    "created:",
-    created,
-    "deleted_at:",
-    createdVariant.deleted_at,
-  );
 
   const variantImages = [
     variant.image_1,

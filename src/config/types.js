@@ -42,13 +42,6 @@ const rolesTypes = {
   CUSTOMER: "User",
 };
 
-const bookingTypes = {
-  PENDING: "PENDING",
-  SUCCESS: "SUCCESS",
-  REJECTED: "REJECTED",
-  ESTIMATE: "ESTIMATE",
-};
-
 const tokenTypes = {
   ACCESS: "access",
   REFRESH: "refresh",
@@ -83,7 +76,6 @@ module.exports = {
   otpTypes,
   paymentStatusTypes,
   rolesTypes,
-  bookingTypes,
   tokenTypes,
   currancyTypes,
   orderStatusTypes,

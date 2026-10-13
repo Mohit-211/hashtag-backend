@@ -2,6 +2,7 @@
 
 const { Sequelize, DataTypes, Model } = require("sequelize");
 const sequelize = require("../config/central.db");
+const { touchUpdatedAt, markDeleted } = require("./hooks");
 
 class Carrier extends Model {}
 
@@ -54,19 +55,8 @@ Carrier.init(
 	},
 );
 
-Carrier.beforeUpdate(async (carrier) => {
-	carrier.updated_at = new Date()
-		.toISOString()
-		.replace(/T/, " ")
-		.replace(/\..+/g, "");
-});
+Carrier.beforeUpdate(touchUpdatedAt);
 
-Carrier.beforeDestroy(async (carrier) => {
-	carrier.deleted_at = new Date()
-		.toISOString()
-		.replace(/T/, " ")
-		.replace(/\..+/g, "");
-	carrier.is_active = false;
-});
+Carrier.beforeDestroy(markDeleted);
 
 module.exports = Carrier;

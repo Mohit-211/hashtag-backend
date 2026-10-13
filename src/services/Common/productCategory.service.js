@@ -88,49 +88,6 @@ const getAllCategories = async (query) => {
   }
 };
 
-// const getAllCategories = async (query) => {
-//   try {
-//     let { page = 1, limit = 20, search } = query;
-
-//     page = parseInt(page) || 1;
-//     limit = parseInt(limit) || 20;
-//     const offset = (page - 1) * limit;
-
-//     const whereCondition = {
-//       is_active: true,
-//     };
-
-//     // 🔍 SEARCH (by title)
-//     if (search) {
-//       whereCondition.title = {
-//         [Op.like]: `%${search}%`, // use Op.iLike if using PostgreSQL
-//       };
-//     }
-
-//     const { rows, count } = await ProductCategory.findAndCountAll({
-//       where: whereCondition,
-//       limit,
-//       offset,
-//       order: [["title", "ASC"]],
-//     });
-
-//     return {
-//       data: rows,
-//       pagination: {
-//         total: count,
-//         page,
-//         limit,
-//         totalPages: Math.ceil(count / limit),
-//       },
-//     };
-//   } catch (error) {
-//     throw new ApiError(
-//       error.statusCode || httpStatus.INTERNAL_SERVER_ERROR,
-//       error.message
-//     );
-//   }
-// };
-
 const findCategoryById = async (id) => {
   try {
     const categoryDoc = await ProductCategory.findOne({
@@ -229,8 +186,6 @@ const syncSSCategories = async () => {
     const res = await ssClient.get("/categories?mediaType=json");
 
     const categories = res.data;
-
-    console.log("Sample category:", categories?.[0]);
 
     let processed = 0;
 

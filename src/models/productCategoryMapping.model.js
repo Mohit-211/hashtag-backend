@@ -1,5 +1,6 @@
 const { Sequelize, DataTypes, Model } = require("sequelize");
 const sequelize = require("../config/central.db");
+const { touchUpdatedAt, markDeleted } = require("./hooks");
 
 
 class ProductCategoryMapping extends Model {}
@@ -48,18 +49,7 @@ ProductCategoryMapping.init(
 	}
 );
 
-ProductCategoryMapping.beforeUpdate(async (productCategoryMapping) => {
-	productCategoryMapping.updated_at = new Date()
-		.toISOString()
-		.replace(/T/, " ")
-		.replace(/\..+/g, "");
-});
-ProductCategoryMapping.beforeDestroy(async (productCategoryMapping) => {
-	productCategoryMapping.deleted_at = new Date()
-		.toISOString()
-		.replace(/T/, " ")
-		.replace(/\..+/g, "");
-	productCategoryMapping.is_active = false;
-});
+ProductCategoryMapping.beforeUpdate(touchUpdatedAt);
+ProductCategoryMapping.beforeDestroy(markDeleted);
 
 module.exports = ProductCategoryMapping;

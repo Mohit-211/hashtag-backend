@@ -4,7 +4,6 @@ const responseWrapper = require("../../config/responseWrapper");
 const { grandCategoryService } = require("../../services");
 
 const createGrandCategory = catchAsync(async (req, res) => {
-      console.log("GRAND CATEGORY CONTROLLER HIT");
   const data = await grandCategoryService.createGrandCategory(req.body);
 
   return responseWrapper(

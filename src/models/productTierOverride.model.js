@@ -1,6 +1,7 @@
 const { Sequelize, DataTypes, Model } = require("sequelize");
 
 const sequelize = require("../config/central.db");
+const { touchUpdatedAt } = require("./hooks");
 
 class ProductTierOverride extends Model {}
 
@@ -65,11 +66,6 @@ ProductTierOverride.init(
   },
 );
 
-ProductTierOverride.beforeUpdate(async (override) => {
-  override.updated_at = new Date()
-    .toISOString()
-    .replace(/T/, " ")
-    .replace(/\..+/, "");
-});
+ProductTierOverride.beforeUpdate(touchUpdatedAt);
 
 module.exports = ProductTierOverride;

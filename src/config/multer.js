@@ -6,20 +6,12 @@ const PUBLIC_DIR = path.resolve(__dirname, "../../public");
 // Set storage engine
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    if (file.fieldname === "videos") {
-      cb(null, PUBLIC_DIR + "/uploads/videos");
-    } else if (
+    if (
       file.fieldname === "images" ||
       file.fieldname === "variant_images" ||
       file.fieldname === "customization_images"
     ) {
       cb(null, PUBLIC_DIR + "/uploads/images");
-    } else if (file.fieldname === "gifs") {
-      cb(null, PUBLIC_DIR + "/uploads/gifs");
-    } else if (file.fieldname === "docs") {
-      cb(null, PUBLIC_DIR + "/uploads/docs");
-    } else if (file.fieldname === "audios") {
-      cb(null, PUBLIC_DIR + "/uploads/audios");
     } else {
       cb(new Error("Invalid fieldname"));
     }
@@ -134,11 +126,7 @@ const upload = multer({
     return checkFileType(file, cb);
   },
 }).fields([
-  { name: "gifs", maxCount: 10 },
   { name: "images", maxCount: 10 },
-  { name: "videos", maxCount: 10 },
-  { name: "docs", maxCount: 10 },
-  { name: "audios", maxCount: 10 },
   { name: "variant_images", maxCount: 20 },
   { name: "customization_images", maxCount: 10 },
 ]);

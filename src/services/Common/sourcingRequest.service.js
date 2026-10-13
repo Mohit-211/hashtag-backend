@@ -8,7 +8,6 @@ const {
 
 const createSourcingRequest = async (body, files) => {
   try {
-    console.log(files,"files")
     const {
       name,
       email,

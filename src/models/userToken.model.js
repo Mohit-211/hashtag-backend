@@ -1,5 +1,6 @@
 const { Sequelize, DataTypes, Model } = require('sequelize');
 const sequelize = require('../config/central.db');
+const { touchUpdatedAt, markDeleted } = require('./hooks');
 const { tokenTypes } = require('../config/types');
 
 class UserToken extends Model { }
@@ -38,10 +39,6 @@ UserToken.init({
         type: DataTypes.TEXT,
         allowNull: true
     },
-    fcm_token: {
-        type: DataTypes.TEXT,
-        allowNull: true
-    },
     is_active: {
         type: DataTypes.BOOLEAN,
         defaultValue: true,
@@ -74,13 +71,8 @@ UserToken.init({
     'deletedAt': 'deleted_at'
 });
 
-UserToken.beforeUpdate(async (UserToken) => {
-    UserToken.updated_at = new Date().toISOString().replace(/T/, ' ').replace(/\..+/g, '');
-});
+UserToken.beforeUpdate(touchUpdatedAt);
 
-UserToken.beforeDestroy(async (UserToken) => {
-    UserToken.deleted_at = new Date().toISOString().replace(/T/, ' ').replace(/\..+/g, '');
-    UserToken.is_active = false;
-});
+UserToken.beforeDestroy(markDeleted);
 
 module.exports = UserToken;

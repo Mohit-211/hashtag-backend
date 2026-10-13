@@ -34,6 +34,22 @@ const {
 const decodeHtmlEntities = require("../../utils/decodeHtmlEntities");
 const { cancelShipstationShipment } = require("../../config/shipstation");
 
+// Variant's primary image, else its first image, else the product's first attachment.
+const getVariantImage = (variant) => {
+  if (!variant) return null;
+
+  if (variant.images?.length) {
+    const primary = variant.images.find((img) => img.is_primary);
+    return (primary || variant.images[0])?.file_uri || null;
+  }
+
+  if (variant.product?.attachments?.length) {
+    return variant.product.attachments[0]?.file_uri || null;
+  }
+
+  return null;
+};
+
 const addToWishlist = async (body) => {
   try {
     const { user, product_id, variant_id } = body;
@@ -97,46 +113,10 @@ const getWishlist = async (body) => {
       ],
     });
 
-    const getImage = (variant) => {
-      if (!variant) return null;
-
-      if (variant.images?.length) {
-        const primary = variant.images.find((img) => img.is_primary);
-        return (primary || variant.images[0])?.file_uri || null;
-      }
-
-      if (variant.product?.attachments?.length) {
-        return variant.product.attachments[0]?.file_uri || null;
-      }
-
-      return null;
-    };
-
     const formatted = (
       await Promise.all(
         data.map(async (item) => {
           const v = item.variant;
-
-          let customization_config = item.customization_config;
-
-          let pricing_snapshot = item.pricing_snapshot;
-
-          /*
-|--------------------------------------------------------------------------
-| PARSE JSON
-|--------------------------------------------------------------------------
-*/
-
-          if (
-            customization_config &&
-            typeof customization_config === "string"
-          ) {
-            customization_config = JSON.parse(customization_config);
-          }
-
-          if (pricing_snapshot && typeof pricing_snapshot === "string") {
-            pricing_snapshot = JSON.parse(pricing_snapshot);
-          }
 
           if (!v) return null;
 
@@ -173,7 +153,7 @@ const getWishlist = async (body) => {
             color_code: v.color_code,
             size: v.size_details?.name || null,
 
-            image: getImage(v),
+            image: getVariantImage(v),
 
             stock: v.stock,
             stock_status,
@@ -1175,8 +1155,6 @@ const addToCart = async (body, files) => {
       customization = null,
     } = body;
 
-    console.log("REQUEST BODY", body);
-
     /*
      * =========================================================
      * MANUAL PRODUCT CART
@@ -1840,15 +1818,6 @@ const addToCart = async (body, files) => {
 
     await invalidatePendingOrder(user.id);
 
-    console.log(
-      "STEP 1 - REQUEST CUSTOMIZATION",
-      JSON.stringify(
-        customization,
-        null,
-        2,
-      ),
-    );
-
     let logo_image = null;
 
     if (files?.images?.length) {
@@ -2038,50 +2007,6 @@ const getCart = async (body) => {
       ],
     });
 
-    /*
-     * ---------------------------------------------------------
-     * GET PRODUCT IMAGE
-     * ---------------------------------------------------------
-     */
-
-    const getImage = (variant) => {
-      if (!variant) {
-        return null;
-      }
-
-      /*
-       * First priority:
-       * Variant images
-       */
-
-      if (variant.images?.length) {
-        const primary = variant.images.find(
-          (img) => img.is_primary,
-        );
-
-        return (
-          primary ||
-          variant.images[0]
-        )?.file_uri || null;
-      }
-
-      /*
-       * Second priority:
-       * Product attachment
-       */
-
-      if (
-        variant.product?.attachments?.length
-      ) {
-        return (
-          variant.product.attachments[0]
-            ?.file_uri || null
-        );
-      }
-
-      return null;
-    };
-
     let cart_total = 0;
 
     /*
@@ -2126,157 +2051,14 @@ const getCart = async (body) => {
             );
         }
 
-        /*
-         * -----------------------------------------------------
-         * MANUAL PRODUCT ONLY
-         * -----------------------------------------------------
-         *
-         * Parse customization_config and add:
-         *
-         * - customization_option_name
-         * - customization_option_value_name
-         *
-         * Also convert artwork path into full URL.
-         *
-         * IMPORTANT:
-         *
-         * Do NOT modify existing supplier
-         * customization response behavior.
-         * -----------------------------------------------------
-         */
-
-        if (
-          v.supplier === "MANUAL"
-        ) {
-          if (
-            customization_config &&
-            typeof customization_config ===
-              "string"
-          ) {
-            customization_config =
-              JSON.parse(
-                customization_config,
-              );
-          }
-
-          if (
-            customization_config?.customization &&
-            Array.isArray(
-              customization_config.customization,
-            )
-          ) {
-            customization_config.customization =
-              await Promise.all(
-                customization_config.customization.map(
-                  async (
-                    customizationItem,
-                  ) => {
-                    if (
-                      !customizationItem ||
-                      typeof customizationItem !==
-                        "object"
-                    ) {
-                      return customizationItem;
-                    }
-
-                    const updatedItem = {
-                      ...customizationItem,
-                    };
-
-                    /*
-                     * -----------------------------------------
-                     * Customization Option Name
-                     * -----------------------------------------
-                     */
-
-                    const optionId =
-                      Number(
-                        customizationItem.customization_option_id,
-                      );
-
-                    if (optionId) {
-                      const customizationOption =
-                        await CustomizationOption.findOne(
-                          {
-                            where: {
-                              id: optionId,
-                            },
-
-                            attributes: [
-                              "id",
-                              "name",
-                            ],
-                          },
-                        );
-
-                      if (
-                        customizationOption
-                      ) {
-                        updatedItem.customization_option_name =
-                          customizationOption.name;
-                      }
-                    }
-
-                    /*
-                     * -----------------------------------------
-                     * Customization Option Value Name
-                     * -----------------------------------------
-                     */
-
-                    const valueId =
-                      Number(
-                        customizationItem.customization_option_value_id,
-                      );
-
-                    if (valueId) {
-                      const customizationOptionValue =
-                        await CustomizationOptionValue.findOne(
-                          {
-                            where: {
-                              id: valueId,
-                            },
-
-                            attributes: [
-                              "id",
-                              "name",
-                            ],
-                          },
-                        );
-
-                      if (
-                        customizationOptionValue
-                      ) {
-                        updatedItem.customization_option_value_name =
-                          customizationOptionValue.name;
-                      }
-                    }
-
-                    /*
-                     * -----------------------------------------
-                     * Customization Artwork URL
-                     * -----------------------------------------
-                     */
-
-                    if (
-                      updatedItem.logo_image &&
-                      typeof updatedItem.logo_image ===
-                        "string" &&
-                      updatedItem.logo_image.startsWith(
-                        "/",
-                      )
-                    ) {
-                      updatedItem.logo_image =
-                        `${process.env.IMAGE_BASE_URL}${updatedItem.logo_image}`;
-                    }
-
-                    return updatedItem;
-                  },
-                ),
-              );
-          }
+        // MANUAL only: add option/value names and full artwork URLs.
+        // Supplier customization_config is returned as stored.
+        if (v.supplier === "MANUAL") {
+          customization_config =
+            await enrichManualCustomizationConfig(customization_config);
         }
 
-        const image = getImage(v);
+        const image = getVariantImage(v);
 
         /*
          * -----------------------------------------------------
@@ -2571,38 +2353,6 @@ const getCart = async (body) => {
             cart_total || 0,
           ).toFixed(2),
       },
-
-      // pending_order: pendingOrder
-      //   ? {
-      //       order_id: pendingOrder.id,
-      //
-      //       order_number:
-      //         pendingOrder.order_number,
-      //
-      //       total_amount:
-      //         Number(
-      //           pendingOrder.total_amount || 0,
-      //         ),
-      //
-      //       shipping_amount:
-      //         Number(
-      //           pendingOrder.shipping_amount || 0,
-      //         ),
-      //
-      //       payment_status:
-      //         pendingOrder.payment_status,
-      //
-      //       shipment_status:
-      //         pendingOrder.shipment_status,
-      //
-      //       tracking_number:
-      //         pendingOrder.tracking_number,
-      //
-      //       label_url:
-      //         pendingOrder.label_url,
-      //
-      //     }
-      //   : null,
     };
   } catch (error) {
     console.log(
@@ -2710,6 +2460,112 @@ const enrichManualCustomizationConfig = async (customizationConfig) => {
   return config;
 };
 
+// A cart line as the cart endpoints return it: JSON columns parsed and logo_image as a
+// full URL. MANUAL lines also get option/value names and full artwork URLs.
+const toCartItemResponse = async (cart, isManual) => {
+  const response = cart.toJSON();
+
+  if (isManual) {
+    response.customization_config = await enrichManualCustomizationConfig(
+      response.customization_config,
+    );
+  } else if (
+    response.customization_config &&
+    typeof response.customization_config === "string"
+  ) {
+    response.customization_config = JSON.parse(response.customization_config);
+  }
+
+  if (
+    response.pricing_snapshot &&
+    typeof response.pricing_snapshot === "string"
+  ) {
+    response.pricing_snapshot = JSON.parse(response.pricing_snapshot);
+  }
+
+  response.logo_image = response.logo_image
+    ? `${process.env.IMAGE_BASE_URL}${response.logo_image}`
+    : null;
+
+  return response;
+};
+
+// Reprices an existing MANUAL cart line at a new quantity and saves it.
+// allowInactiveCustomization lets an existing cart keep a customization the admin deleted
+// or deactivated after the item was added; addToCart doesn't pass it, so new carts can't.
+const repriceManualCartItem = async (cart, variant, customization, quantity) => {
+  const manualCustomization = customization?.customization || [];
+
+  const manualAddons = customization?.addons || [];
+
+  const pricing_snapshot = await buildManualPricingSnapshot({
+    product: variant.product,
+
+    variant,
+
+    quantity,
+
+    customization: manualCustomization,
+
+    addons: manualAddons,
+
+    allowInactiveCustomization: true,
+  });
+
+  await cart.update({
+    quantity,
+
+    customization_config: {
+      ...(customization || {}),
+
+      type: "MANUAL",
+
+      quantity,
+
+      customization: manualCustomization,
+
+      addons: manualAddons,
+    },
+
+    pricing_snapshot,
+  });
+
+  return toCartItemResponse(cart, true);
+};
+
+// Pricing snapshot of a supplier cart line at a new quantity. Lines without a
+// customization have none.
+const buildSupplierPricingSnapshot = async (variant, customization, quantity) => {
+  const categories = await getProductCategories(variant.product_id);
+
+  if (!customization) {
+    return null;
+  }
+
+  if (variant.supplier === "SAGE") {
+    return buildSagePricingSnapshot({
+      variant,
+
+      product: {
+        ...variant.product.toJSON(),
+        categories,
+      },
+
+      quantity,
+
+      customization,
+    });
+  }
+
+  return buildPricingSnapshot({
+    variant,
+
+    quantity,
+
+    customization,
+  });
+};
+
 const incrementCart = async (body) => {
   try {
     const { cart_id } = body;
@@ -2780,221 +2636,29 @@ const incrementCart = async (body) => {
       customization = JSON.parse(customization);
     }
 
-    /*
-     * =========================================================
-     * MANUAL PRODUCT
-     * =========================================================
-     *
-     * Existing MANUAL cart items are allowed to continue using
-     * a customization even if that customization was later
-     * deleted/deactivated by the admin.
-     *
-     * This is ONLY for an existing cart.
-     *
-     * New carts still use allowInactiveCustomization = false
-     * through addToCart.
-     */
-
     if (variant.supplier === "MANUAL") {
-      const manualCustomization =
-        customization?.customization || [];
-
-      const manualAddons =
-        customization?.addons || [];
-
-      /*
-       * ---------------------------------------------------------
-       * Rebuild MANUAL pricing using new quantity
-       * ---------------------------------------------------------
-       *
-       * IMPORTANT:
-       *
-       * allowInactiveCustomization: true
-       *
-       * This allows an already-existing cart to continue using
-       * an option/value that was deleted after the cart was created.
-       *
-       * It does NOT make deleted customizations available for
-       * new carts because addToCart does not pass this flag.
-       */
-
-      const pricing_snapshot =
-        await buildManualPricingSnapshot({
-          product: variant.product,
-
-          variant,
-
-          quantity: newQty,
-
-          customization: manualCustomization,
-
-          addons: manualAddons,
-
-          allowInactiveCustomization: true,
-        });
-
-      /*
-       * ---------------------------------------------------------
-       * Update MANUAL customization config
-       * ---------------------------------------------------------
-       */
-
-      const updatedCustomizationConfig = {
-        ...(customization || {}),
-
-        type: "MANUAL",
-
-        quantity: newQty,
-
-        customization: manualCustomization,
-
-        addons: manualAddons,
-      };
-
-      await cart.update({
-        quantity: newQty,
-
-        customization_config:
-          updatedCustomizationConfig,
-
-        pricing_snapshot,
-      });
-
-      const response = cart.toJSON();
-
-      /*
-       * ---------------------------------------------------------
-       * MANUAL ONLY:
-       * Enrich customization response
-       *
-       * Adds:
-       * - customization_option_name
-       * - customization_option_value_name
-       * - full artwork URL
-       * ---------------------------------------------------------
-       */
-
-      response.customization_config =
-        await enrichManualCustomizationConfig(
-          response.customization_config,
-        );
-
-      /*
-       * ---------------------------------------------------------
-       * Parse pricing snapshot
-       * ---------------------------------------------------------
-       */
-
-      if (
-        response.pricing_snapshot &&
-        typeof response.pricing_snapshot === "string"
-      ) {
-        response.pricing_snapshot =
-          JSON.parse(
-            response.pricing_snapshot,
-          );
-      }
-
-      /*
-       * ---------------------------------------------------------
-       * Existing top-level logo_image
-       *
-       * Keep this exactly for backwards compatibility.
-       * ---------------------------------------------------------
-       */
-
-      response.logo_image =
-        response.logo_image
-          ? `${process.env.IMAGE_BASE_URL}${response.logo_image}`
-          : null;
-
-      return response;
+      return await repriceManualCartItem(cart, variant, customization, newQty);
     }
-
-    /*
-     * =========================================================
-     * EXISTING SUPPLIER CART LOGIC
-     * =========================================================
-     *
-     * DO NOT CHANGE existing supplier behavior.
-     * =========================================================
-     */
-
-    const categories =
-      await getProductCategories(
-        variant.product_id,
-      );
 
     if (customization?.size) {
       customization.size.quantity = newQty;
     }
 
-    let pricing_snapshot = null;
-
-    if (customization) {
-      if (variant.supplier === "SAGE") {
-        pricing_snapshot =
-          await buildSagePricingSnapshot({
-            variant,
-
-            product: {
-              ...variant.product.toJSON(),
-              categories,
-            },
-
-            quantity: newQty,
-
-            customization,
-          });
-      } else {
-        pricing_snapshot =
-          await buildPricingSnapshot({
-            variant,
-
-            quantity: newQty,
-
-            customization,
-          });
-      }
-    }
+    const pricing_snapshot = await buildSupplierPricingSnapshot(
+      variant,
+      customization,
+      newQty,
+    );
 
     await cart.update({
       quantity: newQty,
 
-      customization_config:
-        customization,
+      customization_config: customization,
 
       pricing_snapshot,
     });
 
-    const response = cart.toJSON();
-
-    if (
-      response.customization_config &&
-      typeof response.customization_config === "string"
-    ) {
-      response.customization_config =
-        JSON.parse(
-          response.customization_config,
-        );
-    }
-
-    if (
-      response.pricing_snapshot &&
-      typeof response.pricing_snapshot === "string"
-    ) {
-      response.pricing_snapshot =
-        JSON.parse(
-          response.pricing_snapshot,
-        );
-    }
-
-    response.logo_image =
-      response.logo_image
-        ? `${process.env.IMAGE_BASE_URL}${response.logo_image}`
-        : null;
-
-    return response;
+    return await toCartItemResponse(cart, false);
   } catch (error) {
     console.log(
       "❌ INCREMENT CART ERROR:",
@@ -3067,165 +2731,19 @@ const decrementCart = async (body) => {
       customization = JSON.parse(customization);
     }
 
-    /*
-     * =========================================================
-     * MANUAL PRODUCT
-     * =========================================================
-     *
-     * Recalculate the MANUAL pricing snapshot using
-     * the new quantity.
-     *
-     * Existing carts are allowed to continue using
-     * customizations that were later deactivated/deleted.
-     */
-
     if (variant.supplier === "MANUAL") {
-      const manualCustomization = customization?.customization || [];
-
-      const manualAddons = customization?.addons || [];
-
-      /*
-       * ---------------------------------------------------------
-       * Rebuild MANUAL pricing using new quantity
-       * ---------------------------------------------------------
-       */
-
-      const pricing_snapshot = await buildManualPricingSnapshot({
-        product: variant.product,
-
-        variant,
-
-        quantity: newQty,
-
-        customization: manualCustomization,
-
-        addons: manualAddons,
-
-        /*
-         * IMPORTANT:
-         * This is an existing cart.
-         *
-         * If an admin deleted/deactivated a customization after
-         * the item was added to the cart, the existing cart must
-         * still be able to recalculate its pricing.
-         *
-         * New addToCart requests still use the default:
-         * allowInactiveCustomization = false
-         */
-        allowInactiveCustomization: true,
-      });
-
-      /*
-       * ---------------------------------------------------------
-       * Update MANUAL customization config
-       * ---------------------------------------------------------
-       */
-
-      const updatedCustomizationConfig = {
-        ...(customization || {}),
-
-        type: "MANUAL",
-
-        quantity: newQty,
-
-        customization: manualCustomization,
-
-        addons: manualAddons,
-      };
-
-      await cart.update({
-        quantity: newQty,
-
-        customization_config: updatedCustomizationConfig,
-
-        pricing_snapshot,
-      });
-
-      const response = cart.toJSON();
-
-      /*
-       * ---------------------------------------------------------
-       * MANUAL ONLY:
-       * Enrich customization response
-       *
-       * Adds:
-       * - customization_option_name
-       * - customization_option_value_name
-       * - full artwork URL
-       * ---------------------------------------------------------
-       */
-
-      response.customization_config =
-        await enrichManualCustomizationConfig(
-          response.customization_config,
-        );
-
-      /*
-       * ---------------------------------------------------------
-       * Parse pricing snapshot
-       * ---------------------------------------------------------
-       */
-
-      if (
-        response.pricing_snapshot &&
-        typeof response.pricing_snapshot === "string"
-      ) {
-        response.pricing_snapshot = JSON.parse(response.pricing_snapshot);
-      }
-
-      /*
-       * ---------------------------------------------------------
-       * Existing top-level logo_image
-       * ---------------------------------------------------------
-       */
-
-      response.logo_image = response.logo_image
-        ? `${process.env.IMAGE_BASE_URL}${response.logo_image}`
-        : null;
-
-      return response;
+      return await repriceManualCartItem(cart, variant, customization, newQty);
     }
-
-    /*
-     * =========================================================
-     * EXISTING SUPPLIER CART LOGIC
-     * =========================================================
-     *
-     * DO NOT CHANGE existing supplier behavior.
-     */
-
-    const categories = await getProductCategories(variant.product_id);
 
     if (customization?.size) {
       customization.size.quantity = newQty;
     }
 
-    let pricing_snapshot = null;
-
-    if (customization) {
-      if (variant.supplier === "SAGE") {
-        pricing_snapshot = await buildSagePricingSnapshot({
-          variant,
-
-          product: {
-            ...variant.product.toJSON(),
-            categories,
-          },
-
-          quantity: newQty,
-
-          customization,
-        });
-      } else {
-        pricing_snapshot = await buildPricingSnapshot({
-          variant,
-
-          quantity: newQty,
-
-          customization,
-        });
-      }
-    }
+    const pricing_snapshot = await buildSupplierPricingSnapshot(
+      variant,
+      customization,
+      newQty,
+    );
 
     await cart.update({
       quantity: newQty,
@@ -3235,31 +2753,7 @@ const decrementCart = async (body) => {
       pricing_snapshot,
     });
 
-    const response = cart.toJSON();
-
-    if (
-      response.customization_config &&
-      typeof response.customization_config === "string"
-    ) {
-      response.customization_config = JSON.parse(
-        response.customization_config,
-      );
-    }
-
-    if (
-      response.pricing_snapshot &&
-      typeof response.pricing_snapshot === "string"
-    ) {
-      response.pricing_snapshot = JSON.parse(
-        response.pricing_snapshot,
-      );
-    }
-
-    response.logo_image = response.logo_image
-      ? `${process.env.IMAGE_BASE_URL}${response.logo_image}`
-      : null;
-
-    return response;
+    return await toCartItemResponse(cart, false);
   } catch (error) {
     console.log("❌ DECREMENT CART ERROR:", error);
 
@@ -3336,159 +2830,18 @@ const updateCartQuantity = async (body) => {
       customization = JSON.parse(customization);
     }
 
-    // =========================================================
-    // MANUAL PRODUCT
-    // =========================================================
     if (variant.supplier === "MANUAL") {
-      const manualCustomization = customization?.customization || [];
-
-      const manualAddons = customization?.addons || [];
-
-      /*
-       * ---------------------------------------------------------
-       * Recalculate complete MANUAL pricing
-       * using the NEW quantity.
-       *
-       * IMPORTANT:
-       *
-       * This is an EXISTING cart.
-       *
-       * If a customization was deleted/deactivated by admin
-       * after this cart item was created, it must still be
-       * usable when recalculating the cart.
-       *
-       * New carts remain protected because addToCart does NOT
-       * pass allowInactiveCustomization: true.
-       * ---------------------------------------------------------
-       */
-
-      const pricing_snapshot = await buildManualPricingSnapshot({
-        product: variant.product,
-
-        variant,
-
-        quantity: finalQty,
-
-        customization: manualCustomization,
-
-        addons: manualAddons,
-
-        allowInactiveCustomization: true,
-      });
-
-      /*
-       * ---------------------------------------------------------
-       * Keep customization config quantity
-       * synchronized with cart quantity.
-       * ---------------------------------------------------------
-       */
-
-      const updatedCustomizationConfig = {
-        ...(customization || {}),
-
-        type: "MANUAL",
-
-        quantity: finalQty,
-
-        customization: manualCustomization,
-
-        addons: manualAddons,
-      };
-
-      await cart.update({
-        quantity: finalQty,
-
-        customization_config: updatedCustomizationConfig,
-
-        pricing_snapshot,
-      });
-
-      // =========================================================
-      // CONVERT SEQUELIZE INSTANCE TO PLAIN OBJECT
-      // =========================================================
-
-      const response = cart.toJSON();
-
-      // =========================================================
-      // PARSE CUSTOMIZATION CONFIG
-      // =========================================================
-
-      if (
-        response.customization_config &&
-        typeof response.customization_config === "string"
-      ) {
-        response.customization_config = JSON.parse(
-          response.customization_config,
-        );
-      }
-
-      // =========================================================
-      // ENRICH MANUAL CUSTOMIZATION
-      // =========================================================
-
-      response.customization_config =
-        await enrichManualCustomizationConfig(
-          response.customization_config,
-        );
-
-      // =========================================================
-      // PARSE PRICING SNAPSHOT
-      // =========================================================
-
-      if (
-        response.pricing_snapshot &&
-        typeof response.pricing_snapshot === "string"
-      ) {
-        response.pricing_snapshot = JSON.parse(
-          response.pricing_snapshot,
-        );
-      }
-
-      // =========================================================
-      // EXISTING TOP-LEVEL LOGO IMAGE
-      // =========================================================
-
-      response.logo_image = response.logo_image
-        ? `${process.env.IMAGE_BASE_URL}${response.logo_image}`
-        : null;
-
-      return response;
+      return await repriceManualCartItem(cart, variant, customization, finalQty);
     }
 
-    // =========================================================
-    // EXISTING SUPPLIER LOGIC
-    // DO NOT CHANGE
-    // =========================================================
+    const pricing_snapshot = await buildSupplierPricingSnapshot(
+      variant,
+      customization,
+      finalQty,
+    );
 
-    const categories = await getProductCategories(variant.product_id);
-
-    let pricing_snapshot = null;
-
-    if (customization) {
-      if (variant.supplier === "SAGE") {
-        pricing_snapshot = await buildSagePricingSnapshot({
-          variant,
-
-          product: {
-            ...variant.product.toJSON(),
-            categories,
-          },
-
-          quantity: finalQty,
-
-          customization,
-        });
-      } else {
-        pricing_snapshot = await buildPricingSnapshot({
-          variant,
-
-          quantity: finalQty,
-
-          customization,
-        });
-      }
-    }
-
+    // Unlike increment/decrement, this leaves customization_config (and its
+    // size.quantity) as stored.
     await cart.update({
       quantity: finalQty,
 

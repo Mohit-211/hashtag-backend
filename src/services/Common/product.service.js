@@ -79,6 +79,150 @@ const resolveSku = (v, nextSku) => {
   return typed || nextSku();
 };
 
+// meta may arrive as an object, a JSON string or a double-encoded JSON string.
+// Anything that isn't a plain object becomes {}.
+const parseMeta = (raw) => {
+  let value = raw;
+
+  for (let i = 0; i < 2 && typeof value === "string"; i++) {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      break;
+    }
+  }
+
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return value;
+};
+
+// Option selection of a manual variant. The flat columns still only hold ONE size-like
+// value and ONE color; the complete selection is kept in meta.option_values.
+const resolveVariantOptions = (v) => {
+  let optionValues = v.option_values;
+
+  if (optionValues && typeof optionValues === "string") {
+    try {
+      optionValues = JSON.parse(optionValues);
+    } catch {
+      optionValues = [];
+    }
+  }
+
+  if (!Array.isArray(optionValues)) {
+    optionValues = [];
+  }
+
+  const colorEntry = optionValues.find((o) => o?.type === "color" && o?.value);
+
+  const nonColorEntry = optionValues.find(
+    (o) => o?.type !== "color" && o?.value,
+  );
+
+  return {
+    optionValues,
+    color: colorEntry?.value || v.color || null,
+    colorCode: colorEntry?.color_code || v.color_code || null,
+    sizeName: nonColorEntry?.value || v.size || null,
+    optionName: nonColorEntry?.name || v.option_name || "Size",
+  };
+};
+
+// Pricing of a manual variant: fixed | tiered | quantity_fixed. Older callers without
+// pricing_mode get tiered when they send bulk_pricing. The flat price column holds the
+// fixed price, the first tier's price, or the price of the smallest quantity.
+const resolveVariantPricing = (v, sku) => {
+  const pricingMode =
+    v.pricing_mode === "quantity_fixed"
+      ? "quantity_fixed"
+      : v.pricing_mode === "tiered"
+        ? "tiered"
+        : v.pricing_mode === "fixed"
+          ? "fixed"
+          : Array.isArray(v.bulk_pricing) && v.bulk_pricing.length > 0
+            ? "tiered"
+            : "fixed";
+
+  let quantityPricing = null;
+
+  if (pricingMode === "quantity_fixed") {
+    if (!Array.isArray(v.quantity_pricing) || !v.quantity_pricing.length) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        `Variant "${sku}": quantity_pricing is required for fixed quantity pricing`,
+      );
+    }
+
+    const seenQuantities = new Set();
+
+    quantityPricing = v.quantity_pricing.map((item, index) => {
+      const quantity = Number(item?.quantity);
+      const price = Number(item?.price);
+
+      if (!Number.isInteger(quantity) || quantity <= 0) {
+        throw new ApiError(
+          httpStatus.BAD_REQUEST,
+          `Variant "${sku}", Quantity ${index + 1}: quantity must be a positive whole number`,
+        );
+      }
+
+      if (!Number.isFinite(price) || price <= 0) {
+        throw new ApiError(
+          httpStatus.BAD_REQUEST,
+          `Variant "${sku}", Quantity ${index + 1}: price must be more than 0`,
+        );
+      }
+
+      if (seenQuantities.has(quantity)) {
+        throw new ApiError(
+          httpStatus.BAD_REQUEST,
+          `Variant "${sku}": quantity ${quantity} is duplicated`,
+        );
+      }
+
+      seenQuantities.add(quantity);
+
+      return { quantity, price };
+    });
+
+    quantityPricing.sort((a, b) => a.quantity - b.quantity);
+  }
+
+  let price = Number(v.price || 0);
+
+  if (
+    pricingMode === "tiered" &&
+    Array.isArray(v.bulk_pricing) &&
+    v.bulk_pricing.length > 0 &&
+    v.bulk_pricing[0].price !== undefined
+  ) {
+    price = Number(v.bulk_pricing[0].price);
+  }
+
+  if (
+    pricingMode === "quantity_fixed" &&
+    Array.isArray(quantityPricing) &&
+    quantityPricing.length > 0
+  ) {
+    price = Number(quantityPricing[0].price);
+  }
+
+  return {
+    price,
+    meta: {
+      pricing_mode: pricingMode,
+      bulk_pricing:
+        pricingMode === "tiered" && Array.isArray(v.bulk_pricing)
+          ? v.bulk_pricing
+          : null,
+      quantity_pricing: pricingMode === "quantity_fixed" ? quantityPricing : null,
+    },
+  };
+};
+
 const createProduct = async (body, files) => {
   let {
     category_ids,
@@ -258,40 +402,13 @@ const addProductVariants = async (body, files) => {
       // Blank SKU → generated (was: throw "sku required")
       const sku = resolveSku(v, nextSku);
 
-      // --------------------------------------------------
-      // Multi-option support
-      // --------------------------------------------------
-      let optionValues = v.option_values;
-
-      if (optionValues && typeof optionValues === "string") {
-        try {
-          optionValues = JSON.parse(optionValues);
-        } catch {
-          optionValues = [];
-        }
-      }
-
-      if (!Array.isArray(optionValues)) {
-        optionValues = [];
-      }
-
-      const colorEntry = optionValues.find(
-        (o) => o?.type === "color" && o?.value,
-      );
-
-      const nonColorEntry = optionValues.find(
-        (o) => o?.type !== "color" && o?.value,
-      );
-
-      // Flat columns still only hold ONE size-like value and ONE color.
-      // Complete option selection is preserved in meta.option_values.
-      const resolvedColor = colorEntry?.value || v.color || null;
-
-      const resolvedColorCode = colorEntry?.color_code || v.color_code || null;
-
-      const resolvedSizeName = nonColorEntry?.value || v.size || null;
-
-      const resolvedOptionName = nonColorEntry?.name || v.option_name || "Size";
+      const {
+        optionValues,
+        color: resolvedColor,
+        colorCode: resolvedColorCode,
+        sizeName: resolvedSizeName,
+        optionName: resolvedOptionName,
+      } = resolveVariantOptions(v);
 
       let selectedSize = null;
 
@@ -321,91 +438,10 @@ const addProductVariants = async (body, files) => {
         }
       }
 
-      // --------------------------------------------------
-      // Pricing Mode — fixed | tiered | quantity_fixed
-      // Older callers without pricing_mode infer tiered from bulk_pricing.
-      // --------------------------------------------------
-      const pricingMode =
-        v.pricing_mode === "quantity_fixed"
-          ? "quantity_fixed"
-          : v.pricing_mode === "tiered"
-            ? "tiered"
-            : v.pricing_mode === "fixed"
-              ? "fixed"
-              : Array.isArray(v.bulk_pricing) && v.bulk_pricing.length > 0
-                ? "tiered"
-                : "fixed";
-
-      // --------------------------------------------------
-      // Quantity Fixed Pricing Validation
-      // --------------------------------------------------
-      let quantityPricing = null;
-
-      if (pricingMode === "quantity_fixed") {
-        if (!Array.isArray(v.quantity_pricing) || !v.quantity_pricing.length) {
-          throw new ApiError(
-            httpStatus.BAD_REQUEST,
-            `Variant "${sku}": quantity_pricing is required for fixed quantity pricing`,
-          );
-        }
-
-        const seenQuantities = new Set();
-
-        quantityPricing = v.quantity_pricing.map((item, index) => {
-          const quantity = Number(item?.quantity);
-          const price = Number(item?.price);
-
-          if (!Number.isInteger(quantity) || quantity <= 0) {
-            throw new ApiError(
-              httpStatus.BAD_REQUEST,
-              `Variant "${sku}", Quantity ${index + 1}: quantity must be a positive whole number`,
-            );
-          }
-
-          if (!Number.isFinite(price) || price <= 0) {
-            throw new ApiError(
-              httpStatus.BAD_REQUEST,
-              `Variant "${sku}", Quantity ${index + 1}: price must be more than 0`,
-            );
-          }
-
-          if (seenQuantities.has(quantity)) {
-            throw new ApiError(
-              httpStatus.BAD_REQUEST,
-              `Variant "${sku}": quantity ${quantity} is duplicated`,
-            );
-          }
-
-          seenQuantities.add(quantity);
-
-          return { quantity, price };
-        });
-
-        quantityPricing.sort((a, b) => a.quantity - b.quantity);
-      }
-
-      // --------------------------------------------------
-      // Flat Variant Price
-      // fixed → v.price, tiered → first tier, quantity_fixed → smallest qty
-      // --------------------------------------------------
-      let variantPrice = Number(v.price || 0);
-
-      if (
-        pricingMode === "tiered" &&
-        Array.isArray(v.bulk_pricing) &&
-        v.bulk_pricing.length > 0 &&
-        v.bulk_pricing[0].price !== undefined
-      ) {
-        variantPrice = Number(v.bulk_pricing[0].price);
-      }
-
-      if (
-        pricingMode === "quantity_fixed" &&
-        Array.isArray(quantityPricing) &&
-        quantityPricing.length > 0
-      ) {
-        variantPrice = Number(quantityPricing[0].price);
-      }
+      const { price: variantPrice, meta: pricingMeta } = resolveVariantPricing(
+        v,
+        sku,
+      );
 
       // --------------------------------------------------
       // Create Variant
@@ -423,13 +459,7 @@ const addProductVariants = async (body, files) => {
         supplier: "MANUAL",
         last_supplier_sync_at: new Date(),
         meta: {
-          pricing_mode: pricingMode,
-          bulk_pricing:
-            pricingMode === "tiered" && Array.isArray(v.bulk_pricing)
-              ? v.bulk_pricing
-              : null,
-          quantity_pricing:
-            pricingMode === "quantity_fixed" ? quantityPricing : null,
+          ...pricingMeta,
           option_values: optionValues,
         },
       });
@@ -477,10 +507,6 @@ const addProductVariants = async (body, files) => {
     return createdVariants;
   } catch (error) {
     console.error(error);
-    console.error(error.message);
-    console.error(error.stack);
-    console.error(error.parent);
-    console.error(error.original);
 
     throw error;
   }
@@ -776,24 +802,6 @@ const updateManualProductFull = async (body, files) => {
     // ---------------------------------------------------------
     // Product meta
     // ---------------------------------------------------------
-    const parseMeta = (raw) => {
-      let value = raw;
-
-      for (let i = 0; i < 2 && typeof value === "string"; i++) {
-        try {
-          value = JSON.parse(value);
-        } catch {
-          break;
-        }
-      }
-
-      if (!value || typeof value !== "object" || Array.isArray(value)) {
-        return {};
-      }
-
-      return value;
-    };
-
     const existingMeta = parseMeta(product.meta);
 
     await product.update({
@@ -832,38 +840,13 @@ const updateManualProductFull = async (body, files) => {
       // Blank SKU → generated (was: throw "Every variant needs a SKU")
       const sku = resolveSku(v, nextSku);
 
-      // -------------------------------------------------------
-      // Resolve option_values
-      // -------------------------------------------------------
-      let optionValues = v.option_values;
-
-      if (optionValues && typeof optionValues === "string") {
-        try {
-          optionValues = JSON.parse(optionValues);
-        } catch {
-          optionValues = [];
-        }
-      }
-
-      if (!Array.isArray(optionValues)) {
-        optionValues = [];
-      }
-
-      const colorEntry = optionValues.find(
-        (o) => o?.type === "color" && o?.value,
-      );
-
-      const nonColorEntry = optionValues.find(
-        (o) => o?.type !== "color" && o?.value,
-      );
-
-      const resolvedColor = colorEntry?.value || v.color || null;
-
-      const resolvedColorCode = colorEntry?.color_code || v.color_code || null;
-
-      const resolvedSizeName = nonColorEntry?.value || v.size || null;
-
-      const resolvedOptionName = nonColorEntry?.name || v.option_name || "Size";
+      const {
+        optionValues,
+        color: resolvedColor,
+        colorCode: resolvedColorCode,
+        sizeName: resolvedSizeName,
+        optionName: resolvedOptionName,
+      } = resolveVariantOptions(v);
 
       let selectedSize = null;
 
@@ -880,89 +863,10 @@ const updateManualProductFull = async (body, files) => {
         }
       }
 
-      // =======================================================
-      // PRICING MODE — fixed | tiered | quantity_fixed
-      // =======================================================
-      const pricingMode =
-        v.pricing_mode === "quantity_fixed"
-          ? "quantity_fixed"
-          : v.pricing_mode === "tiered"
-            ? "tiered"
-            : v.pricing_mode === "fixed"
-              ? "fixed"
-              : Array.isArray(v.bulk_pricing) && v.bulk_pricing.length > 0
-                ? "tiered"
-                : "fixed";
-
-      // =======================================================
-      // QUANTITY FIXED PRICING
-      // =======================================================
-      let quantityPricing = null;
-
-      if (pricingMode === "quantity_fixed") {
-        if (!Array.isArray(v.quantity_pricing) || !v.quantity_pricing.length) {
-          throw new ApiError(
-            httpStatus.BAD_REQUEST,
-            `Variant "${sku}": quantity_pricing is required for fixed quantity pricing`,
-          );
-        }
-
-        const seenQuantities = new Set();
-
-        quantityPricing = v.quantity_pricing.map((item, index) => {
-          const quantity = Number(item?.quantity);
-          const price = Number(item?.price);
-
-          if (!Number.isInteger(quantity) || quantity <= 0) {
-            throw new ApiError(
-              httpStatus.BAD_REQUEST,
-              `Variant "${sku}", Quantity ${index + 1}: quantity must be a positive whole number`,
-            );
-          }
-
-          if (!Number.isFinite(price) || price <= 0) {
-            throw new ApiError(
-              httpStatus.BAD_REQUEST,
-              `Variant "${sku}", Quantity ${index + 1}: price must be more than 0`,
-            );
-          }
-
-          if (seenQuantities.has(quantity)) {
-            throw new ApiError(
-              httpStatus.BAD_REQUEST,
-              `Variant "${sku}": quantity ${quantity} is duplicated`,
-            );
-          }
-
-          seenQuantities.add(quantity);
-
-          return { quantity, price };
-        });
-
-        quantityPricing.sort((a, b) => a.quantity - b.quantity);
-      }
-
-      // =======================================================
-      // FLAT VARIANT PRICE
-      // =======================================================
-      let variantPrice = Number(v.price || 0);
-
-      if (
-        pricingMode === "tiered" &&
-        Array.isArray(v.bulk_pricing) &&
-        v.bulk_pricing.length > 0 &&
-        v.bulk_pricing[0].price !== undefined
-      ) {
-        variantPrice = Number(v.bulk_pricing[0].price);
-      }
-
-      if (
-        pricingMode === "quantity_fixed" &&
-        Array.isArray(quantityPricing) &&
-        quantityPricing.length > 0
-      ) {
-        variantPrice = Number(quantityPricing[0].price);
-      }
+      const { price: variantPrice, meta: pricingMeta } = resolveVariantPricing(
+        v,
+        sku,
+      );
 
       // =======================================================
       // VARIANT FIELDS
@@ -977,13 +881,7 @@ const updateManualProductFull = async (body, files) => {
         size_id: selectedSize?.id || null,
         size: selectedSize?.name || null,
         meta: {
-          pricing_mode: pricingMode,
-          bulk_pricing:
-            pricingMode === "tiered" && Array.isArray(v.bulk_pricing)
-              ? v.bulk_pricing
-              : null,
-          quantity_pricing:
-            pricingMode === "quantity_fixed" ? quantityPricing : null,
+          ...pricingMeta,
           option_values: optionValues,
         },
       };
@@ -1171,24 +1069,6 @@ const duplicateProduct = async (productId) => {
     );
 
     // 4. Options — Size ids are NOT copied; createProduct makes new rows
-    const parseMeta = (raw) => {
-      let value = raw;
-
-      for (let i = 0; i < 2 && typeof value === "string"; i++) {
-        try {
-          value = JSON.parse(value);
-        } catch {
-          break;
-        }
-      }
-
-      if (!value || typeof value !== "object" || Array.isArray(value)) {
-        return {};
-      }
-
-      return value;
-    };
-
     const productMeta = parseMeta(product.meta);
 
     const options = Array.isArray(productMeta.options)
@@ -1442,6 +1322,336 @@ const FABRIC_KEYWORDS = {
   NYLON: ["nylon"],
 };
 
+// Front image ("...-0.jpg") first; the rest keep their order.
+const frontImageFirst = (a, b) => {
+  const aFront = a.file_name?.includes("-0.");
+  const bFront = b.file_name?.includes("-0.");
+
+  if (aFront && !bFront) return -1;
+  if (!aFront && bFront) return 1;
+
+  return 0;
+};
+
+// SanMar variant images in their numbered order ("...-variant-2.jpg"); unnumbered ones last.
+const byVariantImageNumber = (a, b) =>
+  Number(a.file_name?.match(/variant-(\d+)/)?.[1] || 999) -
+  Number(b.file_name?.match(/variant-(\d+)/)?.[1] || 999);
+
+// Ids of products whose name, description, style, brand, category, parent category or
+// variant color matches any spelling of the search text (see getSearchVariants).
+const findProductIdsForSearch = async (search) => {
+  const searchVariants = getSearchVariants(search);
+  const searchProductIds = new Set();
+
+  const productMatches = await Product.findAll({
+    where: {
+      [Op.or]: searchVariants.flatMap((term) => [
+        { name: { [Op.like]: `%${term}%` } },
+        { description: { [Op.like]: `%${term}%` } },
+        { external_style_id: { [Op.like]: `%${term}%` } },
+        { external_style_name: { [Op.like]: `%${term}%` } },
+      ]),
+    },
+    attributes: ["id"],
+    raw: true,
+  });
+  productMatches.forEach((p) => searchProductIds.add(p.id));
+
+  const brands = await Brand.findAll({
+    where: {
+      [Op.or]: searchVariants.map((term) => ({
+        name: { [Op.like]: `%${term}%` },
+      })),
+    },
+    attributes: ["id"],
+    raw: true,
+  });
+
+  const categories = await ProductCategory.findAll({
+    where: {
+      [Op.or]: searchVariants.map((term) => ({
+        title: { [Op.like]: `%${term}%` },
+      })),
+    },
+    attributes: ["id"],
+    raw: true,
+  });
+
+  if (categories.length) {
+    const mappings = await ProductCategoryMapping.findAll({
+      where: {
+        product_category_id: { [Op.in]: categories.map((c) => c.id) },
+      },
+      attributes: ["product_id"],
+      raw: true,
+    });
+    mappings.forEach((m) => searchProductIds.add(m.product_id));
+  }
+
+  const parentCategories = await ParentCategory.findAll({
+    where: {
+      [Op.or]: searchVariants.map((term) => ({
+        title: { [Op.like]: `%${term}%` },
+      })),
+    },
+    include: [
+      {
+        model: ProductCategory,
+        as: "categories",
+        attributes: ["id"],
+        through: { attributes: [] },
+      },
+    ],
+  });
+
+  for (const parent of parentCategories) {
+    const categoryIds = parent.categories.map((c) => c.id);
+    if (!categoryIds.length) continue;
+
+    const mappings = await ProductCategoryMapping.findAll({
+      where: { product_category_id: { [Op.in]: categoryIds } },
+      attributes: ["product_id"],
+      raw: true,
+    });
+    mappings.forEach((m) => searchProductIds.add(m.product_id));
+  }
+
+  if (brands.length) {
+    const brandProducts = await Product.findAll({
+      where: { brand_id: { [Op.in]: brands.map((b) => b.id) } },
+      attributes: ["id"],
+      raw: true,
+    });
+    brandProducts.forEach((p) => searchProductIds.add(p.id));
+  }
+
+  const colorVariants = await ProductVariant.findAll({
+    where: {
+      [Op.or]: searchVariants.map((term) => ({
+        color: { [Op.like]: `%${term}%` },
+      })),
+    },
+    attributes: ["product_id"],
+    raw: true,
+  });
+  colorVariants.forEach((v) => searchProductIds.add(v.product_id));
+
+  return searchProductIds;
+};
+
+// The cheapest variant of each product, comparing the case price when there is one.
+const cheapestVariantByProduct = (variants) => {
+  const variantMap = {};
+
+  for (const variant of variants) {
+    const effectivePrice =
+      variant.case_price && Number(variant.case_price) > 0
+        ? Number(variant.case_price)
+        : Number(variant.price);
+
+    if (
+      !variantMap[variant.product_id] ||
+      effectivePrice < variantMap[variant.product_id].effectivePrice
+    ) {
+      variantMap[variant.product_id] = { ...variant, effectivePrice };
+    }
+  }
+
+  return variantMap;
+};
+
+// A listing card, priced from the product's cheapest variant. markupMap (supplier -> percent)
+// is optional; without it calculatePricing looks the markup up itself.
+const withListingPrice = async (data, minVariant, markupMap) => {
+  let pricing = {
+    base_price: 0,
+    markup_percent: 0,
+    markup_amount: 0,
+    final_price: 0,
+  };
+
+  let effectivePrice = 0;
+
+  if (minVariant) {
+    effectivePrice = minVariant.effectivePrice;
+
+    pricing = await calculatePricing(
+      effectivePrice,
+      minVariant.supplier,
+      markupMap?.[minVariant.supplier],
+    );
+  }
+
+  return {
+    ...data,
+    name: decodeHtmlEntities(data.name),
+    original_price: minVariant ? Number(minVariant.price || 0) : 0,
+    case_price: effectivePrice,
+    price: pricing.final_price,
+    base_price: pricing.base_price,
+    markup_percent: pricing.markup_percent,
+    markup_amount: pricing.markup_amount,
+    used_case_price:
+      !!minVariant?.case_price && Number(minVariant.case_price) > 0,
+  };
+};
+
+// Loads a product page: the product (with brand), attachments, sizes, categories (with parent
+// and grand categories) and the supplier markup. `variants` are plain objects with decoded
+// titles and their images and size details attached; SanMar images come in display order.
+const loadProductDetail = async (where) => {
+  const product = await Product.findOne({
+    where,
+    include: [
+      {
+        model: Brand,
+        as: "brand",
+        required: false,
+      },
+    ],
+  });
+
+  if (!product) {
+    throw new ApiError(httpStatus.NOT_FOUND, "Product not found");
+  }
+
+  const [variants, attachments, sizes, categories, markupPercent] =
+    await Promise.all([
+      ProductVariant.findAll({
+        where: {
+          product_id: product.id,
+          is_active: true,
+        },
+        order: [["id", "ASC"]],
+      }),
+
+      ProductAttachment.findAll({
+        where: {
+          product_id: product.id,
+          is_active: true,
+        },
+      }),
+
+      Size.findAll({
+        where: {
+          product_id: product.id,
+          is_active: true,
+        },
+      }),
+
+      ProductCategory.findAll({
+        attributes: ["id", "title", "supplier"],
+
+        include: [
+          {
+            model: Product,
+            as: "products",
+            where: {
+              id: product.id,
+            },
+            attributes: [],
+            through: {
+              attributes: [],
+            },
+          },
+          {
+            model: ParentCategory,
+            as: "parent_categories",
+            attributes: ["id", "title"],
+            through: {
+              attributes: [],
+            },
+            required: false,
+
+            include: [
+              {
+                model: GrandCategory,
+                as: "grand_categories",
+                attributes: ["id", "title"],
+                through: {
+                  attributes: [],
+                },
+                required: false,
+              },
+            ],
+          },
+        ],
+      }),
+
+      getMarkupPercent(product.supplier),
+    ]);
+
+  const variantIds = variants.map((v) => v.id);
+
+  const sizeIds = [...new Set(variants.map((v) => v.size_id).filter(Boolean))];
+
+  const [variantImages, variantSizeDetails] = await Promise.all([
+    VariantAttachment.findAll({
+      where: {
+        variant_id: variantIds,
+        is_active: true,
+      },
+      attributes: ["id", "variant_id", "file_name", "file_uri", "is_primary"],
+    }),
+
+    Size.findAll({
+      where: {
+        id: sizeIds,
+      },
+      attributes: ["id", "name", "measurements"],
+    }),
+  ]);
+
+  const data = product.toJSON();
+
+  data.attachments = attachments.map((a) => a.toJSON());
+
+  data.sizes = sortSizes(sizes.map((s) => s.toJSON()));
+
+  data.categories = categories.map((c) => c.toJSON());
+
+  if (data.supplier === "SANMAR") {
+    data.attachments.sort(frontImageFirst);
+  }
+
+  const imageMap = {};
+
+  variantImages.forEach((img) => {
+    const image = img.toJSON();
+
+    if (!imageMap[image.variant_id]) {
+      imageMap[image.variant_id] = [];
+    }
+
+    imageMap[image.variant_id].push(image);
+  });
+
+  const sizeMap = {};
+
+  variantSizeDetails.forEach((size) => {
+    sizeMap[size.id] = size.toJSON();
+  });
+
+  const variantData = variants.map((variant) => {
+    const v = variant.toJSON();
+
+    v.title = decodeHtmlEntities(v.title);
+
+    v.images = imageMap[v.id] || [];
+
+    v.size_details = sizeMap[v.size_id] || null;
+
+    if (product.supplier === "SANMAR") {
+      v.images.sort(byVariantImageNumber);
+    }
+
+    return v;
+  });
+
+  return { data, variants: variantData, markupPercent };
+};
+
 const getAllProducts = async (query) => {
   try {
     let {
@@ -1664,101 +1874,7 @@ const getAllProducts = async (query) => {
     }
 
     if (search) {
-      const searchVariants = getSearchVariants(search);
-      const searchProductIds = new Set();
-
-      const productMatches = await Product.findAll({
-        where: {
-          [Op.or]: searchVariants.flatMap((term) => [
-            { name: { [Op.like]: `%${term}%` } },
-            { description: { [Op.like]: `%${term}%` } },
-            { external_style_id: { [Op.like]: `%${term}%` } },
-            { external_style_name: { [Op.like]: `%${term}%` } },
-          ]),
-        },
-        attributes: ["id"],
-        raw: true,
-      });
-      productMatches.forEach((p) => searchProductIds.add(p.id));
-
-      const brands = await Brand.findAll({
-        where: {
-          [Op.or]: searchVariants.map((term) => ({
-            name: { [Op.like]: `%${term}%` },
-          })),
-        },
-        attributes: ["id"],
-        raw: true,
-      });
-
-      const categories = await ProductCategory.findAll({
-        where: {
-          [Op.or]: searchVariants.map((term) => ({
-            title: { [Op.like]: `%${term}%` },
-          })),
-        },
-        attributes: ["id"],
-        raw: true,
-      });
-
-      if (categories.length) {
-        const mappings = await ProductCategoryMapping.findAll({
-          where: {
-            product_category_id: { [Op.in]: categories.map((c) => c.id) },
-          },
-          attributes: ["product_id"],
-          raw: true,
-        });
-        mappings.forEach((m) => searchProductIds.add(m.product_id));
-      }
-
-      const parentCategories = await ParentCategory.findAll({
-        where: {
-          [Op.or]: searchVariants.map((term) => ({
-            title: { [Op.like]: `%${term}%` },
-          })),
-        },
-        include: [
-          {
-            model: ProductCategory,
-            as: "categories",
-            attributes: ["id"],
-            through: { attributes: [] },
-          },
-        ],
-      });
-
-      for (const parent of parentCategories) {
-        const categoryIds = parent.categories.map((c) => c.id);
-        if (!categoryIds.length) continue;
-
-        const mappings = await ProductCategoryMapping.findAll({
-          where: { product_category_id: { [Op.in]: categoryIds } },
-          attributes: ["product_id"],
-          raw: true,
-        });
-        mappings.forEach((m) => searchProductIds.add(m.product_id));
-      }
-
-      if (brands.length) {
-        const brandProducts = await Product.findAll({
-          where: { brand_id: { [Op.in]: brands.map((b) => b.id) } },
-          attributes: ["id"],
-          raw: true,
-        });
-        brandProducts.forEach((p) => searchProductIds.add(p.id));
-      }
-
-      const colorVariants = await ProductVariant.findAll({
-        where: {
-          [Op.or]: searchVariants.map((term) => ({
-            color: { [Op.like]: `%${term}%` },
-          })),
-        },
-        attributes: ["product_id"],
-        raw: true,
-      });
-      colorVariants.forEach((v) => searchProductIds.add(v.product_id));
+      const searchProductIds = await findProductIdsForSearch(search);
 
       if (!searchProductIds.size) {
         return {
@@ -1886,65 +2002,15 @@ const getAllProducts = async (query) => {
       raw: true,
     });
 
-    const variantMap = {};
-
-    for (const variant of variants) {
-      const effectivePrice =
-        variant.case_price && Number(variant.case_price) > 0
-          ? Number(variant.case_price)
-          : Number(variant.price);
-
-      if (
-        !variantMap[variant.product_id] ||
-        effectivePrice < variantMap[variant.product_id].effectivePrice
-      ) {
-        variantMap[variant.product_id] = { ...variant, effectivePrice };
-      }
-    }
+    const variantMap = cheapestVariantByProduct(variants);
 
     const formattedProducts = await Promise.all(
-      rows.map(async (product) => {
+      rows.map((product) => {
         const data = product.toJSON();
 
-        data.attachments = (data.attachments || []).sort((a, b) => {
-          const aFront = a.file_name?.includes("-0.");
-          const bFront = b.file_name?.includes("-0.");
-          if (aFront && !bFront) return -1;
-          if (!aFront && bFront) return 1;
-          return 0;
-        });
+        data.attachments = (data.attachments || []).sort(frontImageFirst);
 
-        const minVariant = variantMap[data.id];
-
-        let pricing = {
-          base_price: 0,
-          markup_percent: 0,
-          markup_amount: 0,
-          final_price: 0,
-        };
-        let effectivePrice = 0;
-
-        if (minVariant) {
-          effectivePrice = minVariant.effectivePrice;
-          pricing = await calculatePricing(
-            effectivePrice,
-            minVariant.supplier,
-            markupMap[minVariant.supplier],
-          );
-        }
-
-        return {
-          ...data,
-          name: decodeHtmlEntities(data.name),
-          original_price: minVariant ? Number(minVariant.price || 0) : 0,
-          case_price: effectivePrice,
-          price: pricing.final_price,
-          base_price: pricing.base_price,
-          markup_percent: pricing.markup_percent,
-          markup_amount: pricing.markup_amount,
-          used_case_price:
-            !!minVariant?.case_price && Number(minVariant.case_price) > 0,
-        };
+        return withListingPrice(data, variantMap[data.id], markupMap);
       }),
     );
 
@@ -2104,67 +2170,15 @@ const getAllProductsByGrandCategory = async (query) => {
       raw: true,
     });
 
-    const variantMap = {};
-
-    for (const variant of variants) {
-      const effectivePrice =
-        variant.case_price && Number(variant.case_price) > 0
-          ? Number(variant.case_price)
-          : Number(variant.price);
-
-      if (
-        !variantMap[variant.product_id] ||
-        effectivePrice < variantMap[variant.product_id].effectivePrice
-      ) {
-        variantMap[variant.product_id] = {
-          ...variant,
-          effectivePrice,
-        };
-      }
-    }
+    const variantMap = cheapestVariantByProduct(variants);
 
     const formattedProducts = await Promise.all(
-      rows.map(async (product) => {
+      rows.map((product) => {
         const data = product.toJSON();
 
-        data.attachments = (data.attachments || []).sort((a, b) => {
-          const aFront = a.file_name?.includes("-0.");
-          const bFront = b.file_name?.includes("-0.");
+        data.attachments = (data.attachments || []).sort(frontImageFirst);
 
-          if (aFront && !bFront) return -1;
-          if (!aFront && bFront) return 1;
-
-          return 0;
-        });
-
-        const minVariant = variantMap[data.id];
-
-        let pricing = {
-          base_price: 0,
-          markup_percent: 0,
-          markup_amount: 0,
-          final_price: 0,
-        };
-
-        let effectivePrice = 0;
-
-        if (minVariant) {
-          effectivePrice = minVariant.effectivePrice;
-          pricing = await calculatePricing(effectivePrice, minVariant.supplier);
-        }
-
-        return {
-          ...data,
-          name: decodeHtmlEntities(data.name),
-          original_price: minVariant ? Number(minVariant.price || 0) : 0,
-          case_price: effectivePrice,
-          price: pricing.final_price,
-          base_price: pricing.base_price,
-          markup_percent: pricing.markup_percent,
-          markup_amount: pricing.markup_amount,
-          used_case_price:
-            !!minVariant?.case_price && Number(minVariant.case_price) > 0,
-        };
+        return withListingPrice(data, variantMap[data.id]);
       }),
     );
 
@@ -2278,66 +2292,13 @@ const getProductsByBrand = async (query) => {
       raw: true,
     });
 
-    const variantMap = {};
-
-    for (const variant of variants) {
-      const effectivePrice =
-        variant.case_price && Number(variant.case_price) > 0
-          ? Number(variant.case_price)
-          : Number(variant.price);
-
-      if (
-        !variantMap[variant.product_id] ||
-        effectivePrice < variantMap[variant.product_id].effectivePrice
-      ) {
-        variantMap[variant.product_id] = {
-          ...variant,
-          effectivePrice,
-        };
-      }
-    }
+    const variantMap = cheapestVariantByProduct(variants);
 
     const formattedProducts = await Promise.all(
-      rows.map(async (product) => {
+      rows.map((product) => {
         const data = product.toJSON();
 
-        const minVariant = variantMap[data.id];
-
-        let pricing = {
-          base_price: 0,
-          markup_percent: 0,
-          markup_amount: 0,
-          final_price: 0,
-        };
-
-        let effectivePrice = 0;
-
-        if (minVariant) {
-          effectivePrice = minVariant.effectivePrice;
-
-          pricing = await calculatePricing(effectivePrice, minVariant.supplier);
-        }
-
-        return {
-          ...data,
-
-          name: decodeHtmlEntities(data.name),
-
-          original_price: minVariant ? Number(minVariant.price || 0) : 0,
-
-          case_price: effectivePrice,
-
-          price: pricing.final_price,
-
-          base_price: pricing.base_price,
-
-          markup_percent: pricing.markup_percent,
-
-          markup_amount: pricing.markup_amount,
-
-          used_case_price:
-            !!minVariant?.case_price && Number(minVariant.case_price) > 0,
-        };
+        return withListingPrice(data, variantMap[data.id]);
       }),
     );
 
@@ -2363,126 +2324,11 @@ const getProductById = async (id, reqBody) => {
   try {
     const { user } = reqBody;
 
-    const product = await Product.findOne({
-      where: {
-        id,
-        is_active: true,
-        is_discontinued: false,
-      },
-      include: [
-        {
-          model: Brand,
-          as: "brand",
-          required: false,
-        },
-      ],
+    const { data, variants, markupPercent } = await loadProductDetail({
+      id,
+      is_active: true,
+      is_discontinued: false,
     });
-
-    if (!product) {
-      throw new ApiError(httpStatus.NOT_FOUND, "Product not found");
-    }
-
-    const [variants, attachments, sizes, categories, markupPercent] =
-      await Promise.all([
-        /* ---------------- VARIANTS ---------------- */
-
-        ProductVariant.findAll({
-          where: {
-            product_id: product.id,
-            is_active: true,
-          },
-          order: [["id", "ASC"]],
-        }),
-
-        /* ---------------- PRODUCT ATTACHMENTS ---------------- */
-
-        ProductAttachment.findAll({
-          where: {
-            product_id: product.id,
-            is_active: true,
-          },
-        }),
-
-        /* ---------------- PRODUCT SIZES ---------------- */
-
-        Size.findAll({
-          where: {
-            product_id: product.id,
-            is_active: true,
-          },
-        }),
-
-        /* ---------------- PRODUCT CATEGORIES ---------------- */
-
-        ProductCategory.findAll({
-          attributes: ["id", "title", "supplier"],
-
-          include: [
-            {
-              model: Product,
-              as: "products",
-              where: {
-                id: product.id,
-              },
-              attributes: [],
-              through: {
-                attributes: [],
-              },
-            },
-            {
-              model: ParentCategory,
-              as: "parent_categories",
-              attributes: ["id", "title"],
-              through: {
-                attributes: [],
-              },
-              required: false,
-
-              include: [
-                {
-                  model: GrandCategory,
-                  as: "grand_categories",
-                  attributes: ["id", "title"],
-                  through: {
-                    attributes: [],
-                  },
-                  required: false,
-                },
-              ],
-            },
-          ],
-        }),
-
-        /* ---------------- MARKUP ---------------- */
-
-        getMarkupPercent(product.supplier),
-      ]);
-
-    const variantIds = variants.map((v) => v.id);
-
-    const sizeIds = [
-      ...new Set(variants.map((v) => v.size_id).filter(Boolean)),
-    ];
-
-    const [variantImages, variantSizeDetails] = await Promise.all([
-      VariantAttachment.findAll({
-        where: {
-          variant_id: variantIds,
-          is_active: true,
-        },
-
-        attributes: ["id", "variant_id", "file_name", "file_uri", "is_primary"],
-      }),
-
-      Size.findAll({
-        where: {
-          id: sizeIds,
-        },
-
-        attributes: ["id", "name", "measurements"],
-        raw: false,
-      }),
-    ]);
 
     let cartMap = {};
     let wishlistSet = new Set();
@@ -2515,78 +2361,10 @@ const getProductById = async (id, reqBody) => {
       });
     }
 
-    const data = product.toJSON();
-
     data.name = decodeHtmlEntities(data.name);
 
-    data.attachments = attachments.map((a) => a.toJSON());
-
-    data.sizes = sortSizes(sizes.map((s) => s.toJSON()));
-
-    data.categories = categories.map((c) => c.toJSON());
-
-    if (data.supplier === "SANMAR") {
-      data.attachments.sort((a, b) => {
-        const aFront = a.file_name?.includes("-0.");
-        const bFront = b.file_name?.includes("-0.");
-
-        if (aFront && !bFront) return -1;
-        if (!aFront && bFront) return 1;
-
-        return 0;
-      });
-    }
-
-    const imageMap = {};
-
-    variantImages.forEach((img) => {
-      const image = img.toJSON();
-
-      if (!imageMap[image.variant_id]) {
-        imageMap[image.variant_id] = [];
-      }
-
-      imageMap[image.variant_id].push(image);
-    });
-
-    const sizeMap = {};
-
-    variantSizeDetails.forEach((size) => {
-      sizeMap[size.id] = size.toJSON();
-    });
-
     data.variants = await Promise.all(
-      variants.map(async (variant) => {
-        const v = variant.toJSON();
-
-        v.title = decodeHtmlEntities(v.title);
-
-        /* ---------- ATTACH IMAGES ---------- */
-
-        v.images = imageMap[v.id] || [];
-
-        /* ---------- ATTACH SIZE ---------- */
-
-        v.size_details = sizeMap[v.size_id] || null;
-
-        /* ---------- SANMAR IMAGE SORT ---------- */
-
-        if (product.supplier === "SANMAR") {
-          v.images.sort((a, b) => {
-            const aNum = Number(
-              a.file_name?.match(/variant-(\d+)/)?.[1] || 999,
-            );
-
-            const bNum = Number(
-              b.file_name?.match(/variant-(\d+)/)?.[1] || 999,
-            );
-
-            return aNum - bNum;
-          });
-        }
-
-        /* ---------- PRICE ---------- */
-
+      variants.map(async (v) => {
         const effectivePrice =
           v.case_price && Number(v.case_price) > 0 ? v.case_price : v.price;
 
@@ -2654,7 +2432,6 @@ const getVariantById = async (id) => {
     where: {
       id,
       is_active: true,
-      // is_discontinued: false,
     },
     include: [
       {
@@ -2725,15 +2502,7 @@ const getVariantById = async (id) => {
   if (data.product) {
     data.product.name = decodeHtmlEntities(data.product.name);
 
-    data.product.attachments = (data.product.attachments || []).sort((a, b) => {
-      const aFront = a.file_name?.includes("-0.");
-      const bFront = b.file_name?.includes("-0.");
-
-      if (aFront && !bFront) return -1;
-      if (!aFront && bFront) return 1;
-
-      return 0;
-    });
+    data.product.attachments = (data.product.attachments || []).sort(frontImageFirst);
   }
 
   data.title = decodeHtmlEntities(data.title);
@@ -2771,230 +2540,15 @@ const getVariantById = async (id) => {
 
 const getGuestProductById = async (id) => {
   try {
-    /* ============================================================
-       PRODUCT
-    ============================================================ */
-
-    const product = await Product.findOne({
-      where: {
-        id,
-        is_active: true,
-        is_discontinued: false,
-      },
-      include: [
-        {
-          model: Brand,
-          as: "brand",
-          required: false,
-        },
-      ],
+    const { data, variants, markupPercent } = await loadProductDetail({
+      id,
+      is_active: true,
+      is_discontinued: false,
     });
-
-    if (!product) {
-      throw new ApiError(httpStatus.NOT_FOUND, "Product not found");
-    }
-
-    /* ============================================================
-       LOAD EVERYTHING IN PARALLEL
-    ============================================================ */
-
-    const [variants, attachments, sizes, categories, markupPercent] =
-      await Promise.all([
-        /* ---------------- VARIANTS ---------------- */
-
-        ProductVariant.findAll({
-          where: {
-            product_id: product.id,
-            is_active: true,
-          },
-          order: [["id", "ASC"]],
-        }),
-
-        /* ---------------- PRODUCT ATTACHMENTS ---------------- */
-
-        ProductAttachment.findAll({
-          where: {
-            product_id: product.id,
-            is_active: true,
-          },
-        }),
-
-        /* ---------------- PRODUCT SIZES ---------------- */
-
-        Size.findAll({
-          where: {
-            product_id: product.id,
-            is_active: true,
-          },
-        }),
-
-        /* ---------------- CATEGORIES ---------------- */
-
-        ProductCategory.findAll({
-          attributes: ["id", "title", "supplier"],
-
-          include: [
-            {
-              model: Product,
-              as: "products",
-              where: {
-                id: product.id,
-              },
-              attributes: [],
-              through: {
-                attributes: [],
-              },
-            },
-
-            {
-              model: ParentCategory,
-              as: "parent_categories",
-              attributes: ["id", "title"],
-
-              through: {
-                attributes: [],
-              },
-
-              required: false,
-
-              include: [
-                {
-                  model: GrandCategory,
-                  as: "grand_categories",
-
-                  attributes: ["id", "title"],
-
-                  through: {
-                    attributes: [],
-                  },
-
-                  required: false,
-                },
-              ],
-            },
-          ],
-        }),
-
-        /* ---------------- MARKUP ---------------- */
-
-        getMarkupPercent(product.supplier),
-      ]);
-
-    /* ============================================================
-       VARIANT IDS
-    ============================================================ */
-
-    const variantIds = variants.map((v) => v.id);
-
-    const sizeIds = [
-      ...new Set(variants.map((v) => v.size_id).filter(Boolean)),
-    ];
-
-    /* ============================================================
-       LOAD VARIANT DATA
-    ============================================================ */
-
-    const [variantImages, variantSizeDetails] = await Promise.all([
-      VariantAttachment.findAll({
-        where: {
-          variant_id: variantIds,
-          is_active: true,
-        },
-
-        attributes: ["id", "variant_id", "file_name", "file_uri", "is_primary"],
-      }),
-
-      Size.findAll({
-        where: {
-          id: sizeIds,
-        },
-
-        attributes: ["id", "name", "measurements"],
-      }),
-    ]);
-    /* ============================================================
-   PRODUCT JSON
-============================================================ */
-
-    const data = product.toJSON();
 
     data.name = decodeHtmlEntities(data.name);
 
-    data.attachments = attachments.map((a) => a.toJSON());
-
-    data.sizes = sortSizes(sizes.map((s) => s.toJSON()));
-
-    data.categories = categories.map((c) => c.toJSON());
-
-    /* ============================================================
-   SANMAR PRODUCT IMAGE SORTING
-============================================================ */
-
-    if (data.supplier === "SANMAR") {
-      data.attachments.sort((a, b) => {
-        const aFront = a.file_name?.includes("-0.");
-        const bFront = b.file_name?.includes("-0.");
-
-        if (aFront && !bFront) return -1;
-        if (!aFront && bFront) return 1;
-
-        return 0;
-      });
-    }
-
-    /* ============================================================
-   BUILD IMAGE MAP
-============================================================ */
-
-    const imageMap = {};
-
-    variantImages.forEach((img) => {
-      const image = img.toJSON();
-
-      if (!imageMap[image.variant_id]) {
-        imageMap[image.variant_id] = [];
-      }
-
-      imageMap[image.variant_id].push(image);
-    });
-
-    /* ============================================================
-   BUILD SIZE MAP
-============================================================ */
-
-    const sizeMap = {};
-
-    variantSizeDetails.forEach((size) => {
-      sizeMap[size.id] = size.toJSON();
-    });
-
-    /* ============================================================
-   PROCESS VARIANTS
-============================================================ */
-
-    data.variants = variants.map((variant) => {
-      const v = variant.toJSON();
-
-      v.title = decodeHtmlEntities(v.title);
-
-      v.images = imageMap[v.id] || [];
-
-      v.size_details = sizeMap[v.size_id] || null;
-
-      /* ---------- SANMAR IMAGE SORT ---------- */
-
-      if (product.supplier === "SANMAR") {
-        v.images.sort((a, b) => {
-          const aNum = Number(a.file_name?.match(/variant-(\d+)/)?.[1] || 999);
-
-          const bNum = Number(b.file_name?.match(/variant-(\d+)/)?.[1] || 999);
-
-          return aNum - bNum;
-        });
-      }
-
-      /* ---------- PRICE ---------- */
-
+    data.variants = variants.map((v) => {
       const effectivePrice =
         v.case_price && Number(v.case_price) > 0 ? v.case_price : v.price;
 
@@ -3024,10 +2578,6 @@ const getGuestProductById = async (id) => {
         pricing_tiers: buildPricingTiers(v.meta, markupPercent, false),
       };
     });
-
-    /* ============================================================
-   SORT VARIANTS
-============================================================ */
 
     data.variants = sortSizes(data.variants);
 
@@ -3690,8 +3240,6 @@ const deleteProduct = async ({ styleId, supplier, product_id }) => {
 
 const getSSStylesByBrand = async (brand) => {
   try {
-    console.log("🚀 Fetching styles for brand:", brand);
-
     const res = await ssClient.get(`/styles?search=${brand}`);
     const styles = res.data;
 
@@ -3733,7 +3281,6 @@ const getSSProductByStyle = async (styleId) => {
     );
 
     const style = styleRes.data?.[0] || {};
-    console.log(style, "style");
 
     return {
       style_id: styleId,
@@ -3816,8 +3363,6 @@ const saveSSProductToDB = async (data, batchId) => {
   let transaction;
 
   try {
-    console.log("Saving product to DB with batch ID:", batchId);
-
     const { style_id, raw, product: pData, variants } = data;
 
     // =========================================================
@@ -3911,8 +3456,6 @@ const saveSSProductToDB = async (data, batchId) => {
       import_batch_id: batchId,
     });
 
-    console.log("✅ Raw data saved");
-
     // =========================================
     // ✅ PRODUCT UPSERT
     // =========================================
@@ -3965,8 +3508,6 @@ const saveSSProductToDB = async (data, batchId) => {
         { transaction },
       );
     }
-
-    console.log("✅ Product saved:", product.id);
 
     // =========================================
     // ✅ CATEGORY MAPPING
@@ -4025,8 +3566,6 @@ const saveSSProductToDB = async (data, batchId) => {
           transaction,
         });
 
-        console.log("Checking product image:", url, "Exists:", !!exists);
-
         if (exists) {
           await exists.update(
             {
@@ -4058,8 +3597,6 @@ const saveSSProductToDB = async (data, batchId) => {
       }
     }
 
-    console.log("✅ Product attachments synced");
-
     // =========================================
     // ✅ SIZES
     // =========================================
@@ -4085,8 +3622,6 @@ const saveSSProductToDB = async (data, batchId) => {
     });
 
     const sizeMap = new Map(sizes.map((s) => [s.name, s]));
-
-    console.log("✅ Sizes synced");
 
     // =========================================
     // ✅ VARIANTS UPSERT
@@ -4162,8 +3697,6 @@ const saveSSProductToDB = async (data, batchId) => {
       transaction,
     });
 
-    console.log("✅ Variants synced");
-
     // =========================================
     // ✅ FETCH CREATED VARIANTS
     // =========================================
@@ -4215,8 +3748,6 @@ const saveSSProductToDB = async (data, batchId) => {
           },
           transaction,
         });
-
-        console.log("Checking variant image:", img, "Exists:", !!exists);
 
         if (exists) {
           await exists.update(
@@ -4516,30 +4047,13 @@ const getProductVariantByAdmin = async (query) => {
 
       data.pricing_tiers = buildPricingTiers(data.meta, 0, true);
 
-      // SANMAR product images
+      // SANMAR images in display order
       if (data.product?.supplier === "SANMAR") {
         data.product.attachments = (data.product.attachments || []).sort(
-          (a, b) => {
-            const aFront = a.file_name?.includes("-0.");
-
-            const bFront = b.file_name?.includes("-0.");
-
-            if (aFront && !bFront) return -1;
-
-            if (!aFront && bFront) return 1;
-
-            return 0;
-          },
+          frontImageFirst,
         );
 
-        // SANMAR variant images
-        data.images = (data.images || []).sort((a, b) => {
-          const aNum = Number(a.file_name?.match(/variant-(\d+)/)?.[1] || 999);
-
-          const bNum = Number(b.file_name?.match(/variant-(\d+)/)?.[1] || 999);
-
-          return aNum - bNum;
-        });
+        data.images = (data.images || []).sort(byVariantImageNumber);
       }
 
       return data;
@@ -4564,213 +4078,38 @@ const getProductVariantByAdmin = async (query) => {
 
 const getProductByIdAdmin = async (id) => {
   try {
-    const product = await Product.findOne({
-      where: {
-        id,
-        is_active: true,
-      },
-      include: [
-        {
-          model: Brand,
-          as: "brand",
-          required: false,
-        },
-      ],
+    // Unlike the customer pages, admins can open discontinued products.
+    const { data, variants, markupPercent } = await loadProductDetail({
+      id,
+      is_active: true,
     });
 
-    if (!product) {
-      throw new ApiError(httpStatus.NOT_FOUND, "Product not found");
-    }
+    data.variants = variants.map((v) => ({
+      ...v,
 
-    const [variants, attachments, sizes, categories, markupPercent] =
-      await Promise.all([
-        /* ---------------- VARIANTS ---------------- */
+      size: v.size_details?.name || null,
 
-        ProductVariant.findAll({
-          where: {
-            product_id: product.id,
-            is_active: true,
-          },
-          order: [["id", "ASC"]],
-        }),
+      // ADMIN VIEW (NO MARKUP)
 
-        /* ---------------- PRODUCT ATTACHMENTS ---------------- */
+      price: Number(v.price),
 
-        ProductAttachment.findAll({
-          where: {
-            product_id: product.id,
-            is_active: true,
-          },
-        }),
+      cost_price: Number(v.cost_price || v.price),
 
-        /* ---------------- PRODUCT SIZES ---------------- */
+      supplier: v.supplier,
 
-        Size.findAll({
-          where: {
-            product_id: product.id,
-            is_active: true,
-          },
-        }),
+      stock: v.stock,
 
-        /* ---------------- PRODUCT CATEGORIES (with parent + grand) ----------------
-           Mirrors the customer-facing getProductById query so the admin
-           panel can render the same category -> parent -> grand hierarchy
-           instead of only the flat leaf-category title.
-        ------------------------------------------------------------------------ */
+      track_inventory: v.track_inventory,
 
-        ProductCategory.findAll({
-          attributes: ["id", "title", "supplier"],
+      // Exactly what the supplier sent — no markup, source of truth for audits.
+      // Empty array (not null/undefined) when the supplier gave no tier data,
+      // so the frontend can distinguish "no pricing table" from "not loaded yet".
+      pricing_tiers: buildPricingTiers(v.meta, 0, true),
 
-          include: [
-            {
-              model: Product,
-              as: "products",
-              where: {
-                id: product.id,
-              },
-              attributes: [],
-              through: {
-                attributes: [],
-              },
-            },
-            {
-              model: ParentCategory,
-              as: "parent_categories",
-              attributes: ["id", "title"],
-              through: {
-                attributes: [],
-              },
-              required: false,
-
-              include: [
-                {
-                  model: GrandCategory,
-                  as: "grand_categories",
-                  attributes: ["id", "title"],
-                  through: {
-                    attributes: [],
-                  },
-                  required: false,
-                },
-              ],
-            },
-          ],
-        }),
-
-        /* ---------------- MARKUP ----------------
-           Needed so we can show admin a preview of what the customer will
-           actually pay (pricing_tiers_customer below), alongside the raw
-           supplier numbers (pricing_tiers), without changing any existing
-           field's value or shape.
-        ------------------------------------------------------------------- */
-        getMarkupPercent(product.supplier),
-      ]);
-
-    const variantIds = variants.map((v) => v.id);
-
-    const sizeIds = [
-      ...new Set(variants.map((v) => v.size_id).filter(Boolean)),
-    ];
-
-    const [variantImages, variantSizeDetails] = await Promise.all([
-      VariantAttachment.findAll({
-        where: {
-          variant_id: variantIds,
-          is_active: true,
-        },
-        attributes: ["id", "variant_id", "file_name", "file_uri", "is_primary"],
-      }),
-
-      Size.findAll({
-        where: {
-          id: sizeIds,
-        },
-        attributes: ["id", "name", "measurements"],
-      }),
-    ]);
-
-    const data = product.toJSON();
-
-    data.attachments = attachments.map((a) => a.toJSON());
-    data.sizes = sortSizes(sizes.map((s) => s.toJSON()));
-    data.categories = categories.map((c) => c.toJSON());
-
-    const imageMap = {};
-
-    variantImages.forEach((img) => {
-      const image = img.toJSON();
-
-      if (!imageMap[image.variant_id]) {
-        imageMap[image.variant_id] = [];
-      }
-
-      imageMap[image.variant_id].push(image);
-    });
-
-    const sizeMap = {};
-
-    variantSizeDetails.forEach((size) => {
-      sizeMap[size.id] = size.toJSON();
-    });
-
-    data.variants = variants.map((variant) => {
-      const v = variant.toJSON();
-
-      v.title = decodeHtmlEntities(v.title);
-
-      v.images = imageMap[v.id] || [];
-
-      v.size_details = sizeMap[v.size_id] || null;
-
-      if (product.supplier === "SANMAR") {
-        v.images.sort((a, b) => {
-          const aNum = Number(a.file_name?.match(/variant-(\d+)/)?.[1] || 999);
-
-          const bNum = Number(b.file_name?.match(/variant-(\d+)/)?.[1] || 999);
-
-          return aNum - bNum;
-        });
-      }
-
-      return {
-        ...v,
-
-        size: v.size_details?.name || null,
-
-        // ADMIN VIEW (NO MARKUP)
-
-        price: Number(v.price),
-
-        cost_price: Number(v.cost_price || v.price),
-
-        supplier: v.supplier,
-
-        stock: v.stock,
-
-        track_inventory: v.track_inventory,
-
-        // Exactly what the supplier sent — no markup, source of truth for audits.
-        // Empty array (not null/undefined) when the supplier gave no tier data,
-        // so the frontend can distinguish "no pricing table" from "not loaded yet".
-        pricing_tiers: buildPricingTiers(v.meta, 0, true),
-
-        // Preview of what the customer will actually see/pay, so admin can
-        // sanity-check markup without needing to open the live site.
-        pricing_tiers_customer: buildPricingTiers(v.meta, markupPercent, false),
-      };
-    });
-
-    if (data.supplier === "SANMAR") {
-      data.attachments.sort((a, b) => {
-        const aFront = a.file_name?.includes("-0.");
-        const bFront = b.file_name?.includes("-0.");
-
-        if (aFront && !bFront) return -1;
-        if (!aFront && bFront) return 1;
-
-        return 0;
-      });
-    }
+      // Preview of what the customer will actually see/pay, so admin can
+      // sanity-check markup without needing to open the live site.
+      pricing_tiers_customer: buildPricingTiers(v.meta, markupPercent, false),
+    }));
 
     return {
       ...data,
@@ -5066,103 +4405,8 @@ const getAllProductsAdmin = async (query) => {
       }
     }
 
-    // 🔥 SEARCH — SAME LOGIC AS getAllProducts
     if (search) {
-      const searchVariants = getSearchVariants(search);
-      const searchProductIds = new Set();
-
-      const productMatches = await Product.findAll({
-        where: {
-          [Op.or]: searchVariants.flatMap((term) => [
-            { name: { [Op.like]: `%${term}%` } },
-            { description: { [Op.like]: `%${term}%` } },
-            { external_style_id: { [Op.like]: `%${term}%` } },
-            { external_style_name: { [Op.like]: `%${term}%` } },
-          ]),
-        },
-        attributes: ["id"],
-        raw: true,
-      });
-      productMatches.forEach((p) => searchProductIds.add(p.id));
-
-      const brands = await Brand.findAll({
-        where: {
-          [Op.or]: searchVariants.map((term) => ({
-            name: { [Op.like]: `%${term}%` },
-          })),
-        },
-        attributes: ["id"],
-        raw: true,
-      });
-
-      if (brands.length) {
-        const brandProducts = await Product.findAll({
-          where: { brand_id: { [Op.in]: brands.map((b) => b.id) } },
-          attributes: ["id"],
-          raw: true,
-        });
-        brandProducts.forEach((p) => searchProductIds.add(p.id));
-      }
-
-      const categories = await ProductCategory.findAll({
-        where: {
-          [Op.or]: searchVariants.map((term) => ({
-            title: { [Op.like]: `%${term}%` },
-          })),
-        },
-        attributes: ["id"],
-        raw: true,
-      });
-
-      if (categories.length) {
-        const mappings = await ProductCategoryMapping.findAll({
-          where: {
-            product_category_id: { [Op.in]: categories.map((c) => c.id) },
-          },
-          attributes: ["product_id"],
-          raw: true,
-        });
-        mappings.forEach((m) => searchProductIds.add(m.product_id));
-      }
-
-      const parentCategories = await ParentCategory.findAll({
-        where: {
-          [Op.or]: searchVariants.map((term) => ({
-            title: { [Op.like]: `%${term}%` },
-          })),
-        },
-        include: [
-          {
-            model: ProductCategory,
-            as: "categories",
-            attributes: ["id"],
-            through: { attributes: [] },
-          },
-        ],
-      });
-
-      for (const parent of parentCategories) {
-        const categoryIds = parent.categories.map((c) => c.id);
-        if (!categoryIds.length) continue;
-
-        const mappings = await ProductCategoryMapping.findAll({
-          where: { product_category_id: { [Op.in]: categoryIds } },
-          attributes: ["product_id"],
-          raw: true,
-        });
-        mappings.forEach((m) => searchProductIds.add(m.product_id));
-      }
-
-      const colorVariants = await ProductVariant.findAll({
-        where: {
-          [Op.or]: searchVariants.map((term) => ({
-            color: { [Op.like]: `%${term}%` },
-          })),
-        },
-        attributes: ["product_id"],
-        raw: true,
-      });
-      colorVariants.forEach((v) => searchProductIds.add(v.product_id));
+      const searchProductIds = await findProductIdsForSearch(search);
 
       if (!searchProductIds.size) {
         return { data: [], total: 0, page: pageNum, totalPages: 0 };
@@ -5229,13 +4473,7 @@ const getAllProductsAdmin = async (query) => {
 
     const formattedProducts = rows.map((product) => {
       const data = product.toJSON();
-      data.attachments = (data.attachments || []).sort((a, b) => {
-        const aFront = a.file_name?.includes("-0.");
-        const bFront = b.file_name?.includes("-0.");
-        if (aFront && !bFront) return -1;
-        if (!aFront && bFront) return 1;
-        return 0;
-      });
+      data.attachments = (data.attachments || []).sort(frontImageFirst);
       return { ...data, name: decodeHtmlEntities(data.name) };
     });
 

@@ -1,5 +1,6 @@
 const { Sequelize, DataTypes, Model } = require('sequelize');
 const sequelize = require('../config/central.db');
+const { touchUpdatedAt, markDeleted } = require('./hooks');
 
 class userLoginTiming extends Model { }
 
@@ -96,14 +97,9 @@ userLoginTiming.init({
 });
 
 
-userLoginTiming.beforeUpdate(async (userLoginTiming) => {
-    userLoginTiming.updated_at = new Date().toISOString().replace(/T/, ' ').replace(/\..+/g, '');
-});
+userLoginTiming.beforeUpdate(touchUpdatedAt);
 
-userLoginTiming.beforeDestroy(async (userLoginTiming) => {
-    userLoginTiming.deleted_at = new Date().toISOString().replace(/T/, ' ').replace(/\..+/g, '');
-    userLoginTiming.is_active = false;
-});
+userLoginTiming.beforeDestroy(markDeleted);
 
 
 module.exports = userLoginTiming;

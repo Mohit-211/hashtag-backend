@@ -56,7 +56,6 @@ const syncImportedSanmarProducts = async () => {
       const styleId = item.external_style_id;
 
       try {
-        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━");
         console.log(`🔄 Syncing SANMAR style ${styleId}`);
 
         // =========================

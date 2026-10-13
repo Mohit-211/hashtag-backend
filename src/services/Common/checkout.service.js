@@ -19,23 +19,20 @@ const { cancelShipstationShipment } = require("../../config/shipstation");
 
 const { SquareClient, SquareEnvironment } = require("square");
 const decodeHtmlEntities = require("../../utils/decodeHtmlEntities");
+const {
+  parseJson,
+  getCustomizationArtwork,
+  toFullImageUrl,
+  getItemImage,
+  isManualItem,
+  buildPricingBreakdown,
+  buildOrderTotals,
+  sumQuantity,
+} = require("../../utils/orderFormat");
 
 const { OrdersController } = require("@paypal/paypal-server-sdk");
 const paypalClient = require("../../config/paypal");
 const { paymentStatusTypes, orderStatusTypes } = require("../../config/types");
-
-// Get uploaded artwork/logo from customization config
-const getCustomizationArtwork = (customization) => {
-  if (!customization?.customization?.length) {
-    return null;
-  }
-
-  const artwork = customization.customization.find(
-    (item) => item?.logo_image,
-  );
-
-  return artwork?.logo_image || null;
-};
 
 const client = new SquareClient({
   token: config.SQUARE_ACCESS_TOKEN,
@@ -69,8 +66,6 @@ const getOrCreateSquareCustomer = async (user) => {
 
       phoneNumber: user.user_profile?.mobile || undefined,
     });
-
-    console.log("CUSTOMER RESPONSE", response);
 
     const customer = response.customer;
 
@@ -304,8 +299,6 @@ const getSquarePaymentStatus = async (body) => {
 
 const squareWebhook = async (body) => {
   try {
-    console.log("📩 Square Webhook:", JSON.stringify(body, null, 2));
-
     // ==================================================
     // EVENT TYPE
     // ==================================================
@@ -602,75 +595,13 @@ const getPaymentHistory = async (body, query) => {
 
       const order = p.order || null;
 
+      // The preview card uses the first item.
       const firstItem = order?.items?.[0];
 
-      // -------------------------------------------------------------------
-      // TOTAL ITEMS
-      // -------------------------------------------------------------------
-
-      const totalItems =
-        order?.items?.reduce(
-          (sum, item) =>
-            sum + Number(item.quantity || 0),
-          0,
-        ) || 0;
-
-      // -------------------------------------------------------------------
-      // PREVIEW IMAGE
-      //
-      // Preview still uses the first item.
-      //
-      // Priority:
-      // 1. Variant primary image
-      // 2. First variant image
-      // 3. Product primary attachment
-      // 4. First product attachment
-      // -------------------------------------------------------------------
-
-      const originalImage =
-        firstItem?.variant?.images?.find(
-          (img) => img?.is_primary && img?.file_uri,
-        )?.file_uri ||
-        firstItem?.variant?.images?.find(
-          (img) => img?.file_uri,
-        )?.file_uri ||
-        firstItem?.product?.attachments?.find(
-          (img) => img?.is_primary && img?.file_uri,
-        )?.file_uri ||
-        firstItem?.product?.attachments?.find(
-          (img) => img?.file_uri,
-        )?.file_uri ||
-        null;
-
-      // -------------------------------------------------------------------
-      // PREVIEW CUSTOMIZATION
-      // -------------------------------------------------------------------
-
-      let customization =
-        firstItem?.customization_config;
-
-      if (
-        customization &&
-        typeof customization === "string"
-      ) {
-        try {
-          customization = JSON.parse(
-            customization,
-          );
-        } catch (error) {
-          customization = null;
-        }
-      }
+      const customization = parseJson(firstItem?.customization_config);
 
       const customizedImage =
-        firstItem?.logo_image ||
-        getCustomizationArtwork(customization);
-
-      // -------------------------------------------------------------------
-      // ALL ORDER ITEMS
-      //
-      // Every OrderItem belonging to this Order is returned here.
-      // -------------------------------------------------------------------
+        firstItem?.logo_image || getCustomizationArtwork(customization);
 
       const items =
         order?.items?.map((item) => {
@@ -678,251 +609,91 @@ const getPaymentHistory = async (body, query) => {
 
           const product = item.product || {};
 
-          // ---------------------------------------------------------------
-          // ORIGINAL IMAGE
-          // ---------------------------------------------------------------
-
-          const itemOriginalImage =
-            variant.images?.find(
-              (img) =>
-                img?.is_primary &&
-                img?.file_uri,
-            )?.file_uri ||
-            variant.images?.find(
-              (img) => img?.file_uri,
-            )?.file_uri ||
-            product.attachments?.find(
-              (img) =>
-                img?.is_primary &&
-                img?.file_uri,
-            )?.file_uri ||
-            product.attachments?.find(
-              (img) => img?.file_uri,
-            )?.file_uri ||
-            null;
-
-          // ---------------------------------------------------------------
-          // CUSTOMIZATION
-          // ---------------------------------------------------------------
-
-          let itemCustomization =
-            item.customization_config;
-
-          if (
-            itemCustomization &&
-            typeof itemCustomization === "string"
-          ) {
-            try {
-              itemCustomization =
-                JSON.parse(
-                  itemCustomization,
-                );
-            } catch (error) {
-              itemCustomization = null;
-            }
-          }
-
-          // ---------------------------------------------------------------
-          // PRICING SNAPSHOT
-          // ---------------------------------------------------------------
-
-          let itemPricingSnapshot =
-            item.pricing_snapshot;
-
-          if (
-            itemPricingSnapshot &&
-            typeof itemPricingSnapshot === "string"
-          ) {
-            try {
-              itemPricingSnapshot =
-                JSON.parse(
-                  itemPricingSnapshot,
-                );
-            } catch (error) {
-              itemPricingSnapshot = null;
-            }
-          }
-
-          // ---------------------------------------------------------------
-          // CUSTOMIZED IMAGE
-          // ---------------------------------------------------------------
-
-          const itemCustomizedImage =
-            item.logo_image ||
-            getCustomizationArtwork(
-              itemCustomization,
-            );
-
-          // ---------------------------------------------------------------
-          // RETURN ITEM
-          // ---------------------------------------------------------------
+          const itemCustomization = parseJson(item.customization_config);
 
           return {
             product_id: product.id,
 
-            product_name:
-              decodeHtmlEntities(
-                product.name || null,
-              ),
+            product_name: decodeHtmlEntities(product.name || null),
 
             variant_id: variant.id,
 
             sku: variant.sku || null,
 
-            original_image:
-              itemOriginalImage,
+            original_image: getItemImage(item),
 
-            customized_image:
-              itemCustomizedImage
-                ? itemCustomizedImage.startsWith(
-                    "http",
-                  )
-                  ? itemCustomizedImage
-                  : `${process.env.IMAGE_BASE_URL}${itemCustomizedImage}`
-                : null,
-
-            price: Number(
-              item.price || 0,
+            customized_image: toFullImageUrl(
+              item.logo_image || getCustomizationArtwork(itemCustomization),
             ),
 
-            quantity: Number(
-              item.quantity || 0,
-            ),
+            price: Number(item.price || 0),
 
-            total: Number(
-              item.total_price || 0,
-            ),
+            quantity: Number(item.quantity || 0),
 
-            customization_config:
-              itemCustomization,
+            total: Number(item.total_price || 0),
 
-            pricing_snapshot:
-              itemPricingSnapshot,
+            customization_config: itemCustomization,
+
+            pricing_snapshot: parseJson(item.pricing_snapshot),
           };
         }) || [];
 
       return {
         payment_id: p.id,
 
-        transaction_id:
-          p.transaction_id,
+        transaction_id: p.transaction_id,
 
-        amount: Number(
-          p.amount || 0,
-        ),
+        amount: Number(p.amount || 0),
 
         currency: p.currency,
 
         status: p.status,
 
-        payment_method:
-          p.payment_method,
+        payment_method: p.payment_method,
 
-        created_at:
-          p.created_at,
+        created_at: p.created_at,
 
         order: order
           ? {
               order_id: order.id,
 
-              order_number:
-                order.order_number,
+              order_number: order.order_number,
 
-              total_amount: Number(
-                order.total_amount || 0,
-              ),
+              total_amount: Number(order.total_amount || 0),
 
-              subtotal_amount: Number(
-                order.subtotal_amount || 0,
-              ),
+              subtotal_amount: Number(order.subtotal_amount || 0),
 
-              shipping_amount: Number(
-                order.shipping_amount || 0,
-              ),
+              shipping_amount: Number(order.shipping_amount || 0),
 
-              tax_rate: Number(
-                order.tax_rate || 0,
-              ),
+              tax_rate: Number(order.tax_rate || 0),
 
-              tax_amount: Number(
-                order.tax_amount || 0,
-              ),
+              tax_amount: Number(order.tax_amount || 0),
 
-              pricing_breakdown: {
-                subtotal: Number(
-                  order.subtotal_amount || 0,
-                ),
+              pricing_breakdown: buildOrderTotals(order),
 
-                tax: Number(
-                  order.tax_amount || 0,
-                ),
+              payment_status: order.payment_status,
 
-                shipping: Number(
-                  order.shipping_amount || 0,
-                ),
+              shipment_status: order.shipment_status,
 
-                total: Number(
-                  order.total_amount || 0,
-                ),
-              },
+              tracking_number: order.tracking_number,
 
-              payment_status:
-                order.payment_status,
-
-              shipment_status:
-                order.shipment_status,
-
-              tracking_number:
-                order.tracking_number,
-
-              tracking_url:
-                order.tracking_url,
-
-              // -----------------------------------------------------------
-              // PREVIEW
-              //
-              // This remains the first item only for the payment-list
-              // preview/card.
-              // -----------------------------------------------------------
+              tracking_url: order.tracking_url,
 
               preview: {
-                product_name:
-                  decodeHtmlEntities(
-                    firstItem?.product?.name ||
-                      null,
-                  ),
+                product_name: decodeHtmlEntities(firstItem?.product?.name || null),
 
-                original_image:
-                  originalImage,
+                original_image: getItemImage(firstItem),
 
-                customized_image:
-                  customizedImage
-                    ? customizedImage.startsWith(
-                        "http",
-                      )
-                      ? customizedImage
-                      : `${process.env.IMAGE_BASE_URL}${customizedImage}`
-                    : null,
+                customized_image: toFullImageUrl(customizedImage),
 
-                total_items:
-                  totalItems,
+                total_items: sumQuantity(order.items),
 
-                print_method:
-                  customization?.print_method ||
-                  null,
+                print_method: customization?.print_method || null,
 
-                type:
-                  customization?.type ||
-                  null,
+                type: customization?.type || null,
 
-                custom_text:
-                  customization?.custom_text ||
-                  null,
+                custom_text: customization?.custom_text || null,
               },
-
-              // -----------------------------------------------------------
-              // ALL ITEMS
-              // -----------------------------------------------------------
 
               items,
             }
@@ -1129,83 +900,16 @@ const getAllPayments = async (query) => {
 
       const order = data.order;
 
+      // The preview uses the first item.
       const firstItem = order?.items?.[0];
 
-      /*
-       |--------------------------------------------------------------------------
-       | IMAGE
-       |--------------------------------------------------------------------------
-       */
+      const customization = parseJson(firstItem?.customization_config);
 
-      const originalImage =
-        firstItem?.variant?.images?.find((img) => img.is_primary)
-          ?.file_uri ||
-        firstItem?.variant?.images?.[0]?.file_uri ||
-        null;
+      const pricingSnapshot = parseJson(firstItem?.pricing_snapshot);
 
-      /*
-       |--------------------------------------------------------------------------
-       | TOTAL ITEMS
-       |--------------------------------------------------------------------------
-       */
-
-      const totalItems =
-        order?.items?.reduce(
-          (sum, item) => sum + Number(item.quantity || 0),
-          0,
-        ) || 0;
-
-      /*
-       |--------------------------------------------------------------------------
-       | CUSTOMIZATION
-       |--------------------------------------------------------------------------
-       */
-
-      let customization = firstItem?.customization_config;
-
-      let pricingSnapshot = firstItem?.pricing_snapshot;
-
-      if (customization && typeof customization === "string") {
-        try {
-          customization = JSON.parse(customization);
-        } catch (error) {
-          customization = null;
-        }
-      }
-
-      if (pricingSnapshot && typeof pricingSnapshot === "string") {
-        try {
-          pricingSnapshot = JSON.parse(pricingSnapshot);
-        } catch (error) {
-          pricingSnapshot = null;
-        }
-      }
-
-      /*
-       |--------------------------------------------------------------------------
-       | MANUAL PRODUCT CHECK
-       |--------------------------------------------------------------------------
-       */
-
-      const isManual =
-        firstItem?.supplier === "MANUAL" ||
-        firstItem?.variant?.supplier === "MANUAL" ||
-        customization?.type === "MANUAL" ||
-        pricingSnapshot?.supplier === "MANUAL";
-
-      /*
-       |--------------------------------------------------------------------------
-       | RESPONSE
-       |--------------------------------------------------------------------------
-       */
+      const isManual = isManualItem(firstItem, customization, pricingSnapshot);
 
       return {
-        /*
-         |--------------------------------------------------------------------------
-         | PAYMENT
-         |--------------------------------------------------------------------------
-         */
-
         payment_id: data.id,
 
         transaction_id: data.transaction_id,
@@ -1220,12 +924,6 @@ const getAllPayments = async (query) => {
 
         created_at: data.created_at,
 
-        /*
-         |--------------------------------------------------------------------------
-         | USER
-         |--------------------------------------------------------------------------
-         */
-
         user: data.user
           ? {
               id: data.user.id,
@@ -1236,16 +934,9 @@ const getAllPayments = async (query) => {
 
               mobile: data.user?.user_profile?.mobile || null,
 
-              dialing_code:
-                data.user?.user_profile?.dialing_code || null,
+              dialing_code: data.user?.user_profile?.dialing_code || null,
             }
           : null,
-
-        /*
-         |--------------------------------------------------------------------------
-         | ORDER
-         |--------------------------------------------------------------------------
-         */
 
         order: order
           ? {
@@ -1256,9 +947,7 @@ const getAllPayments = async (query) => {
               subtotal_amount: Number(order.subtotal_amount || 0),
 
               shipping_amount: Number(
-                order.actual_shipping_cost ||
-                  order.shipping_amount ||
-                  0,
+                order.actual_shipping_cost || order.shipping_amount || 0,
               ),
 
               total_amount: Number(order.total_amount || 0),
@@ -1275,214 +964,40 @@ const getAllPayments = async (query) => {
 
               created_at: order.created_at,
 
-              /*
-               |--------------------------------------------------------------------------
-               | PREVIEW
-               |--------------------------------------------------------------------------
-               */
-
               preview: {
-                product_name: decodeHtmlEntities(
-                  firstItem?.product?.name || null,
-                ),
+                product_name: decodeHtmlEntities(firstItem?.product?.name || null),
 
-                original_image: originalImage,
+                original_image: getItemImage(firstItem),
 
-                customized_image: firstItem?.logo_image
-                  ? `${process.env.IMAGE_BASE_URL}${firstItem.logo_image}`
-                  : null,
+                customized_image: toFullImageUrl(firstItem?.logo_image),
 
-                total_items: totalItems,
+                total_items: sumQuantity(order.items),
 
                 customization_type:
-                  customization?.type ||
-                  (isManual ? "MANUAL" : null),
+                  customization?.type || (isManual ? "MANUAL" : null),
 
-                print_method:
-                  customization?.print_method || null,
+                print_method: customization?.print_method || null,
 
-                custom_text:
-                  customization?.custom_text || null,
+                custom_text: customization?.custom_text || null,
 
                 customization_summary: isManual
                   ? pricingSnapshot?.customization?.items || []
                   : pricingSnapshot?.pricing_table || [],
               },
 
-              /*
-               |--------------------------------------------------------------------------
-               | ITEMS
-               |--------------------------------------------------------------------------
-               */
-
               items: order.items.map((item) => {
                 const variant = item.variant || {};
 
                 const product = item.product || {};
 
-                /*
-                 |--------------------------------------------------------------------------
-                 | ITEM IMAGE
-                 |--------------------------------------------------------------------------
-                 */
+                const itemCustomization = parseJson(item.customization_config);
 
-                const itemImage =
-                  variant.images?.find((img) => img.is_primary)
-                    ?.file_uri ||
-                  variant.images?.[0]?.file_uri ||
-                  null;
-
-                /*
-                 |--------------------------------------------------------------------------
-                 | CUSTOMIZATION
-                 |--------------------------------------------------------------------------
-                 */
-
-                let itemCustomization =
-                  item.customization_config;
-
-                let itemPricing = item.pricing_snapshot;
-
-                if (
-                  itemCustomization &&
-                  typeof itemCustomization === "string"
-                ) {
-                  try {
-                    itemCustomization =
-                      JSON.parse(itemCustomization);
-                  } catch (error) {
-                    itemCustomization = null;
-                  }
-                }
-
-                if (
-                  itemPricing &&
-                  typeof itemPricing === "string"
-                ) {
-                  try {
-                    itemPricing = JSON.parse(itemPricing);
-                  } catch (error) {
-                    itemPricing = null;
-                  }
-                }
-
-                /*
-                 |--------------------------------------------------------------------------
-                 | ITEM MANUAL CHECK
-                 |--------------------------------------------------------------------------
-                 */
-
-                const itemIsManual =
-                  item.supplier === "MANUAL" ||
-                  variant.supplier === "MANUAL" ||
-                  itemCustomization?.type === "MANUAL" ||
-                  itemPricing?.supplier === "MANUAL";
-
-                /*
-                 |--------------------------------------------------------------------------
-                 | ITEM PRICING BREAKDOWN
-                 |--------------------------------------------------------------------------
-                 */
-
-                let itemPricingBreakdown = null;
-
-                if (itemPricing) {
-                  if (itemIsManual) {
-                    itemPricingBreakdown = {
-                      actual_product_price: Number(
-                        itemPricing?.product_price
-                          ?.base_price || 0,
-                      ),
-
-                      supplier_markup: 0,
-
-                      final_product_price: Number(
-                        itemPricing?.product_price
-                          ?.final_product_price || 0,
-                      ),
-
-                      product_total: Number(
-                        itemPricing?.totals?.product_total ||
-                          itemPricing?.product_price?.total ||
-                          0,
-                      ),
-
-                      customization_price: Number(
-                        itemPricing?.totals
-                          ?.customization_total ||
-                          itemPricing?.customization?.total ||
-                          0,
-                      ),
-
-                      addon_price: Number(
-                        itemPricing?.totals?.addon_total ||
-                          itemPricing?.addon_total ||
-                          0,
-                      ),
-
-                      final_price_per_item: Number(
-                        itemPricing?.final_price_per_item || 0,
-                      ),
-
-                      final_total: Number(
-                        itemPricing?.total_price ||
-                          itemPricing?.totals?.grand_total ||
-                          0,
-                      ),
-
-                      customization:
-                        itemPricing?.customization || null,
-
-                      addons: itemPricing?.addons || [],
-
-                      pricing_table: [],
-                    };
-                  } else {
-                    /*
-                     |--------------------------------------------------------------------------
-                     | EXISTING SUPPLIER PRICING
-                     |--------------------------------------------------------------------------
-                     */
-
-                    itemPricingBreakdown = {
-                      actual_product_price:
-                        itemPricing?.product_price
-                          ?.actual_price,
-
-                      supplier_markup:
-                        itemPricing?.product_price
-                          ?.supplier_markup,
-
-                      final_product_price:
-                        itemPricing?.product_price
-                          ?.final_product_price,
-
-                      customization_price:
-                        itemPricing?.customization_price
-                          ?.total_customization_price,
-
-                      setup_fee:
-                        itemPricing?.customization_price
-                          ?.setup_fee,
-
-                      final_price_per_item:
-                        itemPricing?.final_price_per_item,
-
-                      final_total:
-                        itemPricing?.total_price,
-
-                      pricing_table:
-                        itemPricing?.pricing_table || [],
-                    };
-                  }
-                }
+                const itemPricing = parseJson(item.pricing_snapshot);
 
                 return {
                   product_id: product.id,
 
-                  product_name: decodeHtmlEntities(
-                    product.name,
-                  ),
+                  product_name: decodeHtmlEntities(product.name),
 
                   variant_id: variant.id,
 
@@ -1490,14 +1005,11 @@ const getAllPayments = async (query) => {
 
                   color: variant.color,
 
-                  size:
-                    variant?.size_details?.name || null,
+                  size: variant?.size_details?.name || null,
 
-                  original_image: itemImage,
+                  original_image: getItemImage(item),
 
-                  customized_image: item.logo_image
-                    ? `${process.env.IMAGE_BASE_URL}${item.logo_image}`
-                    : null,
+                  customized_image: toFullImageUrl(item.logo_image),
 
                   quantity: Number(item.quantity || 0),
 
@@ -1505,13 +1017,14 @@ const getAllPayments = async (query) => {
 
                   total: Number(item.total_price || 0),
 
-                  customization_config:
-                    itemCustomization,
+                  customization_config: itemCustomization,
 
                   pricing_snapshot: itemPricing,
 
-                  pricing_breakdown:
-                    itemPricingBreakdown,
+                  pricing_breakdown: buildPricingBreakdown(
+                    itemPricing,
+                    isManualItem(item, itemCustomization, itemPricing),
+                  ),
                 };
               }),
             }
@@ -1608,8 +1121,6 @@ const createPayPalOrder = async (body) => {
     const approvalLink = paypalOrder.links?.find(
       (link) => link.rel === "approve",
     );
-
-    console.log("🔗 PayPal Approval URL:", approvalLink?.href);
 
     return {
       order_id: order.id,
@@ -1738,8 +1249,6 @@ const capturePayPalOrder = async (body) => {
 
 const paypalWebhook = async (body) => {
   try {
-    console.log("📩 PayPal Webhook:", JSON.stringify(body, null, 2));
-
     // ==================================================
     // EVENT TYPE
     // ==================================================

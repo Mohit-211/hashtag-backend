@@ -23,6 +23,16 @@ const ApiError = require("../../utils/ApiError");
 const httpStatus = require("http-status");
 const { Op } = require("sequelize");
 const decodeHtmlEntities = require("../../utils/decodeHtmlEntities");
+const {
+  parseJson,
+  getCustomizationArtwork,
+  toFullImageUrl,
+  getItemImage,
+  isManualItem,
+  buildPricingBreakdown,
+  buildOrderTotals,
+  sumQuantity,
+} = require("../../utils/orderFormat");
 const { paymentStatusTypes } = require("../../config/types");
 
 const createOrder = async (body) => {
@@ -38,8 +48,6 @@ const createOrder = async (body) => {
 
       shipping_amount,
     } = body;
-
-    console.log("🚀 START ORDER FLOW");
 
     /*
      |--------------------------------------------------------------------------
@@ -386,16 +394,6 @@ const createOrder = async (body) => {
   }
 };
 
-const getCustomizationArtwork = (customization) => {
-  if (!customization?.customization?.length) {
-    return null;
-  }
-
-  const artwork = customization.customization.find((item) => item?.logo_image);
-
-  return artwork?.logo_image || null;
-};
-
 const getOrders = async ({ user, page = 1, limit = 10 }) => {
   page = parseInt(page) || 1;
   limit = parseInt(limit) || 10;
@@ -469,76 +467,16 @@ const getOrders = async ({ user, page = 1, limit = 10 }) => {
   const formatted = rows.map((order) => {
     const data = order.toJSON();
 
+    // The preview uses the first item.
     const firstItem = data.items?.[0];
 
-    // ---------------------------------------------------------------------
-    // ORIGINAL PRODUCT IMAGE
-    //
-    // Priority:
-    // 1. Variant primary image
-    // 2. First variant image
-    // 3. Product attachment
-    // 4. First product attachment
-    // ---------------------------------------------------------------------
+    const customization = parseJson(firstItem?.customization_config);
 
-    const originalImage =
-      firstItem?.variant?.images?.find(
-        (img) => img?.is_primary && img?.file_uri,
-      )?.file_uri ||
-      firstItem?.variant?.images?.find(
-        (img) => img?.file_uri,
-      )?.file_uri ||
-      firstItem?.product?.attachments?.find(
-        (img) => img?.file_uri && img?.is_primary,
-      )?.file_uri ||
-      firstItem?.product?.attachments?.find(
-        (img) => img?.file_uri,
-      )?.file_uri ||
-      null;
+    const pricingSnapshot = parseJson(firstItem?.pricing_snapshot);
 
-    // ---------------------------------------------------------------------
-    // TOTAL QUANTITY
-    // ---------------------------------------------------------------------
-
-    const totalQuantity = (data.items || []).reduce(
-      (sum, item) => sum + Number(item.quantity || 0),
-      0,
-    );
-
-    // ---------------------------------------------------------------------
-    // CUSTOMIZATION
-    // ---------------------------------------------------------------------
-
-    let customization = firstItem?.customization_config;
-
-    let pricingSnapshot = firstItem?.pricing_snapshot;
-
-    if (customization && typeof customization === "string") {
-      try {
-        customization = JSON.parse(customization);
-      } catch (error) {
-        customization = null;
-      }
-    }
-
-    if (pricingSnapshot && typeof pricingSnapshot === "string") {
-      try {
-        pricingSnapshot = JSON.parse(pricingSnapshot);
-      } catch (error) {
-        pricingSnapshot = null;
-      }
-    }
-
-    // ---------------------------------------------------------------------
-    // CUSTOMIZED IMAGE
-    //
-    // First check OrderItem.logo_image.
-    // If not present, check customization_config.customization[].logo_image
-    // ---------------------------------------------------------------------
-
+    // OrderItem.logo_image first, then artwork uploaded through customization_config.
     const customizedImage =
-      firstItem?.logo_image ||
-      getCustomizationArtwork(customization);
+      firstItem?.logo_image || getCustomizationArtwork(customization);
 
     return {
       id: data.id,
@@ -555,15 +493,7 @@ const getOrders = async ({ user, page = 1, limit = 10 }) => {
 
       tax_amount: Number(data.tax_amount || 0),
 
-      pricing_breakdown: {
-        subtotal: Number(data.subtotal_amount || 0),
-
-        tax: Number(data.tax_amount || 0),
-
-        shipping: Number(data.shipping_amount || 0),
-
-        total: Number(data.total_amount || 0),
-      },
+      pricing_breakdown: buildOrderTotals(data),
 
       payment_status: data.payment_status,
 
@@ -575,136 +505,55 @@ const getOrders = async ({ user, page = 1, limit = 10 }) => {
 
       created_at: data.created_at,
 
-      // -------------------------------------------------------------------
-      // PREVIEW
-      // -------------------------------------------------------------------
-
       preview: {
-        product_name: decodeHtmlEntities(
-          firstItem?.product?.name || null,
+        product_name: decodeHtmlEntities(firstItem?.product?.name || null),
+
+        original_image: getItemImage(firstItem),
+
+        customized_image: toFullImageUrl(customizedImage),
+
+        total_items: sumQuantity(data.items),
+
+        customization_type: customization?.type || null,
+
+        print_method: customization?.print_method || null,
+
+        custom_text: customization?.custom_text || null,
+
+        customization_summary: (pricingSnapshot?.pricing_table || []).map(
+          (row) => ({
+            ...row,
+
+            customization_type: customization?.type || null,
+
+            print_method: customization?.print_method || null,
+
+            custom_text: customization?.custom_text || null,
+          }),
         ),
-
-        original_image: originalImage,
-
-        customized_image: customizedImage
-          ? customizedImage.startsWith("http")
-            ? customizedImage
-            : `${process.env.IMAGE_BASE_URL}${customizedImage}`
-          : null,
-
-        total_items: totalQuantity,
-
-        customization_type:
-          customization?.type || null,
-
-        print_method:
-          customization?.print_method || null,
-
-        custom_text:
-          customization?.custom_text || null,
-
-        customization_summary: (
-          pricingSnapshot?.pricing_table || []
-        ).map((row) => ({
-          ...row,
-
-          customization_type:
-            customization?.type || null,
-
-          print_method:
-            customization?.print_method || null,
-
-          custom_text:
-            customization?.custom_text || null,
-        })),
       },
-
-      // -------------------------------------------------------------------
-      // ITEMS
-      // -------------------------------------------------------------------
 
       items: (data.items || []).map((item) => {
         const variant = item.variant || {};
 
         const product = item.product || {};
 
-        // ---------------------------------------------------------------
-        // ITEM ORIGINAL IMAGE
-        // ---------------------------------------------------------------
-
-        const itemOriginalImage =
-          variant?.images?.find(
-            (img) => img?.is_primary && img?.file_uri,
-          )?.file_uri ||
-          variant?.images?.find(
-            (img) => img?.file_uri,
-          )?.file_uri ||
-          product?.attachments?.find(
-            (img) => img?.file_uri && img?.is_primary,
-          )?.file_uri ||
-          product?.attachments?.find(
-            (img) => img?.file_uri,
-          )?.file_uri ||
-          null;
-
-        // ---------------------------------------------------------------
-        // ITEM CUSTOMIZATION
-        // ---------------------------------------------------------------
-
-        let itemCustomization = item.customization_config;
-
-        let itemPricing = item.pricing_snapshot;
-
-        if (
-          itemCustomization &&
-          typeof itemCustomization === "string"
-        ) {
-          try {
-            itemCustomization = JSON.parse(
-              itemCustomization,
-            );
-          } catch (error) {
-            itemCustomization = null;
-          }
-        }
-
-        if (
-          itemPricing &&
-          typeof itemPricing === "string"
-        ) {
-          try {
-            itemPricing = JSON.parse(itemPricing);
-          } catch (error) {
-            itemPricing = null;
-          }
-        }
-
-        // ---------------------------------------------------------------
-        // ITEM CUSTOMIZED IMAGE
-        // ---------------------------------------------------------------
-
-        const itemCustomizedImage =
-          item.logo_image ||
-          getCustomizationArtwork(itemCustomization);
+        const itemCustomization = parseJson(item.customization_config);
 
         return {
           product_id: product.id,
 
-          product_name: decodeHtmlEntities(
-            product.name,
-          ),
+          product_name: decodeHtmlEntities(product.name),
 
           variant_id: variant.id,
 
           sku: variant.sku,
 
-          original_image: itemOriginalImage,
+          original_image: getItemImage(item),
 
-          customized_image: itemCustomizedImage
-            ? itemCustomizedImage.startsWith("http")
-              ? itemCustomizedImage
-              : `${process.env.IMAGE_BASE_URL}${itemCustomizedImage}`
-            : null,
+          customized_image: toFullImageUrl(
+            item.logo_image || getCustomizationArtwork(itemCustomization),
+          ),
 
           price: Number(item.price || 0),
 
@@ -712,11 +561,9 @@ const getOrders = async ({ user, page = 1, limit = 10 }) => {
 
           total: Number(item.total_price || 0),
 
-          customization_config:
-            itemCustomization,
+          customization_config: itemCustomization,
 
-          pricing_snapshot:
-            itemPricing,
+          pricing_snapshot: parseJson(item.pricing_snapshot),
         };
       }),
     };
@@ -894,181 +741,11 @@ const getOrderById = async (body, order_id) => {
 
         const product = i.product || {};
 
-        /*
-        |--------------------------------------------------------------------------
-        | ORIGINAL IMAGE
-        |--------------------------------------------------------------------------
-        */
+        const customization = parseJson(i.customization_config);
 
-        const originalImage =
-          variant.images?.find(
-            (img) => img?.is_primary && img?.file_uri,
-          )?.file_uri ||
-          variant.images?.find(
-            (img) => img?.file_uri,
-          )?.file_uri ||
-          product.attachments?.find(
-            (img) => img?.is_primary && img?.file_uri,
-          )?.file_uri ||
-          product.attachments?.find(
-            (img) => img?.file_uri,
-          )?.file_uri ||
-          null;
-
-        /*
-        |--------------------------------------------------------------------------
-        | PARSE JSON
-        |--------------------------------------------------------------------------
-        */
-
-        let customization = i.customization_config;
-
-        let pricingSnapshot = i.pricing_snapshot;
-
-        if (
-          customization &&
-          typeof customization === "string"
-        ) {
-          customization = JSON.parse(customization);
-        }
-
-        if (
-          pricingSnapshot &&
-          typeof pricingSnapshot === "string"
-        ) {
-          pricingSnapshot = JSON.parse(pricingSnapshot);
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | CUSTOMIZED IMAGE
-        |--------------------------------------------------------------------------
-        */
-
-        const customizedImage =
-          i.logo_image ||
-          getCustomizationArtwork(customization);
-
-        /*
-        |--------------------------------------------------------------------------
-        | MANUAL PRODUCT CHECK
-        |--------------------------------------------------------------------------
-        */
-
-        const isManual =
-          i.supplier === "MANUAL" ||
-          variant.supplier === "MANUAL" ||
-          customization?.type === "MANUAL" ||
-          pricingSnapshot?.supplier === "MANUAL";
-
-        /*
-        |--------------------------------------------------------------------------
-        | PRICING BREAKDOWN
-        |--------------------------------------------------------------------------
-        */
-
-        let pricingBreakdown = null;
-
-        if (pricingSnapshot) {
-          if (isManual) {
-            pricingBreakdown = {
-              actual_product_price: Number(
-                pricingSnapshot?.product_price?.base_price || 0,
-              ),
-
-              supplier_markup: 0,
-
-              final_product_price: Number(
-                pricingSnapshot?.product_price
-                  ?.final_product_price || 0,
-              ),
-
-              product_total: Number(
-                pricingSnapshot?.totals?.product_total ||
-                  pricingSnapshot?.product_price?.total ||
-                  0,
-              ),
-
-              customization_price: Number(
-                pricingSnapshot?.totals?.customization_total ||
-                  pricingSnapshot?.customization?.total ||
-                  0,
-              ),
-
-              addon_price: Number(
-                pricingSnapshot?.totals?.addon_total ||
-                  pricingSnapshot?.addon_total ||
-                  0,
-              ),
-
-              final_price_per_item: Number(
-                pricingSnapshot?.final_price_per_item || 0,
-              ),
-
-              final_total: Number(
-                pricingSnapshot?.total_price ||
-                  pricingSnapshot?.totals?.grand_total ||
-                  0,
-              ),
-
-              customization:
-                pricingSnapshot?.customization || null,
-
-              addons: pricingSnapshot?.addons || [],
-
-              pricing_table: [],
-            };
-          } else {
-            /*
-            |--------------------------------------------------------------------------
-            | EXISTING SUPPLIER PRICING
-            | DO NOT CHANGE
-            |--------------------------------------------------------------------------
-            */
-
-            pricingBreakdown = {
-              actual_product_price:
-                pricingSnapshot?.product_price?.actual_price,
-
-              supplier_markup:
-                pricingSnapshot?.product_price?.supplier_markup,
-
-              final_product_price:
-                pricingSnapshot?.product_price
-                  ?.final_product_price,
-
-              customization_price:
-                pricingSnapshot?.customization_price
-                  ?.total_customization_price,
-
-              setup_fee:
-                pricingSnapshot?.customization_price?.setup_fee,
-
-              final_price_per_item:
-                pricingSnapshot?.final_price_per_item,
-
-              final_total:
-                pricingSnapshot?.total_price,
-
-              pricing_table:
-                pricingSnapshot?.pricing_table || [],
-            };
-          }
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | RETURN ITEM
-        |--------------------------------------------------------------------------
-        */
+        const pricingSnapshot = parseJson(i.pricing_snapshot);
 
         return {
-          /*
-          |--------------------------------------------------------------------------
-          | PRODUCT
-          |--------------------------------------------------------------------------
-          */
-
           product_id: product.id,
 
           product_name: decodeHtmlEntities(product.name),
@@ -1081,25 +758,11 @@ const getOrderById = async (body, order_id) => {
 
           size: variant.size_details?.name || null,
 
-          /*
-          |--------------------------------------------------------------------------
-          | IMAGES
-          |--------------------------------------------------------------------------
-          */
+          original_image: getItemImage(i),
 
-          original_image: originalImage,
-
-          customized_image: customizedImage
-            ? customizedImage.startsWith("http")
-              ? customizedImage
-              : `${process.env.IMAGE_BASE_URL}${customizedImage}`
-            : null,
-
-          /*
-          |--------------------------------------------------------------------------
-          | PRICING
-          |--------------------------------------------------------------------------
-          */
+          customized_image: toFullImageUrl(
+            i.logo_image || getCustomizationArtwork(customization),
+          ),
 
           price: Number(i.price),
 
@@ -1107,23 +770,14 @@ const getOrderById = async (body, order_id) => {
 
           total: Number(i.total_price),
 
-          /*
-          |--------------------------------------------------------------------------
-          | CUSTOMIZATION
-          |--------------------------------------------------------------------------
-          */
-
           customization_config: customization,
 
           pricing_snapshot: pricingSnapshot,
 
-          /*
-          |--------------------------------------------------------------------------
-          | BREAKDOWN
-          |--------------------------------------------------------------------------
-          */
-
-          pricing_breakdown: pricingBreakdown,
+          pricing_breakdown: buildPricingBreakdown(
+            pricingSnapshot,
+            isManualItem(i, customization, pricingSnapshot),
+          ),
         };
       }),
     };
@@ -1529,737 +1183,129 @@ const getAdminOrders = async ({
       subQuery: false,
     });
 
-  /*
-   * |--------------------------------------------------------------------------
-   * | IMAGE HELPERS
-   * |--------------------------------------------------------------------------
-   */
+  const formatted = rows.map((order) => {
+    const data = order.toJSON();
 
-  /*
-   * ---------------------------------------------------------
-   * Get product image
-   * ---------------------------------------------------------
-   *
-   * Priority:
-   *
-   * 1. Variant primary image
-   * 2. Variant first image
-   * 3. Product primary attachment
-   * 4. Product first attachment
-   */
+    const firstItem = data.items?.[0];
 
-  const getProductImage = (
-    item,
-  ) => {
-    if (!item) {
-      return null;
-    }
+    const customization = parseJson(firstItem?.customization_config);
 
-    /*
-     * Variant images
-     */
+    const pricingSnapshot = parseJson(firstItem?.pricing_snapshot);
 
-    const variantImages =
-      item?.variant?.images || [];
+    return {
+      id: data.id,
 
-    if (variantImages.length) {
-      const primaryImage =
-        variantImages.find(
-          (img) =>
-            img?.is_primary,
-        );
+      order_number: data.order_number,
 
-      return (
-        primaryImage?.file_uri ||
-        variantImages[0]?.file_uri ||
-        null
-      );
-    }
+      created_at: data.created_at,
 
-    /*
-     * Product attachments
-     */
+      subtotal_amount: Number(data.subtotal_amount || 0),
 
-    const productAttachments =
-      item?.product?.attachments || [];
+      shipping_amount: Number(
+        data.actual_shipping_cost || data.shipping_amount || 0,
+      ),
 
-    if (productAttachments.length) {
-      const primaryAttachment =
-        productAttachments.find(
-          (attachment) =>
-            attachment?.is_primary,
-        );
+      total_amount: Number(data.total_amount || 0),
 
-      return (
-        primaryAttachment?.file_uri ||
-        productAttachments[0]?.file_uri ||
-        null
-      );
-    }
+      status: data.status,
 
-    return null;
-  };
+      payment_status: data.payment_status,
 
-  /*
-   * ---------------------------------------------------------
-   * Build full customization image URL
-   * ---------------------------------------------------------
-   *
-   * Supports:
-   *
-   * /images/file.png
-   *
-   * and
-   *
-   * https://domain.com/images/file.png
-   */
+      shipment_status: data.shipment_status,
 
-  const getFullImageUrl = (
-    image,
-  ) => {
-    if (!image) {
-      return null;
-    }
+      payment_method: data.payment_method,
 
-    if (
-      typeof image === "string" &&
-      /^https?:\/\//i.test(image)
-    ) {
-      return image;
-    }
+      carrier: data.carrier,
 
-    return `${process.env.IMAGE_BASE_URL}${image}`;
-  };
+      tracking_number: data.tracking_number,
 
-  /*
-   * |--------------------------------------------------------------------------
-   * | FORMAT ORDERS
-   * |--------------------------------------------------------------------------
-   */
+      tracking_url: data.tracking_url,
 
-  const formatted = rows.map(
-    (order) => {
-      const data =
-        order.toJSON();
+      label_url: data.label_url,
 
-      const firstItem =
-        data.items?.[0];
+      user: data.user
+        ? {
+            id: data.user.id,
 
-      /*
-       * ---------------------------------------------------------
-       * ORIGINAL PRODUCT IMAGE
-       * ---------------------------------------------------------
-       */
+            name: data.user?.user_profile?.name || null,
 
-      let originalImage = null;
+            email: data.user?.email || null,
+          }
+        : null,
 
-      /*
-       * Try each order item until
-       * we find an image.
-       *
-       * This is important because the first
-       * item may not have an image.
-       */
+      preview: {
+        product_name: firstItem?.product?.name || null,
 
-      for (const item of
-        data.items || []) {
-        const image =
-          getProductImage(item);
+        // The first item that has an image. The first item may not have one.
+        original_image: (data.items || []).map(getItemImage).find(Boolean) || null,
 
-        if (image) {
-          originalImage = image;
-          break;
-        }
-      }
+        customized_image: toFullImageUrl(
+          firstItem?.logo_image || getCustomizationArtwork(customization),
+        ),
 
-      /*
-       * ---------------------------------------------------------
-       * TOTAL ITEMS
-       * ---------------------------------------------------------
-       */
+        total_items: sumQuantity(data.items),
 
-      const totalQuantity =
-        (data.items || []).reduce(
-          (sum, item) =>
-            sum +
-            Number(
-              item.quantity || 0,
-            ),
-          0,
-        );
+        customization_type:
+          customization?.type ||
+          (pricingSnapshot?.supplier === "MANUAL" ? "MANUAL" : null),
 
-      /*
-       * ---------------------------------------------------------
-       * CUSTOMIZATION
-       * ---------------------------------------------------------
-       */
+        print_method: customization?.print_method || null,
 
-      let customization =
-        firstItem?.customization_config;
+        custom_text: customization?.custom_text || null,
 
-      let pricingSnapshot =
-        firstItem?.pricing_snapshot;
+        // Supplier items keep their summary in pricing_table, MANUAL items in customization.items.
+        customization_summary:
+          pricingSnapshot?.pricing_table ||
+          pricingSnapshot?.customization?.items ||
+          [],
+      },
 
-      /*
-       * Parse customization JSON
-       */
+      items: (data.items || []).map((i) => {
+        const variant = i.variant || {};
 
-      if (
-        customization &&
-        typeof customization ===
-          "string"
-      ) {
-        customization =
-          JSON.parse(
-            customization,
-          );
-      }
+        const product = i.product || {};
 
-      /*
-       * Parse pricing snapshot JSON
-       */
+        const itemCustomization = parseJson(i.customization_config);
 
-      if (
-        pricingSnapshot &&
-        typeof pricingSnapshot ===
-          "string"
-      ) {
-        pricingSnapshot =
-          JSON.parse(
-            pricingSnapshot,
-          );
-      }
+        const itemPricing = parseJson(i.pricing_snapshot);
 
-      /*
-       * ---------------------------------------------------------
-       * CUSTOMIZED IMAGE
-       * ---------------------------------------------------------
-       *
-       * Priority:
-       *
-       * 1. OrderItem.logo_image
-       * 2. customization_config.customization[].logo_image
-       */
+        return {
+          product_id: product.id,
 
-      let customizedImage =
-        firstItem?.logo_image ||
-        getCustomizationArtwork(
-          customization,
-        );
+          product_name: decodeHtmlEntities(product.name),
 
-      /*
-       * ---------------------------------------------------------
-       * RETURN ORDER
-       * ---------------------------------------------------------
-       */
+          variant_id: variant.id,
 
-      return {
-        /*
-         * -------------------------------------------------------
-         * ORDER
-         * -------------------------------------------------------
-         */
+          sku: variant.sku,
 
-        id: data.id,
+          color: variant.color,
 
-        order_number:
-          data.order_number,
+          size: variant.size_details?.name || null,
 
-        created_at:
-          data.created_at,
+          original_image: getItemImage(i),
 
-        /*
-         * -------------------------------------------------------
-         * AMOUNTS
-         * -------------------------------------------------------
-         */
-
-        subtotal_amount:
-          Number(
-            data.subtotal_amount ||
-              0,
+          customized_image: toFullImageUrl(
+            i.logo_image || getCustomizationArtwork(itemCustomization),
           ),
 
-        shipping_amount:
-          Number(
-            data.actual_shipping_cost ||
-              data.shipping_amount ||
-              0,
+          price: Number(i.price || 0),
+
+          quantity: Number(i.quantity || 0),
+
+          total: Number(i.total_price || 0),
+
+          customization_config: itemCustomization,
+
+          pricing_snapshot: itemPricing,
+
+          pricing_breakdown: buildPricingBreakdown(
+            itemPricing,
+            isManualItem(i, itemCustomization, itemPricing),
           ),
-
-        total_amount:
-          Number(
-            data.total_amount || 0,
-          ),
-
-        /*
-         * -------------------------------------------------------
-         * STATUS
-         * -------------------------------------------------------
-         */
-
-        status:
-          data.status,
-
-        payment_status:
-          data.payment_status,
-
-        shipment_status:
-          data.shipment_status,
-
-        payment_method:
-          data.payment_method,
-
-        /*
-         * -------------------------------------------------------
-         * SHIPPING
-         * -------------------------------------------------------
-         */
-
-        carrier:
-          data.carrier,
-
-        tracking_number:
-          data.tracking_number,
-
-        tracking_url:
-          data.tracking_url,
-
-        label_url:
-          data.label_url,
-
-        /*
-         * -------------------------------------------------------
-         * USER
-         * -------------------------------------------------------
-         */
-
-        user: data.user
-          ? {
-              id:
-                data.user.id,
-
-              name:
-                data.user
-                  ?.user_profile
-                  ?.name ||
-                null,
-
-              email:
-                data.user?.email ||
-                null,
-            }
-          : null,
-
-        /*
-         * -------------------------------------------------------
-         * PREVIEW
-         * -------------------------------------------------------
-         */
-
-        preview: {
-          product_name:
-            firstItem?.product
-              ?.name || null,
-
-          /*
-           * Product image
-           *
-           * Works for:
-           * SUPPLIER
-           * MANUAL
-           */
-
-          original_image:
-            originalImage,
-
-          /*
-           * Customization artwork
-           */
-
-          customized_image:
-            getFullImageUrl(
-              customizedImage,
-            ),
-
-          total_items:
-            totalQuantity,
-
-          customization_type:
-            customization?.type ||
-            (
-              pricingSnapshot
-                ?.supplier ===
-              "MANUAL"
-                ? "MANUAL"
-                : null
-            ),
-
-          print_method:
-            customization
-              ?.print_method ||
-            null,
-
-          custom_text:
-            customization
-              ?.custom_text ||
-            null,
-
-          /*
-           * -----------------------------------------------------
-           * CUSTOMIZATION SUMMARY
-           * -----------------------------------------------------
-           *
-           * MANUAL:
-           * pricingSnapshot.customization.items
-           *
-           * SUPPLIER:
-           * pricingSnapshot.pricing_table
-           */
-
-          customization_summary:
-            pricingSnapshot
-              ?.pricing_table ||
-            pricingSnapshot
-              ?.customization
-              ?.items ||
-            [],
-        },
-
-        /*
-         * -------------------------------------------------------
-         * ITEMS
-         * -------------------------------------------------------
-         */
-
-        items: (
-          data.items || []
-        ).map((i) => {
-          const variant =
-            i.variant || {};
-
-          const product =
-            i.product || {};
-
-          /*
-           * -----------------------------------------------------
-           * IMAGE
-           * -----------------------------------------------------
-           */
-
-          const itemImage =
-            getProductImage(i);
-
-          /*
-           * -----------------------------------------------------
-           * CUSTOMIZATION
-           * -----------------------------------------------------
-           */
-
-          let itemCustomization =
-            i.customization_config;
-
-          let itemPricing =
-            i.pricing_snapshot;
-
-          /*
-           * Parse customization
-           */
-
-          if (
-            itemCustomization &&
-            typeof itemCustomization ===
-              "string"
-          ) {
-            itemCustomization =
-              JSON.parse(
-                itemCustomization,
-              );
-          }
-
-          /*
-           * Parse pricing
-           */
-
-          if (
-            itemPricing &&
-            typeof itemPricing ===
-              "string"
-          ) {
-            itemPricing =
-              JSON.parse(
-                itemPricing,
-              );
-          }
-
-          /*
-           * -----------------------------------------------------
-           * CUSTOMIZED IMAGE
-           * -----------------------------------------------------
-           */
-
-          const itemCustomizedImage =
-            i.logo_image ||
-            getCustomizationArtwork(
-              itemCustomization,
-            );
-
-          /*
-           * -----------------------------------------------------
-           * MANUAL PRODUCT CHECK
-           * -----------------------------------------------------
-           */
-
-          const isManual =
-            i.supplier === "MANUAL" ||
-            variant.supplier ===
-              "MANUAL" ||
-            itemCustomization
-              ?.type === "MANUAL" ||
-            itemPricing?.supplier ===
-              "MANUAL";
-
-          /*
-           * -----------------------------------------------------
-           * PRICING BREAKDOWN
-           * -----------------------------------------------------
-           */
-
-          let pricingBreakdown =
-            null;
-
-          if (itemPricing) {
-            if (isManual) {
-              /*
-               * -------------------------------------------------
-               * MANUAL PRODUCT PRICING
-               * -------------------------------------------------
-               */
-
-              pricingBreakdown = {
-                actual_product_price:
-                  Number(
-                    itemPricing
-                      ?.product_price
-                      ?.base_price || 0,
-                  ),
-
-                supplier_markup: 0,
-
-                final_product_price:
-                  Number(
-                    itemPricing
-                      ?.product_price
-                      ?.final_product_price ||
-                      0,
-                  ),
-
-                product_total:
-                  Number(
-                    itemPricing
-                      ?.totals
-                      ?.product_total ||
-                      itemPricing
-                        ?.product_price
-                        ?.total ||
-                      0,
-                  ),
-
-                customization_price:
-                  Number(
-                    itemPricing
-                      ?.totals
-                      ?.customization_total ||
-                      itemPricing
-                        ?.customization
-                        ?.total ||
-                      0,
-                  ),
-
-                addon_price:
-                  Number(
-                    itemPricing
-                      ?.totals
-                      ?.addon_total ||
-                      itemPricing
-                        ?.addon_total ||
-                      0,
-                  ),
-
-                final_price_per_item:
-                  Number(
-                    itemPricing
-                      ?.final_price_per_item ||
-                      0,
-                  ),
-
-                final_total:
-                  Number(
-                    itemPricing
-                      ?.total_price ||
-                      itemPricing
-                        ?.totals
-                        ?.grand_total ||
-                      0,
-                  ),
-
-                customization:
-                  itemPricing
-                    ?.customization ||
-                  null,
-
-                addons:
-                  itemPricing
-                    ?.addons || [],
-
-                pricing_table: [],
-              };
-            } else {
-              /*
-               * -------------------------------------------------
-               * EXISTING SUPPLIER PRICING
-               * -------------------------------------------------
-               *
-               * DO NOT CHANGE
-               * -------------------------------------------------
-               */
-
-              pricingBreakdown = {
-                actual_product_price:
-                  itemPricing
-                    ?.product_price
-                    ?.actual_price,
-
-                supplier_markup:
-                  itemPricing
-                    ?.product_price
-                    ?.supplier_markup,
-
-                final_product_price:
-                  itemPricing
-                    ?.product_price
-                    ?.final_product_price,
-
-                customization_price:
-                  itemPricing
-                    ?.customization_price
-                    ?.total_customization_price,
-
-                setup_fee:
-                  itemPricing
-                    ?.customization_price
-                    ?.setup_fee,
-
-                final_price_per_item:
-                  itemPricing
-                    ?.final_price_per_item,
-
-                final_total:
-                  itemPricing
-                    ?.total_price,
-
-                pricing_table:
-                  itemPricing
-                    ?.pricing_table || [],
-              };
-            }
-          }
-
-          /*
-           * -----------------------------------------------------
-           * RETURN ITEM
-           * -----------------------------------------------------
-           */
-
-          return {
-            /*
-             * ---------------------------------------------------
-             * PRODUCT
-             * ---------------------------------------------------
-             */
-
-            product_id:
-              product.id,
-
-            product_name:
-              decodeHtmlEntities(
-                product.name,
-              ),
-
-            variant_id:
-              variant.id,
-
-            sku:
-              variant.sku,
-
-            color:
-              variant.color,
-
-            size:
-              variant
-                .size_details
-                ?.name || null,
-
-            /*
-             * ---------------------------------------------------
-             * IMAGES
-             * ---------------------------------------------------
-             */
-
-            original_image:
-              itemImage,
-
-            customized_image:
-              getFullImageUrl(
-                itemCustomizedImage,
-              ),
-
-            /*
-             * ---------------------------------------------------
-             * PRICE
-             * ---------------------------------------------------
-             */
-
-            price:
-              Number(
-                i.price || 0,
-              ),
-
-            quantity:
-              Number(
-                i.quantity || 0,
-              ),
-
-            total:
-              Number(
-                i.total_price || 0,
-              ),
-
-            /*
-             * ---------------------------------------------------
-             * CUSTOMIZATION
-             * ---------------------------------------------------
-             */
-
-            customization_config:
-              itemCustomization,
-
-            pricing_snapshot:
-              itemPricing,
-
-            /*
-             * ---------------------------------------------------
-             * BREAKDOWN
-             * ---------------------------------------------------
-             */
-
-            pricing_breakdown:
-              pricingBreakdown,
-          };
-        }),
-      };
-    },
-  );
+        };
+      }),
+    };
+  });
 
   /*
    * |--------------------------------------------------------------------------
