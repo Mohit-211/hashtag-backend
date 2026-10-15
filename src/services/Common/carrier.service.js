@@ -1,6 +1,7 @@
 /** @format */
 
-const { shipstationClient } = require("../../config/shipstation");
+// config/shipstation exports the client as shipstationApiClient; the old name was undefined.
+const { shipstationApiClient: shipstationClient } = require("../../config/shipstation");
 const { Carrier, CarrierService } = require("../../models");
 const ApiError = require("../../utils/ApiError");
 const httpStatus = require("http-status");
@@ -13,7 +14,7 @@ const syncCarriers = async () => {
     const carriers = res.data.carriers; // ✅ FIX
 
     if (!carriers || !Array.isArray(carriers)) {
-      throw new Error("Invalid carriers response");
+      throw new ApiError(httpStatus.BAD_GATEWAY, "Invalid carriers response");
     }
 
     for (const c of carriers) {
@@ -50,13 +51,23 @@ const syncServices = async () => {
 
       if (!services || !Array.isArray(services)) continue;
 
+      // carrier_services has no unique key, so upsert() always inserted: update the
+      // existing row for this carrier and service code instead.
       for (const s of services) {
-        await CarrierService.upsert({
-          carrier_id: carrier.carrier_id,
-          service_code: s.service_code,
-          name: s.name,
-          is_active: true,
+        const existing = await CarrierService.findOne({
+          where: { carrier_id: carrier.carrier_id, service_code: s.service_code },
         });
+
+        if (existing) {
+          await existing.update({ name: s.name, is_active: true });
+        } else {
+          await CarrierService.create({
+            carrier_id: carrier.carrier_id,
+            service_code: s.service_code,
+            name: s.name,
+            is_active: true,
+          });
+        }
       }
     }
 

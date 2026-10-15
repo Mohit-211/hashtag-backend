@@ -34,8 +34,14 @@ const updatePricingMarkup = async (id, body) => {
       throw new ApiError(httpStatus.NOT_FOUND, "Pricing markup not found");
     }
 
+    // A negative markup sells below cost (-100 makes every product of the supplier free).
+    const markupPercent = Number(body.markup_percent);
+    if (body.markup_percent === "" || body.markup_percent === null || !Number.isFinite(markupPercent) || markupPercent < 0 || markupPercent > 1000) {
+      throw new ApiError(httpStatus.BAD_REQUEST, "markup_percent must be a number from 0 to 1000");
+    }
+
     await pricing.update({
-      markup_percent: body.markup_percent,
+      markup_percent: markupPercent,
     });
 
     return pricing;

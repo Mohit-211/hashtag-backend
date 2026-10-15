@@ -1,28 +1,47 @@
-const app = require('./app.js');
-const moment = require('moment');
+// The timezone must be set before anything else loads: models and cron jobs read it at load time.
 const config = require('./src/config/config.js');
-const logger = require('./src/config/logger.js');
-
 process.env.TZ = config.DEFAULT_TIMEZONE;
+
+const moment = require('moment');
+const app = require('./app.js');
+const logger = require('./src/config/logger.js');
+const sequelize = require('./src/config/central.db.js');
 
 const server = app.listen(config.port, () => {
   const currentTime = moment().format('YYYY-MM-DD HH:mm:ss');
   logger.info(`Server running on port ${config.port} | Time: ${currentTime}`);
 });
 
-// graceful shutdown
-const exitHandler = () => {
-  if (server) {
-    server.close(() => {
-      logger.info('Server closed');
-      process.exit(1);
-    });
-  } else {
-    process.exit(1);
-  }
+// Stops accepting connections, lets requests in flight finish, then closes the database pool.
+let shuttingDown = false;
+const shutdown = (reason, exitCode = 0) => {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info(`${reason}: shutting down.`);
+
+  // Don't wait forever on a connection that never closes.
+  setTimeout(() => process.exit(exitCode), 10000).unref();
+
+  server.close(async () => {
+    try {
+      await sequelize.close();
+    } catch (error) {
+      logger.error(`Closing the database failed: ${error.message}`);
+    }
+    process.exit(exitCode);
+  });
 };
 
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM received.');
-  exitHandler();
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+
+// A promise rejected with no handler is a bug, but not a reason to take the site down.
+process.on('unhandledRejection', (reason) => {
+  logger.error(`Unhandled promise rejection: ${reason?.stack || reason}`);
+});
+
+// After an uncaught exception the process state is unknown: log it and exit (PM2 restarts the app).
+process.on('uncaughtException', (error) => {
+  logger.error(`Uncaught exception: ${error?.stack || error}`);
+  shutdown('Uncaught exception', 1);
 });

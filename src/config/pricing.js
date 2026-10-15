@@ -12,7 +12,9 @@ const getMarkupPercent = async (supplier) => {
     },
   });
 
-  return pricing?.markup_percent || 66.67;
+  // 66.67% only when the supplier has no markup row; a markup of 0 is a real value.
+  const markup = Number(pricing?.markup_percent);
+  return pricing && pricing.markup_percent !== null && Number.isFinite(markup) ? markup : 66.67;
 };
 
 const calculatePricing = async (basePrice, supplier, markupPercent = null) => {

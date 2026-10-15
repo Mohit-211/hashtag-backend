@@ -1,4 +1,5 @@
 const httpStatus = require('http-status');
+const { Op } = require('sequelize');
 
 const { ContactUs } = require('../../models');
 const ApiError = require('../../utils/ApiError');
@@ -54,26 +55,44 @@ const createContactUs = async (reqBody) => {
   }
 };
 
-const getAllContactUs = async () => {
+const CONTACT_US_ATTRIBUTES = ["id", "name", "email", "mobile", "reason", "message", "status", "created_at"];
+
+// Without `page`: every active row as a plain array (what the admin panel calls today).
+// With `page`: one page as { data, pagination }, filtered by `search` and `status`.
+const getAllContactUs = async (query = {}) => {
   try {
-    const contactUsDoc = await ContactUs.findAll({
-      attributes: [
-        "id",
-        "name",
-        "email",
-        "mobile",
-        "reason",
-        "message",
-        "status",
-        "created_at",
-      ],
-      where: {
-        is_active: true,
-      },
-      order: [["created_at", "DESC"]],
+    const where = { is_active: true };
+    const order = [["created_at", "DESC"]];
+
+    if (query.page === undefined) {
+      return await ContactUs.findAll({ attributes: CONTACT_US_ATTRIBUTES, where, order });
+    }
+
+    const page = Math.max(parseInt(query.page) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(query.limit) || 20, 1), 100);
+
+    if (query.status) {
+      where.status = query.status;
+    }
+    const search = String(query.search || "").trim();
+    if (search) {
+      where[Op.or] = ["name", "email", "mobile", "reason", "message"].map((field) => ({
+        [field]: { [Op.like]: `%${search}%` },
+      }));
+    }
+
+    const { count, rows } = await ContactUs.findAndCountAll({
+      attributes: CONTACT_US_ATTRIBUTES,
+      where,
+      order,
+      limit,
+      offset: (page - 1) * limit,
     });
 
-    return contactUsDoc;
+    return {
+      data: rows,
+      pagination: { total: count, page, limit, totalPages: Math.ceil(count / limit) },
+    };
   } catch (error) {
     throw new ApiError(
       error.statusCode || httpStatus.INTERNAL_SERVER_ERROR,

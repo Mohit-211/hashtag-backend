@@ -105,7 +105,7 @@ const createPayment = async (body) => {
     ];
 
     if (payment_mode && !allowedModes.includes(payment_mode)) {
-      throw new Error("Invalid payment mode");
+      throw new ApiError(httpStatus.BAD_REQUEST, "Invalid payment mode");
     }
 
     // ==================================================
@@ -121,11 +121,11 @@ const createPayment = async (body) => {
     });
 
     if (!order) {
-      throw new Error("Order not found");
+      throw new ApiError(httpStatus.NOT_FOUND, "Order not found");
     }
 
     if (order.payment_status === "SUCCESS") {
-      throw new Error("Order already paid");
+      throw new ApiError(httpStatus.BAD_REQUEST, "Order already paid");
     }
 
     const squareCustomerId = await getOrCreateSquareCustomer(user);
@@ -202,7 +202,7 @@ const createPayment = async (body) => {
   } catch (error) {
     console.error("🚨 Create Payment Error:", error);
 
-    throw new ApiError(500, error.message);
+    throw new ApiError(error.statusCode || 500, error.message);
   }
 };
 
@@ -380,11 +380,11 @@ const squareWebhook = async (body) => {
         const variant = await ProductVariant.findByPk(item.variant_id);
 
         if (!variant) {
-          throw new Error(`Variant not found: ${item.variant_id}`);
+          throw new ApiError(httpStatus.NOT_FOUND, `Variant not found: ${item.variant_id}`);
         }
 
         if (variant.track_inventory && variant.stock < item.quantity) {
-          throw new Error(`Insufficient stock for ${variant.sku}`);
+          throw new ApiError(httpStatus.BAD_REQUEST, `Insufficient stock for ${variant.sku}`);
         }
       }
 
@@ -1390,11 +1390,11 @@ const paypalWebhook = async (body) => {
         const variant = await ProductVariant.findByPk(item.variant_id);
 
         if (!variant) {
-          throw new Error(`Variant not found: ${item.variant_id}`);
+          throw new ApiError(httpStatus.NOT_FOUND, `Variant not found: ${item.variant_id}`);
         }
 
         if (variant.track_inventory && variant.stock < item.quantity) {
-          throw new Error(`Insufficient stock for ${variant.sku}`);
+          throw new ApiError(httpStatus.BAD_REQUEST, `Insufficient stock for ${variant.sku}`);
         }
       }
 

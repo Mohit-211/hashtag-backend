@@ -2,11 +2,12 @@ const { Sequelize } = require('sequelize');
 const config = require('./config.js');
 const logger = require('./logger.js');
 
+// supportBigNumbers and collate used to sit here, where Sequelize ignores them; they
+// were never in effect, so they were dropped rather than turned on.
 const sequelizeOptions = {
     host: config.databases.central.host,
+    port: Number(config.databases.central.port) || 3306,
     dialect: 'mysql',
-    supportBigNumbers: true,
-    collate: 'utf8mb4_unicode_ci',
     pool: {
         max: 10,
         min: 0,

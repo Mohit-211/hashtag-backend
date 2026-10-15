@@ -7,7 +7,8 @@ const { loginLimiter, emailLimiter, tokenLimiter } = require('../../../middlewar
 
 router.use(userAuthMiddleware.useCustomerRole);
 
-router.post('/register', [emailLimiter, userAuthMiddleware.validateRegisterUserBody], userAuthController.register);
+// Rate-limited (emailLimiter) in upload.middleware, before any uploaded file is saved.
+router.post('/register', [userAuthMiddleware.validateRegisterUserBody], userAuthController.register);
 router.post('/verify-email', [tokenLimiter], userAuthController.verifyEmail);
 router.post('/verify-email/resend', [emailLimiter], userAuthController.resendVerification);
 router.post('/login', [loginLimiter, userAuthMiddleware.validateSignInReqBody], userAuthController.login);

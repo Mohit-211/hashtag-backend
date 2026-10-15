@@ -19,7 +19,7 @@ const updateContactUs = catchAsync(async (req, res) => {
 
 const getAllContactUs = catchAsync(async (req, res) => {
 
-    const contactUs = await contactUsService.getAllContactUs();
+    const contactUs = await contactUsService.getAllContactUs(req.query);
     return responseWrapper(res, contactUs, '');
 });
 

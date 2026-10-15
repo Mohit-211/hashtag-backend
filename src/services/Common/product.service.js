@@ -2049,15 +2049,9 @@ const getAllProductsByGrandCategory = async (query) => {
 
     grand_category_id = Number(grand_category_id);
 
+    // Optional: narrows the grand category to one brand.
     if (brand_id) {
       brand_id = Number(brand_id);
-    }
-
-    if (brand_id && grand_category_id) {
-      throw new ApiError(
-        httpStatus.BAD_REQUEST,
-        "Pass either grand_category_id or brand_id, not both",
-      );
     }
 
     // Get all parent categories of this grand category
@@ -2091,7 +2085,8 @@ const getAllProductsByGrandCategory = async (query) => {
       is_discontinued: false,
     };
 
-    if (brand_id !== undefined && brand_id !== null) {
+    // An empty brand_id (?brand_id=) means no brand filter.
+    if (brand_id) {
       whereCondition.brand_id = brand_id;
     }
 
@@ -2494,7 +2489,7 @@ const getVariantById = async (id) => {
   });
 
   if (!variant) {
-    throw new Error("Variant not found");
+    throw new ApiError(httpStatus.NOT_FOUND, "Variant not found");
   }
 
   const data = variant.toJSON();
@@ -2622,7 +2617,7 @@ const getProductVariant = async (body) => {
   });
 
   if (!variant) {
-    throw new Error("Variant not found");
+    throw new ApiError(httpStatus.NOT_FOUND, "Variant not found");
   }
 
   const data = variant.toJSON();
@@ -3157,7 +3152,7 @@ const deleteProduct = async ({ styleId, supplier, product_id }) => {
     }
 
     if (!product) {
-      throw new Error("Product not found");
+      throw new ApiError(httpStatus.NOT_FOUND, "Product not found");
     }
 
     // ✅ 2. FIND VARIANTS
@@ -3861,7 +3856,7 @@ const deleteSSProductByStyle = async (styleId) => {
     });
 
     if (!product) {
-      throw new Error("Product not found");
+      throw new ApiError(httpStatus.NOT_FOUND, "Product not found");
     }
 
     // ✅ 2. FIND VARIANTS
@@ -3938,14 +3933,86 @@ const deleteSSProductByStyle = async (styleId) => {
   }
 };
 
+// What the admin variant list and the admin single-variant endpoint load for a variant.
+const adminVariantInclude = () => [
+  {
+    model: Product,
+    as: "product",
+    required: true,
+    include: [
+      {
+        model: ProductAttachment,
+        as: "attachments",
+        required: false,
+      },
+    ],
+  },
+  {
+    model: Size,
+    as: "size_details",
+    attributes: ["id", "name", "measurements"],
+  },
+  {
+    model: VariantAttachment,
+    as: "images",
+    where: {
+      is_active: true,
+    },
+    required: false,
+    attributes: ["id", "file_name", "file_uri", "is_primary"],
+  },
+  {
+    model: VariantWarehouse,
+    as: "variant_warehouse",
+  },
+];
+
+const formatAdminVariant = (variant) => {
+  const data = variant.toJSON();
+
+  // Decode product name
+  if (data.product) {
+    data.product.name = decodeHtmlEntities(data.product.name || "");
+  }
+
+  data.pricing_tiers = buildPricingTiers(data.meta, 0, true);
+
+  // SANMAR images in display order
+  if (data.product?.supplier === "SANMAR") {
+    data.product.attachments = (data.product.attachments || []).sort(
+      frontImageFirst,
+    );
+
+    data.images = (data.images || []).sort(byVariantImageNumber);
+  }
+
+  return data;
+};
+
+// One variant, shaped exactly like a row of the admin variant list. Inactive variants
+// are included, so a link to one still opens.
+const getProductVariantByIdAdmin = async (id) => {
+  const variant = await ProductVariant.findOne({
+    where: { id },
+    include: adminVariantInclude(),
+  });
+
+  if (!variant) {
+    throw new ApiError(httpStatus.NOT_FOUND, "Variant not found");
+  }
+
+  return formatAdminVariant(variant);
+};
+
 const getProductVariantByAdmin = async (query) => {
   try {
     const { page = 1, limit = 20, search = "" } = query;
     const offset = (page - 1) * limit;
 
+    // Discontinued is a product flag; variants have no such column.
     let where = {
       is_active: true,
-      is_discontinued: false,
+      "$product.is_discontinued$": false,
     };
 
     if (search) {
@@ -3988,76 +4055,10 @@ const getProductVariantByAdmin = async (query) => {
 
       distinct: true,
 
-      include: [
-        {
-          model: Product,
-
-          as: "product",
-
-          required: true,
-
-          include: [
-            {
-              model: ProductAttachment,
-
-              as: "attachments",
-
-              required: false,
-            },
-          ],
-        },
-
-        {
-          model: Size,
-
-          as: "size_details",
-
-          attributes: ["id", "name", "measurements"],
-        },
-
-        {
-          model: VariantAttachment,
-
-          as: "images",
-
-          where: {
-            is_active: true,
-          },
-
-          required: false,
-
-          attributes: ["id", "file_name", "file_uri", "is_primary"],
-        },
-
-        {
-          model: VariantWarehouse,
-
-          as: "variant_warehouse",
-        },
-      ],
+      include: adminVariantInclude(),
     });
 
-    const formattedRows = rows.map((variant) => {
-      const data = variant.toJSON();
-
-      // Decode product name
-      if (data.product) {
-        data.product.name = decodeHtmlEntities(data.product.name || "");
-      }
-
-      data.pricing_tiers = buildPricingTiers(data.meta, 0, true);
-
-      // SANMAR images in display order
-      if (data.product?.supplier === "SANMAR") {
-        data.product.attachments = (data.product.attachments || []).sort(
-          frontImageFirst,
-        );
-
-        data.images = (data.images || []).sort(byVariantImageNumber);
-      }
-
-      return data;
-    });
+    const formattedRows = rows.map(formatAdminVariant);
 
     return {
       data: formattedRows,
@@ -4253,7 +4254,9 @@ const getAllProductsAdmin = async (query) => {
               : await resolveTierProductIds(tier, useCaseId);
         } else {
           // No tier selected — resolve every product belonging to this
-          // use case, tier or no tier.
+          // use case, tier or no tier. Required here, not at the top:
+          // industry.service requires this file.
+          const { getProductIdsForUseCase } = require("./industry.service");
           const { productIds: allIds } =
             await getProductIdsForUseCase(useCaseId);
           productIds = allIds;
@@ -4960,6 +4963,7 @@ module.exports = {
   saveSSProductToDB,
   deleteSSProductByStyle,
   getProductVariantByAdmin,
+  getProductVariantByIdAdmin,
   getAdminStats,
   getProductByIdAdmin,
   getAllProductsAdmin,

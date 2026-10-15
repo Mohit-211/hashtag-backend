@@ -7,6 +7,26 @@ const ApiError = require("../../utils/ApiError");
 const httpStatus = require("http-status");
 
 
+// MariaDB returns JSON columns as text. The admin endpoints always send `features` as
+// an array; the storefront's product add-ons endpoint still sends the stored text,
+// which the shop parses itself.
+const parseFeatures = (features) => {
+  if (Array.isArray(features)) return features;
+  if (typeof features !== "string" || !features) return [];
+  try {
+    const parsed = JSON.parse(features);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const forAdmin = (addon) => {
+  const data = addon.toJSON();
+  data.features = parseFeatures(data.features);
+  return data;
+};
+
 const createAddOnProduct = async (body, files) => {
   try {
     let { name, description, features, price } = body;
@@ -86,7 +106,7 @@ const createAddOnProduct = async (body, files) => {
       is_active: true,
     });
 
-    return addon;
+    return forAdmin(addon);
   } catch (error) {
     throw new ApiError(
       error.statusCode || httpStatus.INTERNAL_SERVER_ERROR,
@@ -143,7 +163,7 @@ const getAllAddOnProducts = async (query) => {
     });
 
     return {
-      data: rows,
+      data: rows.map(forAdmin),
 
       pagination: {
         total: count,
@@ -172,7 +192,7 @@ const getAddOnProductById = async (id) => {
       throw new ApiError(httpStatus.NOT_FOUND, "Add-on product not found");
     }
 
-    return addon;
+    return forAdmin(addon);
   } catch (error) {
     throw new ApiError(
       error.statusCode || httpStatus.INTERNAL_SERVER_ERROR,
@@ -269,6 +289,9 @@ const updateAddOnProduct = async (id, body, files) => {
 
     if (imageFile) {
       updateData.image = `${process.env.IMAGE_BASE_URL}/images/${imageFile.filename}`;
+    } else if (body.remove_image === true || body.remove_image === "true") {
+      // Sent when the admin removed the image without picking a new one.
+      updateData.image = null;
     }
 
     // -----------------------------------------
@@ -277,7 +300,7 @@ const updateAddOnProduct = async (id, body, files) => {
 
     await addon.update(updateData);
 
-    return addon;
+    return forAdmin(addon);
   } catch (error) {
     throw new ApiError(
       error.statusCode || httpStatus.INTERNAL_SERVER_ERROR,

@@ -6,9 +6,13 @@ const { Brand, ImportBatch } = require("../../models");
 const ApiError = require("../../utils/ApiError");
 const httpStatus = require("http-status");
 const { Op } = require("sequelize");
+const pick = require("../../utils/pick");
+
+// Fields an admin may set through the generic brand create and update endpoints.
+const BRAND_FIELDS = ["name", "slug", "description", "show_on_website", "is_active"];
 
 const createBrand = async (body, files) => {
-  let brandObj = { ...body };
+  let brandObj = pick(body, BRAND_FIELDS);
 
   // ✅ Handle logo like your pattern
   if (files?.images?.length) {
@@ -60,7 +64,7 @@ const getAllBrands = async (query) => {
       },
     };
   } catch (error) {
-    throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, error.message);
+    throw new ApiError(error.statusCode || httpStatus.INTERNAL_SERVER_ERROR, error.message);
   }
 };
 
@@ -105,7 +109,7 @@ const getAllSSBrands = async (query) => {
       },
     };
   } catch (error) {
-    throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, error.message);
+    throw new ApiError(error.statusCode || httpStatus.INTERNAL_SERVER_ERROR, error.message);
   }
 };
 
@@ -119,7 +123,7 @@ const updateBrand = async (body, id) => {
   const brand = await Brand.findByPk(id);
   if (!brand) throw new ApiError(httpStatus.NOT_FOUND, "Brand not found");
 
-  await brand.update(body);
+  await brand.update(pick(body, BRAND_FIELDS));
   return brand;
 };
 
@@ -138,7 +142,7 @@ const publishBrand = async (body, files) => {
     const brand = await Brand.findByPk(brand_id);
 
     if (!brand) {
-      throw new Error("Brand not found");
+      throw new ApiError(httpStatus.NOT_FOUND, "Brand not found");
     }
 
     const isPublished = show_on_website === true || show_on_website === "true";

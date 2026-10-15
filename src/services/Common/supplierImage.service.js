@@ -9,8 +9,8 @@ const { dirs } = require("../../config/storage");
 // Stored as <storage>/uploads/suppliers/<supplier>/<style>/..., served at /uploads/suppliers/...
 const SUPPLIER_IMAGE_DIR = dirs.suppliers;
 
-// 🔥 PUBLIC BASE URL
-const BASE_URL = "https://node.hashtagbillionaire.com";
+// Public address of this API, used in the image URLs saved to the database.
+const BASE_URL = (process.env.IMAGE_BASE_URL || "https://node.hashtagbillionaire.com").replace(/\/+$/, "");
 
 // 🔥 CLEAN FILE NAME
 const sanitizeFileName = (name = "") => {

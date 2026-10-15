@@ -32,6 +32,8 @@ const {
   buildSagePricingSnapshot,
 } = require("../../utils/pricing/buildPricingSnapshot");
 const decodeHtmlEntities = require("../../utils/decodeHtmlEntities");
+// A stored value that doesn't parse comes back as null instead of failing the whole cart.
+const { parseJson } = require("../../utils/orderFormat");
 const { cancelShipstationShipment } = require("../../config/shipstation");
 
 // Variant's primary image, else its first image, else the product's first attachment.
@@ -176,7 +178,7 @@ const removeFromWishlist = async (user, id) => {
     const item = await Wishlist.findOne({
       where: { id, user_id: user.id, is_active: true },
     });
-    if (!item) throw new Error("Wishlist item not found");
+    if (!item) throw new ApiError(httpStatus.NOT_FOUND, "Wishlist item not found");
 
     await item.destroy();
     return true;
@@ -199,14 +201,14 @@ const moveWishlistToCart = async (body) => {
       transaction: t,
     });
 
-    if (!wishlistItem) throw new Error("Wishlist item not found");
+    if (!wishlistItem) throw new ApiError(httpStatus.NOT_FOUND, "Wishlist item not found");
 
     // ✅ GET VARIANT
     const variant = await ProductVariant.findByPk(wishlistItem.variant_id, {
       transaction: t,
     });
 
-    if (!variant) throw new Error("Variant not found");
+    if (!variant) throw new ApiError(httpStatus.NOT_FOUND, "Variant not found");
 
     // 🔥 USE MIN QUANTITY
     await addToCart({
@@ -1811,7 +1813,7 @@ const addToCart = async (body, files) => {
     }
 
     if (!Array.isArray(customization)) {
-      throw new Error(
+      throw new ApiError(httpStatus.BAD_REQUEST,
         "Invalid customization format",
       );
     }
@@ -1833,7 +1835,7 @@ const addToCart = async (body, files) => {
         customizationItem.sizes || [];
 
       if (!sizes.length) {
-        throw new Error(
+        throw new ApiError(httpStatus.BAD_REQUEST,
           "At least one size is required",
         );
       }
@@ -1855,7 +1857,7 @@ const addToCart = async (body, files) => {
           });
 
         if (!variant) {
-          throw new Error(
+          throw new ApiError(httpStatus.NOT_FOUND,
             `Variant ${sizeItem.variant_id} not found`,
           );
         }
@@ -1882,7 +1884,7 @@ const addToCart = async (body, files) => {
           finalQty >
             Number(variant.stock)
         ) {
-          throw new Error(
+          throw new ApiError(httpStatus.BAD_REQUEST,
             `Not enough stock for variant ${sizeItem.variant_id}`,
           );
         }
@@ -1899,16 +1901,21 @@ const addToCart = async (body, files) => {
         if (
           variant.supplier === "SAGE"
         ) {
+          // Same input as repricing (buildSupplierPricingSnapshot): the handling
+          // charge and drinkware fee depend on the product and its categories.
           pricing_snapshot =
             await buildSagePricingSnapshot({
               variant,
+
+              product: {
+                ...variant.product.toJSON(),
+                categories,
+              },
 
               quantity: finalQty,
 
               customization:
                 customizationForRow,
-
-              categories,
             });
         } else {
           pricing_snapshot =
@@ -2379,7 +2386,7 @@ const enrichManualCustomizationConfig = async (customizationConfig) => {
   let config = customizationConfig;
 
   if (typeof config === "string") {
-    config = JSON.parse(config);
+    config = parseJson(config);
   }
 
   if (!config?.customization || !Array.isArray(config.customization)) {
@@ -2475,14 +2482,14 @@ const toCartItemResponse = async (cart, isManual) => {
     response.customization_config &&
     typeof response.customization_config === "string"
   ) {
-    response.customization_config = JSON.parse(response.customization_config);
+    response.customization_config = parseJson(response.customization_config);
   }
 
   if (
     response.pricing_snapshot &&
     typeof response.pricing_snapshot === "string"
   ) {
-    response.pricing_snapshot = JSON.parse(response.pricing_snapshot);
+    response.pricing_snapshot = parseJson(response.pricing_snapshot);
   }
 
   response.logo_image = response.logo_image
@@ -2575,7 +2582,7 @@ const incrementCart = async (body) => {
     const cart = await Cart.findOne({ where: { id: cart_id, user_id: user.id } });
 
     if (!cart) {
-      throw new Error("Cart not found");
+      throw new ApiError(httpStatus.NOT_FOUND, "Cart not found");
     }
 
     await invalidatePendingOrder(cart.user_id);
@@ -2590,7 +2597,7 @@ const incrementCart = async (body) => {
     });
 
     if (!variant) {
-      throw new Error("Variant not found");
+      throw new ApiError(httpStatus.NOT_FOUND, "Variant not found");
     }
 
     const newQty = Number(cart.quantity) + 1;
@@ -2605,7 +2612,7 @@ const incrementCart = async (body) => {
       variant.track_inventory &&
       newQty > Number(variant.stock)
     ) {
-      throw new Error(`Only ${variant.stock} left`);
+      throw new ApiError(httpStatus.BAD_REQUEST, `Only ${variant.stock} left`);
     }
 
     /*
@@ -2618,7 +2625,7 @@ const incrementCart = async (body) => {
       variant.max_order_quantity &&
       newQty > Number(variant.max_order_quantity)
     ) {
-      throw new Error(
+      throw new ApiError(httpStatus.BAD_REQUEST,
         `Maximum order quantity is ${variant.max_order_quantity}`,
       );
     }
@@ -2682,7 +2689,7 @@ const decrementCart = async (body) => {
     const cart = await Cart.findOne({ where: { id: cart_id, user_id: user.id } });
 
     if (!cart) {
-      throw new Error("Cart not found");
+      throw new ApiError(httpStatus.NOT_FOUND, "Cart not found");
     }
 
     await invalidatePendingOrder(cart.user_id);
@@ -2697,7 +2704,7 @@ const decrementCart = async (body) => {
     });
 
     if (!variant) {
-      throw new Error("Variant not found");
+      throw new ApiError(httpStatus.NOT_FOUND, "Variant not found");
     }
 
     const newQty = Number(cart.quantity) - 1;
@@ -2773,7 +2780,7 @@ const updateCartQuantity = async (body) => {
     const cart = await Cart.findOne({ where: { id: cart_id, user_id: user.id } });
 
     if (!cart) {
-      throw new Error("Cart not found");
+      throw new ApiError(httpStatus.NOT_FOUND, "Cart not found");
     }
 
     await invalidatePendingOrder(cart.user_id);
@@ -2788,7 +2795,7 @@ const updateCartQuantity = async (body) => {
     });
 
     if (!variant) {
-      throw new Error("Variant not found");
+      throw new ApiError(httpStatus.NOT_FOUND, "Variant not found");
     }
 
     const finalQty = Number(quantity);
@@ -2812,7 +2819,7 @@ const updateCartQuantity = async (body) => {
     // INVENTORY VALIDATION
     // =========================================================
     if (variant.track_inventory && finalQty > Number(variant.stock)) {
-      throw new Error("Stock exceeded");
+      throw new ApiError(httpStatus.BAD_REQUEST, "Stock exceeded");
     }
 
     // =========================================================
@@ -2822,7 +2829,7 @@ const updateCartQuantity = async (body) => {
       variant.max_order_quantity &&
       finalQty > Number(variant.max_order_quantity)
     ) {
-      throw new Error(
+      throw new ApiError(httpStatus.BAD_REQUEST,
         `Maximum order quantity is ${variant.max_order_quantity}`,
       );
     }
@@ -2869,7 +2876,7 @@ const updateCartQuantity = async (body) => {
 const removeFromCart = async (user, cart_id) => {
   try {
     const cart = await Cart.findOne({ where: { id: cart_id, user_id: user.id } });
-    if (!cart) throw new Error("Cart not found");
+    if (!cart) throw new ApiError(httpStatus.NOT_FOUND, "Cart not found");
     await invalidatePendingOrder(cart.user_id);
     await cart.destroy();
     return true;
@@ -2892,7 +2899,7 @@ const moveCartToWishlist = async (body) => {
       transaction: t,
     });
 
-    if (!cartItem) throw new Error("Cart item not found");
+    if (!cartItem) throw new ApiError(httpStatus.NOT_FOUND, "Cart item not found");
 
     // ✅ ADD TO WISHLIST
     await addToWishlist({

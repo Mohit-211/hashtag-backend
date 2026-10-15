@@ -73,7 +73,7 @@ const addAddress = async (body) => {
       address_line2: body.address_line2,
 
       city: city.name,
-      state: state.code || state.name, // use code like AK
+      state: state.iso2 || state.name, // two-letter code, e.g. AK
       postal_code: body.postal_code,
       country_code: country.iso2 || "US",
     };
@@ -226,7 +226,7 @@ const updateAddress = async (body) => {
         address_line1: data.address_line1 || address.address_line1,
         address_line2: data.address_line2 || address.address_line2,
         city: city.name,
-        state: state.code || state.name,
+        state: state.iso2 || state.name,
         postal_code: data.postal_code || address.postal_code,
         country_code: country.iso2 || "US",
       };

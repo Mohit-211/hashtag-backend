@@ -17,11 +17,27 @@ const SIZE_ORDER = [
   "8XL",
 ];
 
-const sortSizes = (sizes = []) => {
-  return sizes.sort((a, b) => {
-    const sizeA = String(a.name || a.size || "").toUpperCase();
+// Other spellings suppliers use for the same sizes.
+const SIZE_ALIASES = {
+  "3XS": "XXXS",
+  "2XS": "XXS",
+  XXL: "2XL",
+  XXXL: "3XL",
+  XXXXL: "4XL",
+  XXXXXL: "5XL",
+};
 
-    const sizeB = String(b.name || b.size || "").toUpperCase();
+const sizeKey = (item) => {
+  const size = String(item.name || item.size || "").trim().toUpperCase();
+  return SIZE_ALIASES[size] || size;
+};
+
+// Returns a sorted copy; the input array is left as it was.
+const sortSizes = (sizes = []) => {
+  return [...sizes].sort((a, b) => {
+    const sizeA = sizeKey(a);
+
+    const sizeB = sizeKey(b);
 
     const indexA = SIZE_ORDER.indexOf(sizeA);
 

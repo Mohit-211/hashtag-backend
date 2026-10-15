@@ -40,12 +40,11 @@ const getCountryId = async (body, query, params) => {
                         attributes: ['id', 'name', 'country_id',]
                     }
                 ],
-                // where: { is_active: 1, id: params.id }
-                where: { is_active: 1, id: 233 } 
+                where: { is_active: 1, id: params.id }
             }
         );
         if (!result) {
-            throw new ApiError(httpStatus.BAD_REQUEST, 'Failed to fetch country by ID.');
+            throw new ApiError(httpStatus.NOT_FOUND, 'Country not found.');
         };
         return result;
 

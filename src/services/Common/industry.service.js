@@ -17,9 +17,15 @@ const sequelize = require("../../config/central.db");
 const { getSearchVariants } = require("./product.service");
 const { getCurrentTiersForProducts, resolveAllTierProductIds, resolveTierProductIds } = require("./tier.service");
 const decodeHtmlEntities = require("../../utils/decodeHtmlEntities");
+const pick = require("../../utils/pick");
+
+// Fields an admin may set; anything else in the request body is ignored. Images come
+// from the upload, not the body.
+const INDUSTRY_FIELDS = ["title", "slug", "description", "sort_order", "is_active"];
+const USE_CASE_FIELDS = ["industry_id", "title", "slug", "description", "sort_order", "is_active"];
 
 const createIndustry = async (body, files) => {
-  let industryObj = { ...body };
+  let industryObj = pick(body, INDUSTRY_FIELDS);
 
   if (files?.images?.length) {
     industryObj.image = `/images/${files.images[0].filename}`;
@@ -139,7 +145,7 @@ const updateIndustry = async (id, body, files) => {
     throw new ApiError(httpStatus.NOT_FOUND, "Industry not found");
   }
 
-  let updateObj = { ...body };
+  let updateObj = pick(body, INDUSTRY_FIELDS);
 
   // Update image if a new one is uploaded
   if (files?.images?.length) {
@@ -208,7 +214,7 @@ const createUseCase = async (body, files) => {
   }
 
   const useCaseObj = {
-    ...body,
+    ...pick(body, USE_CASE_FIELDS),
     slug: body.slug ? slugify(body.slug) : slugify(body.title),
   };
 
@@ -359,9 +365,7 @@ const updateUseCase = async (id, body, files) => {
     throw new ApiError(httpStatus.NOT_FOUND, "Use Case not found");
   }
 
-  const updateObj = {
-    ...body,
-  };
+  const updateObj = pick(body, USE_CASE_FIELDS);
 
   // Update image if a new one is uploaded
   if (files?.images?.length) {
@@ -1308,4 +1312,5 @@ module.exports = {
   clearProductOverride,
   moveProductsBetweenUseCases,
   getUseCasesForProduct,
+  getProductIdsForUseCase,
 };

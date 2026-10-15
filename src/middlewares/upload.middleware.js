@@ -1,16 +1,20 @@
+const fs = require("fs");
 const multer = require("multer");
 const httpStatus = require("http-status");
 
 const { upload, limits } = require("../config/multer");
 const { requireAdmin } = require("./adminAuth.middleware");
 const { verifyAuthJWTToken } = require("./userAuth.middleware");
+const { emailLimiter, publicFormLimiter } = require("./rateLimiter");
 const ApiError = require("../utils/ApiError");
 
 // Routes that accept file uploads (paths relative to /api/v1). Admin and customer
-// routes are authenticated before any file is written to disk.
+// routes are authenticated before any file is written to disk. The two public routes
+// are rate-limited here, before the upload (not in their route files), and files from
+// a request that's refused are deleted.
 const FILE_ROUTES = [
-  { method: "POST", path: /^\/user\/auth\/register\/?$/ },
-  { method: "POST", path: /^\/sourcing-requests\/create\/?$/ },
+  { method: "POST", path: /^\/user\/auth\/register\/?$/, limit: emailLimiter },
+  { method: "POST", path: /^\/sourcing-requests\/create\/?$/, limit: publicFormLimiter },
   { method: "POST", path: /^\/product\/cart\/?$/, auth: verifyAuthJWTToken },
 
   { method: "POST", path: /^\/product\/create-product\/?$/, auth: requireAdmin },
@@ -31,6 +35,13 @@ const FILE_ROUTES = [
 // Everywhere else multipart forms are still parsed, but files are refused.
 const textFieldsOnly = multer({ limits }).none();
 
+// Deletes the files multer saved for this request.
+const removeUploadedFiles = (req) => {
+  for (const file of Object.values(req.files || {}).flat()) {
+    fs.promises.unlink(file.path).catch(() => {});
+  }
+};
+
 const uploadMiddleware = (req, res, next) => {
   const route = FILE_ROUTES.find(
     (candidate) => candidate.method === req.method && candidate.path.test(req.path),
@@ -38,6 +49,17 @@ const uploadMiddleware = (req, res, next) => {
 
   if (!route) {
     return textFieldsOnly(req, res, next);
+  }
+
+  if (route.limit) {
+    return route.limit(req, res, (error) => {
+      if (error) return next(error);
+      // A refused request (400-499) has no use for its files.
+      res.on("finish", () => {
+        if (res.statusCode >= 400 && res.statusCode < 500) removeUploadedFiles(req);
+      });
+      return upload(req, res, next);
+    });
   }
 
   if (!route.auth) {

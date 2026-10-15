@@ -1,4 +1,6 @@
 const { calculatePricing } = require("../../config/pricing");
+const httpStatus = require("http-status");
+const ApiError = require("../ApiError");
 
 /*
 |--------------------------------------------------------------------------
@@ -441,7 +443,7 @@ const buildPricingSnapshot = async ({
       const screenPrice = getScreenPrintPrice(colors, quantity);
 
       if (screenPrice === "MINIMUM_12_REQUIRED") {
-        throw new Error("Screen print requires minimum quantity of 12");
+        throw new ApiError(httpStatus.BAD_REQUEST, "Screen print requires minimum quantity of 12");
       }
 
       const locationCount = Math.max(locations.length, 1);
@@ -569,16 +571,19 @@ const buildSagePricingSnapshot = async ({
     }
   }
 
-  const qtyTiers = (meta.qtyTiers || [])
-    .map((q) => Number(q))
-    .filter((q) => q > 0);
+  // Quantity and price tiers are kept as pairs: filtering the two lists separately
+  // shifted prices onto the wrong quantity whenever a tier in the middle was empty.
+  const rawNetTiers = meta.netTiers || [];
+  const tiers = (meta.qtyTiers || [])
+    .map((q, i) => ({ qty: Number(q), net: Number(rawNetTiers[i]) }))
+    .filter((tier) => tier.qty > 0 && !isNaN(tier.net) && tier.net > 0);
 
-  const netTiers = (meta.netTiers || [])
-    .map((p) => Number(p))
-    .filter((p) => !isNaN(p) && p > 0);
+  const qtyTiers = tiers.map((tier) => tier.qty);
+
+  const netTiers = tiers.map((tier) => tier.net);
 
   if (!qtyTiers.length || !netTiers.length) {
-    throw new Error(
+    throw new ApiError(httpStatus.BAD_REQUEST,
       `SAGE net pricing tiers not found for variant ${variant.id}`,
     );
   }
@@ -592,7 +597,7 @@ const buildSagePricingSnapshot = async ({
   const minQty = Math.min(...qtyTiers);
 
   if (quantity < minQty) {
-    throw new Error(`Minimum quantity for this product is ${minQty}`);
+    throw new ApiError(httpStatus.BAD_REQUEST, `Minimum quantity for this product is ${minQty}`);
   }
 
   /*
@@ -617,7 +622,7 @@ const buildSagePricingSnapshot = async ({
 
   /*
    |--------------------------------------------------------------------------
-   | APPLY SAGE MARKUP (49.25%)
+   | APPLY THE SAGE MARKUP (from the pricing settings)
    |--------------------------------------------------------------------------
    */
 
@@ -755,7 +760,7 @@ const buildSagePricingSnapshot = async ({
 
         supplier_price: supplierPrice,
 
-        markup_percent: 49.25,
+        markup_percent: Number(productPricing.markup_percent),
 
         final_price_per_item,
 

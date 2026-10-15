@@ -65,7 +65,7 @@ const createOrder = async (body) => {
     });
 
     if (!address) {
-      throw new Error("Invalid address");
+      throw new ApiError(httpStatus.BAD_REQUEST, "Invalid address");
     }
 
     /*
@@ -96,7 +96,7 @@ const createOrder = async (body) => {
     });
 
     if (!cartItems.length) {
-      throw new Error("Cart is empty");
+      throw new ApiError(httpStatus.BAD_REQUEST, "Cart is empty");
     }
 
     /*
@@ -117,7 +117,7 @@ const createOrder = async (body) => {
        */
 
       if (variant.track_inventory && item.quantity > variant.stock) {
-        throw new Error(`Insufficient stock for ${variant.sku}`);
+        throw new ApiError(httpStatus.BAD_REQUEST, `Insufficient stock for ${variant.sku}`);
       }
 
       /*
@@ -390,7 +390,7 @@ const createOrder = async (body) => {
 
     console.error("❌ ORDER FLOW FAILED:", err.message);
 
-    throw new ApiError(500, err.message);
+    throw new ApiError(err.statusCode || 500, err.message);
   }
 };
 
@@ -420,6 +420,8 @@ const getOrders = async ({ user, page = 1, limit = 10 }) => {
           {
             model: Product,
             as: "product",
+            // Deleted products still belong in order history.
+            paranoid: false,
             attributes: ["id", "name"],
 
             include: [
@@ -437,6 +439,8 @@ const getOrders = async ({ user, page = 1, limit = 10 }) => {
           {
             model: ProductVariant,
             as: "variant",
+            // Deleted products still belong in order history.
+            paranoid: false,
             attributes: ["id", "sku"],
 
             include: [
@@ -603,6 +607,8 @@ const getOrderById = async (body, order_id) => {
             {
               model: Product,
               as: "product",
+              // Deleted products still belong in order history.
+              paranoid: false,
 
               attributes: ["id", "name"],
 
@@ -618,6 +624,8 @@ const getOrderById = async (body, order_id) => {
             {
               model: ProductVariant,
               as: "variant",
+              // Deleted products still belong in order history.
+              paranoid: false,
 
               attributes: ["id", "sku", "color"],
 
@@ -654,7 +662,7 @@ const getOrderById = async (body, order_id) => {
     });
 
     if (!order) {
-      throw new Error("Order not found");
+      throw new ApiError(httpStatus.NOT_FOUND, "Order not found");
     }
 
     const data = order.toJSON();
@@ -818,7 +826,7 @@ const cancelOrder = async (body, order_id) => {
     });
 
     if (!order) {
-      throw new Error("Order not found");
+      throw new ApiError(httpStatus.NOT_FOUND, "Order not found");
     }
 
     // ==================================================
@@ -828,7 +836,7 @@ const cancelOrder = async (body, order_id) => {
     const blockedStatuses = ["DELIVERED", "CANCELLED", "SHIPPED"];
 
     if (blockedStatuses.includes(order.status)) {
-      throw new Error(`Cannot cancel ${order.status} order`);
+      throw new ApiError(httpStatus.BAD_REQUEST, `Cannot cancel ${order.status} order`);
     }
 
     // ==================================================
@@ -945,7 +953,7 @@ const cancelOrder = async (body, order_id) => {
 
     console.error("🚨 Cancel Order Error:", err.message);
 
-    throw new ApiError(500, err.message);
+    throw new ApiError(err.statusCode || 500, err.message);
   }
 };
 
@@ -1031,32 +1039,132 @@ const getAdminOrders = async ({
    * |--------------------------------------------------------------------------
    */
 
-  const { rows, count } =
-    await Order.findAndCountAll({
-      where,
+  const include = [
+    /*
+     * ---------------------------------------------------------
+     * USER
+     * ---------------------------------------------------------
+     */
+
+    {
+      model: User,
+      as: "user",
+
+      attributes: [
+        "id",
+        "email",
+      ],
+
+      required: false,
 
       include: [
-        /*
-         * ---------------------------------------------------------
-         * USER
-         * ---------------------------------------------------------
-         */
-
         {
-          model: User,
-          as: "user",
+          model: Profile,
+          as: "user_profile",
 
           attributes: [
-            "id",
-            "email",
+            "name",
           ],
 
           required: false,
+        },
+      ],
+    },
+
+    /*
+     * ---------------------------------------------------------
+     * ORDER ITEMS
+     * ---------------------------------------------------------
+     */
+
+    {
+      model: OrderItem,
+      as: "items",
+
+      required: false,
+
+      include: [
+        /*
+         * -----------------------------------------------------
+         * PRODUCT
+         * -----------------------------------------------------
+         *
+         * IMPORTANT:
+         *
+         * Product attachments are included here because
+         * MANUAL products may not have VariantAttachment.
+         * -----------------------------------------------------
+         */
+
+        {
+          model: Product,
+          as: "product",
+
+          // Deleted products still belong in order history.
+          paranoid: false,
+
+          attributes: [
+            "id",
+            "name",
+          ],
 
           include: [
             {
-              model: Profile,
-              as: "user_profile",
+              model: ProductAttachment,
+              as: "attachments",
+
+              attributes: [
+                "file_uri",
+                "is_primary",
+              ],
+
+              required: false,
+            },
+          ],
+        },
+
+        /*
+         * -----------------------------------------------------
+         * VARIANT
+         * -----------------------------------------------------
+         */
+
+        {
+          model: ProductVariant,
+          as: "variant",
+
+          paranoid: false,
+
+          attributes: [
+            "id",
+            "sku",
+            "color",
+          ],
+
+          include: [
+            /*
+             * Variant images
+             */
+
+            {
+              model: VariantAttachment,
+              as: "images",
+
+              attributes: [
+                "file_uri",
+                "is_primary",
+              ],
+
+              required: false,
+            },
+
+            /*
+             * Size
+             */
+
+            {
+              model: Size,
+              as: "size_details",
 
               attributes: [
                 "name",
@@ -1066,122 +1174,59 @@ const getAdminOrders = async ({
             },
           ],
         },
+      ],
+    },
+  ];
 
-        /*
-         * ---------------------------------------------------------
-         * ORDER ITEMS
-         * ---------------------------------------------------------
-         */
-
+  // Pick the page of order ids first. Paging the joined query counted item rows, not
+  // orders, so pages came back short and cut off some orders' items.
+  const searchInclude = search
+    ? [
+        {
+          model: User,
+          as: "user",
+          attributes: [],
+          required: false,
+          include: [{ model: Profile, as: "user_profile", attributes: [], required: false }],
+        },
         {
           model: OrderItem,
           as: "items",
-
+          attributes: [],
           required: false,
-
-          include: [
-            /*
-             * -----------------------------------------------------
-             * PRODUCT
-             * -----------------------------------------------------
-             *
-             * IMPORTANT:
-             *
-             * Product attachments are included here because
-             * MANUAL products may not have VariantAttachment.
-             * -----------------------------------------------------
-             */
-
-            {
-              model: Product,
-              as: "product",
-
-              attributes: [
-                "id",
-                "name",
-              ],
-
-              include: [
-                {
-                  model: ProductAttachment,
-                  as: "attachments",
-
-                  attributes: [
-                    "file_uri",
-                    "is_primary",
-                  ],
-
-                  required: false,
-                },
-              ],
-            },
-
-            /*
-             * -----------------------------------------------------
-             * VARIANT
-             * -----------------------------------------------------
-             */
-
-            {
-              model: ProductVariant,
-              as: "variant",
-
-              attributes: [
-                "id",
-                "sku",
-                "color",
-              ],
-
-              include: [
-                /*
-                 * Variant images
-                 */
-
-                {
-                  model: VariantAttachment,
-                  as: "images",
-
-                  attributes: [
-                    "file_uri",
-                    "is_primary",
-                  ],
-
-                  required: false,
-                },
-
-                /*
-                 * Size
-                 */
-
-                {
-                  model: Size,
-                  as: "size_details",
-
-                  attributes: [
-                    "name",
-                  ],
-
-                  required: false,
-                },
-              ],
-            },
-          ],
+          include: [{ model: Product, as: "product", attributes: [], required: false, paranoid: false }],
         },
-      ],
+      ]
+    : [];
 
-      limit,
-      offset,
+  const count = await Order.count({
+    where,
+    include: searchInclude,
+    distinct: true,
+    col: "id",
+  });
 
-      order: [
-        [
-          "created_at",
-          "DESC",
-        ],
-      ],
+  const pageIds = await Order.findAll({
+    where,
+    include: searchInclude,
+    attributes: ["id", "created_at"],
+    group: ["Order.id", "Order.created_at"],
+    order: [["created_at", "DESC"], ["id", "DESC"]],
+    limit,
+    offset,
+    subQuery: false,
+    raw: true,
+  });
 
-      distinct: true,
-      subQuery: false,
-    });
+  const ids = pageIds.map((row) => row.id);
+
+  const rows = ids.length
+    ? await Order.findAll({
+        where: { id: ids },
+        include,
+        order: [["created_at", "DESC"], ["id", "DESC"]],
+      })
+    : [];
 
   const formatted = rows.map((order) => {
     const data = order.toJSON();

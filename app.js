@@ -7,10 +7,10 @@ const cron = require("node-cron");
 const app = express();
 
 const config = require("./src/config/config.js");
+const logger = require("./src/config/logger.js");
 const routes = require("./src/routes/v1");
 const morgan = require("./src/config/morgan.js");
 const corsConfigs = require("./src/config/corsConfigs.js");
-const credentials = require("./src/middlewares/credentials.js");
 
 const ApiError = require("./src/utils/ApiError.js");
 const { uploadMiddleware } = require("./src/middlewares/upload.middleware.js");
@@ -41,77 +41,35 @@ app.set("trust proxy", config.trustProxy);
 // Deletes unverified accounts past their deadline and old one-time tokens.
 cron.schedule("*/15 * * * *", runAccountCleanup);
 
-cron.schedule(
-  "0 2 15 * *",
-  async () => {
-    try {
-      console.log("🚀 STARTING MONTHLY SS SYNC");
+// Monthly supplier syncs (New York time). A run is skipped if the previous one of the same
+// sync is still going; this app runs as a single process.
+const running = new Set();
+const scheduleMonthlySync = (name, expression, sync) =>
+  cron.schedule(
+    expression,
+    async () => {
+      if (running.has(name)) {
+        logger.warn(`Monthly ${name} sync skipped: the previous run is still going`);
+        return;
+      }
+      running.add(name);
+      logger.info(`Monthly ${name} sync started`);
+      try {
+        await sync();
+        logger.info(`Monthly ${name} sync finished`);
+      } catch (err) {
+        logger.error(`Monthly ${name} sync failed: ${err?.stack || err}`);
+      } finally {
+        running.delete(name);
+      }
+    },
+    { timezone: "America/New_York" },
+  );
 
-      await syncImportedSSProducts();
-
-      console.log("✅ MONTHLY SS SYNC COMPLETED");
-    } catch (err) {
-      console.error("❌ MONTHLY SS SYNC FAILED", err);
-    }
-  },
-  {
-    timezone: "America/New_York",
-  },
-);
-
-cron.schedule(
-  "0 2 25 * *",
-  async () => {
-    try {
-      console.log("🚀 STARTING MONTHLY OTTOCAP SYNC");
-
-      await syncImportedOttoProducts();
-
-      console.log("✅ MONTHLY OTTOCAP SYNC COMPLETED");
-    } catch (err) {
-      console.error("❌ MONTHLY OTTOCAP SYNC FAILED", err);
-    }
-  },
-  {
-    timezone: "America/New_York",
-  },
-);
-
-cron.schedule(
-  "0 2 5 * *",
-  async () => {
-    try {
-      console.log("🚀 STARTING MONTHLY SAGE SYNC");
-
-      await syncImportedSageProducts();
-
-      console.log("✅ MONTHLY SAGE SYNC COMPLETED");
-    } catch (err) {
-      console.error("❌ MONTHLY SAGE SYNC FAILED", err);
-    }
-  },
-  {
-    timezone: "America/New_York",
-  },
-);
-
-cron.schedule(
-  "0 2 10 * *",
-  async () => {
-    try {
-      console.log("🚀 STARTING MONTHLY Sanmar SYNC");
-
-      await syncImportedSanmarProducts();
-
-      console.log("✅ MONTHLY SS SYNC COMPLETED");
-    } catch (err) {
-      console.error("❌ MONTHLY SS SYNC FAILED", err);
-    }
-  },
-  {
-    timezone: "America/New_York",
-  },
-);
+scheduleMonthlySync("SAGE", "0 2 5 * *", syncImportedSageProducts);
+scheduleMonthlySync("SanMar", "0 2 10 * *", syncImportedSanmarProducts);
+scheduleMonthlySync("S&S", "0 2 15 * *", syncImportedSSProducts);
+scheduleMonthlySync("OttoCap", "0 2 25 * *", syncImportedOttoProducts);
 
 // set security HTTP headers
 app.use(
@@ -145,31 +103,7 @@ app.use(
   }),
 );
 
-app.use(function (req, res, next) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "*");
-  res.setHeader("Access-Control-Allow-Headers", "*");
-  next();
-});
-
-app.use(credentials);
-app.use(cors(corsConfigs));
-
-app.get("/api/healthcheck", function (req, res) {
-  let data = {
-    response: "ok",
-  };
-  res.status(200).send(data);
-});
-
-app.get("/test", (req, res, next) => {
-  res.status(200).send("Hello World !!");
-});
-
-// Multipart parsing for all v1 api routes; files only on the routes listed in upload.middleware
-app.use("/api/v1", uploadMiddleware, routes);
-
-// All File Apis
+// Admin and customer uploads (/images/x.png), public like /uploads above.
 app.use(
   "/images",
   express.static(dirs.images, {
@@ -187,6 +121,23 @@ app.use(
     },
   }),
 );
+
+// API CORS: only the origins in ACCESSDOMAINS (see corsConfigs). This is the only CORS layer.
+app.use(cors(corsConfigs));
+
+app.get("/api/healthcheck", function (req, res) {
+  let data = {
+    response: "ok",
+  };
+  res.status(200).send(data);
+});
+
+app.get("/test", (req, res, next) => {
+  res.status(200).send("Hello World !!");
+});
+
+// Multipart parsing for all v1 api routes; files only on the routes listed in upload.middleware
+app.use("/api/v1", uploadMiddleware, routes);
 
 
 // send back a 404 error for any unknown api request

@@ -19,7 +19,7 @@ const getSizeById = catchAsync(async (req, res) => {
 });
 
 const updateSize = catchAsync(async (req, res) => {
-  const data = await sizeService.updateSize (req.body);
+  const data = await sizeService.updateSize(req.params.id, req.body);
   return responseWrapper(res, data, "Size Updated", httpStatus.OK);
 });
 

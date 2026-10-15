@@ -6,6 +6,8 @@ const {
   ProductVariant,
 } = require("../models");
 const { calculatePricing } = require("./pricing");
+const httpStatus = require("http-status");
+const ApiError = require("../utils/ApiError");
 
 // ====================== SHIPSTATION V2 CLIENT ======================
 const shipstationApiClient = axios.create({
@@ -25,7 +27,8 @@ const mapAddress = (address) => ({
   city_locality: address.city,
   state_province: address.state,
   postal_code: address.postal_code,
-  country_code: address.country || "US",
+  // New addresses arrive with country_code; saved addresses store it in country.
+  country_code: address.country_code || address.country || "US",
 });
 
 const getShipFromAddress = () => ({
@@ -203,7 +206,7 @@ const createLabel = async (order, address, totalWeight) => {
       where: { carrier_code: order.carrier_code, is_active: true },
     });
 
-    if (!carrier) throw new Error(`Carrier not found: ${order.carrier_code}`);
+    if (!carrier) throw new ApiError(httpStatus.BAD_REQUEST, `Carrier not found: ${order.carrier_code}`);
 
     let carrierId = carrier.carrier_id?.toString().trim();
     if (carrierId && !carrierId.startsWith("se-")) {
@@ -302,7 +305,7 @@ const purchaseLabelForOrder = async (order) => {
     const address = await Address.findByPk(order.address_id);
 
     if (!address) {
-      throw new Error("Address not found");
+      throw new ApiError(httpStatus.NOT_FOUND, "Address not found");
     }
 
     /*
@@ -380,7 +383,7 @@ const getShippingRates = async ({ address, items }) => {
     const carriers = await Carrier.findAll({ where: { is_active: true } });
     const carrierIds = carriers.map((c) => c.carrier_id);
 
-    if (!carrierIds.length) throw new Error("No active carriers found");
+    if (!carrierIds.length) throw new ApiError(httpStatus.SERVICE_UNAVAILABLE, "No active carriers found");
 
     const res = await shipstationApiClient.post("/v2/rates", {
       rate_options: { carrier_ids: carrierIds },
@@ -464,7 +467,7 @@ const validateAddress = async (addressInput) => {
       return result.matched_address || result;
     }
 
-    throw new Error(
+    throw new ApiError(httpStatus.BAD_REQUEST,
       result.messages?.[0]?.message || "Address validation failed",
     );
   } catch (error) {

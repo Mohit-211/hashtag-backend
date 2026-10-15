@@ -140,7 +140,7 @@ const getSSProductByStyle = catchAsync(async (req, res) => {
   );
 });
 
-const syncSingleStyle = async (req, res) => {
+const syncSingleStyle = catchAsync(async (req, res) => {
   const { styleId } = req.params;
 
   const batch = await ImportBatch.create({
@@ -175,12 +175,13 @@ const syncSingleStyle = async (req, res) => {
       error_message: err.message,
     });
 
+    // The details are kept on the import batch, not sent to the client.
     return res.status(500).json({
-      message: "Sync failed",
-      error: err.message,
+      message: `Sync failed. Details are saved on import batch ${batch.id}.`,
+      batch_id: batch.id,
     });
   }
-};
+});
 
 const deleteSSProductByStyle = catchAsync(async (req, res) => {
   const { styleId } = req.params;
@@ -195,6 +196,11 @@ const deleteSSProductByStyle = catchAsync(async (req, res) => {
 
 const getProductVariantByAdmin = catchAsync(async (req, res) => {
   const variant = await productService.getProductVariantByAdmin(req.query);
+  return responseWrapper(res, variant, "", httpStatus.OK);
+});
+
+const getProductVariantByIdAdmin = catchAsync(async (req, res) => {
+  const variant = await productService.getProductVariantByIdAdmin(req.params.id);
   return responseWrapper(res, variant, "", httpStatus.OK);
 });
 
@@ -248,6 +254,7 @@ module.exports = {
   getSSProductByStyle,
   deleteSSProductByStyle,
   getProductVariantByAdmin,
+  getProductVariantByIdAdmin,
   getProductByIdAdmin,
   getAdminStats,
   getAllProductsAdmin,

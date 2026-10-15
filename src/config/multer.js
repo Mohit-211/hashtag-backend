@@ -114,6 +114,8 @@ function getFileExtension(file) {
     "image/gif": "gif",
     "video/mp4": "mp4",
     "video/mov": "mov",
+    // what browsers report for .mov files
+    "video/quicktime": "mov",
     "application/pdf": "pdf",
     "audio/mpeg": "mp3",
     "application/msword": "doc",

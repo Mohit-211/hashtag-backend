@@ -1,4 +1,5 @@
 const httpStatus = require("http-status");
+const { Op } = require("sequelize");
 const { SourcingRequest, SourcingRequestAttachment } = require("../../models");
 const ApiError = require("../../utils/ApiError");
 const {
@@ -129,6 +130,11 @@ const getAllSourcingRequests = async (query) => {
         },
         {
           requested_name: {
+            [Op.like]: `%${searchValue}%`,
+          },
+        },
+        {
+          details: {
             [Op.like]: `%${searchValue}%`,
           },
         },
@@ -323,7 +329,7 @@ const updateSourcingRequest = async (id, body) => {
       throw error;
     }
 
-    throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, error.message);
+    throw new ApiError(error.statusCode || httpStatus.INTERNAL_SERVER_ERROR, error.message);
   }
 };
 

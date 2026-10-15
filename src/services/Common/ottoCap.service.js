@@ -14,6 +14,11 @@ const path = require("path");
 const XLSX = require("xlsx");
 const { dirs } = require("../../config/storage");
 const { Op } = require("sequelize");
+const httpStatus = require("http-status");
+const ApiError = require("../../utils/ApiError");
+
+// Public address of this API: OttoCap images are served through its image proxy.
+const API_BASE_URL = (process.env.IMAGE_BASE_URL || "https://node.hashtagbillionaire.com").replace(/\/+$/, "");
 const { downloadSupplierImage } = require("./supplierImage.service");
 const { getOrCreateColorCode } = require("./colorService");
 
@@ -39,12 +44,6 @@ const importOttoCapInventory = async () => {
       };
     }
 
-    // Clear old inventory
-    await Ottocap.destroy({
-      where: {},
-      truncate: true,
-    });
-
     const payload = rows.map((row) => ({
       sku_no: row.sku_no || null,
       sku_parent: row.sku_parent || null,
@@ -58,9 +57,11 @@ const importOttoCapInventory = async () => {
       ga_stock: Number(row.GA || 0),
     }));
 
-    // Bulk Insert
-    await Ottocap.bulkCreate(payload, {
-      validate: false,
+    // Replace the old inventory in one transaction. DELETE, not TRUNCATE: MySQL commits a
+    // TRUNCATE immediately, so a failed insert used to leave the table empty.
+    await sequelize.transaction(async (transaction) => {
+      await Ottocap.destroy({ where: {}, transaction });
+      await Ottocap.bulkCreate(payload, { validate: false, transaction });
     });
 
     console.log(`✅ Imported ${payload.length} OttoCap records`);
@@ -96,11 +97,6 @@ const importOttoCapCatalog = async () => {
         message: "No rows found in catalog file",
       };
     }
-
-    await OttocapCatalog.destroy({
-      where: {},
-      truncate: true,
-    });
 
     const payload = rows.map((row) => ({
       sku_no: row.sku_no || null,
@@ -154,20 +150,27 @@ const importOttoCapCatalog = async () => {
 
     const chunkSize = 500;
 
-    for (let i = 0; i < payload.length; i += chunkSize) {
-      const chunk = payload.slice(i, i + chunkSize);
+    // Replace the old catalog in one transaction (DELETE, not TRUNCATE, which MySQL
+    // commits immediately), so a failed insert leaves the previous catalog in place.
+    await sequelize.transaction(async (transaction) => {
+      await OttocapCatalog.destroy({ where: {}, transaction });
 
-      await OttocapCatalog.bulkCreate(chunk, {
-        validate: false,
-      });
+      for (let i = 0; i < payload.length; i += chunkSize) {
+        const chunk = payload.slice(i, i + chunkSize);
 
-      console.log(
-        `Inserted ${Math.min(
-          i + chunkSize,
-          payload.length,
-        )} / ${payload.length}`,
-      );
-    }
+        await OttocapCatalog.bulkCreate(chunk, {
+          validate: false,
+          transaction,
+        });
+
+        console.log(
+          `Inserted ${Math.min(
+            i + chunkSize,
+            payload.length,
+          )} / ${payload.length}`,
+        );
+      }
+    });
 
     console.log(`✅ Imported ${payload.length} OttoCap catalog records`);
 
@@ -213,7 +216,7 @@ const getOttoProducts = async () => {
     const data = products.map((product) => ({
       ...product,
 
-      image_main: `https://node.hashtagbillionaire.com/api/v1/ottocap/otto-image?url=${encodeURIComponent(product.image_main)}`,
+      image_main: `${API_BASE_URL}/api/v1/ottocap/otto-image?url=${encodeURIComponent(product.image_main)}`,
 
       is_imported: importedMap.has(product.sku_no),
     }));
@@ -243,7 +246,7 @@ const getOttoProductDetails = async (skuNo) => {
     });
 
     if (!parent) {
-      throw new Error("Product not found");
+      throw new ApiError(httpStatus.NOT_FOUND, "Product not found");
     }
 
     /*
@@ -322,7 +325,7 @@ const getOttoProductDetails = async (skuNo) => {
       return {
         ...variant,
 
-        image_main: `https://node.hashtagbillionaire.com/api/v1/ottocap/otto-image?url=${encodeURIComponent(variant.image_main)}`,
+        image_main: `${API_BASE_URL}/api/v1/ottocap/otto-image?url=${encodeURIComponent(variant.image_main)}`,
 
         is_imported: importedVariantMap.has(variant.sku_no),
 
@@ -342,7 +345,7 @@ const getOttoProductDetails = async (skuNo) => {
       product: {
         ...parent,
 
-        image_main: `https://node.hashtagbillionaire.com/api/v1/ottocap/otto-image?url=${encodeURIComponent(parent.image_main)}`,
+        image_main: `${API_BASE_URL}/api/v1/ottocap/otto-image?url=${encodeURIComponent(parent.image_main)}`,
 
         is_imported: !!importedProduct,
 
@@ -381,17 +384,24 @@ const restoreOttoProduct = async (productId, transaction) => {
     },
   );
 
+  // ProductVariant's soft-delete attribute is deletedAt, so updating `deleted_at` did
+  // nothing and deleted variants stayed deleted. restore() clears it.
+  await ProductVariant.restore({
+    where: {
+      product_id: productId,
+    },
+
+    transaction,
+  });
+
   await ProductVariant.update(
     {
-      deleted_at: null,
       is_active: true,
     },
     {
       where: {
         product_id: productId,
       },
-
-      paranoid: false,
 
       transaction,
     },
@@ -475,7 +485,7 @@ const saveOttoProductToDB = async (skuNo, batchId) => {
     });
 
     if (!parent) {
-      throw new Error(`Product ${skuNo} not found`);
+      throw new ApiError(httpStatus.NOT_FOUND, `Product ${skuNo} not found`);
     }
 
     const variants = await OttocapCatalog.findAll({
@@ -982,11 +992,11 @@ const importSelectedOttoVariants = async (
 
   try {
     if (!parentSku) {
-      throw new Error("parentSku is required");
+      throw new ApiError(httpStatus.BAD_REQUEST, "parentSku is required");
     }
 
     if (!Array.isArray(variantSkus) || variantSkus.length === 0) {
-      throw new Error("variantSkus array is required");
+      throw new ApiError(httpStatus.BAD_REQUEST, "variantSkus array is required");
     }
 
     variantSkus = [...new Set(variantSkus)];
@@ -1010,7 +1020,7 @@ const importSelectedOttoVariants = async (
     });
 
     if (!parent) {
-      throw new Error(`Parent product ${parentSku} not found`);
+      throw new ApiError(httpStatus.NOT_FOUND, `Parent product ${parentSku} not found`);
     }
 
     /*
@@ -1025,7 +1035,7 @@ const importSelectedOttoVariants = async (
     });
 
     if (!variants.length) {
-      throw new Error("No matching variants found");
+      throw new ApiError(httpStatus.NOT_FOUND, "No matching variants found");
     }
 
     /*

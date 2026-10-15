@@ -3,6 +3,7 @@ const catchAsync = require("../../utils/catchAsync");
 const responseWrapper = require("../../config/responseWrapper");
 const { sanmarService } = require("../../services");
 const { ImportBatch } = require("../../models");
+const ApiError = require("../../utils/ApiError");
 
 const syncSanmarBrands = catchAsync(async (req, res) => {
   await sanmarService.syncSanmarBrands();
@@ -73,7 +74,7 @@ const syncSanmarProduct = catchAsync(async (req, res) => {
     const data = await sanmarService.getSanmarProductsByStyle(brand, style);
 
     if (!data) {
-      throw new Error("No product found");
+      throw new ApiError(httpStatus.NOT_FOUND, "No product found");
     }
 
     // 🔥 SAVE

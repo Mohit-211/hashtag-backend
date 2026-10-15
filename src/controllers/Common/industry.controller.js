@@ -2,6 +2,7 @@ const httpStatus = require("http-status");
 const catchAsync = require("../../utils/catchAsync");
 const responseWrapper = require("../../config/responseWrapper");
 const { industryService } = require("../../services");
+const ApiError = require("../../utils/ApiError");
 
 const createIndustry = catchAsync(async (req, res) => {
   const data = await industryService.createIndustry(req.body, req.files);

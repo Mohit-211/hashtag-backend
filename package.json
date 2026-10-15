@@ -21,8 +21,7 @@
     "start": "pm2 start ecosystem.config.json --no-daemon",
     "staging": "pm2 start ecosystem.stagging-config.json --no-daemon",
     "dev": "nodemon --ext js,mjs,json,yaml index.js",
-    "auth": "node src/config/createSuperAdmin.js",
-    "migrate": "node src/config/migrateTable.js",
+    "auth": "node src/config/createSuperAdmin.js",
     "restore:supplier-images": "node src/scripts/restoreSupplierImages.js",
     "recover:next-images": "node src/scripts/recoverImagesFromNextCache.js",
     "report:missing-images": "node src/scripts/reportMissingProductImages.js"

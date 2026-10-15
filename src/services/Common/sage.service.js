@@ -2,6 +2,8 @@
 
 const axios = require("axios");
 const { Op } = require("sequelize");
+const httpStatus = require("http-status");
+const ApiError = require("../../utils/ApiError");
 const sequelize = require("../../config/central.db");
 const {
   SourceRawData,
@@ -32,7 +34,7 @@ const getAuth = () => ({
 // clean reference to compare against what we've imported.
 const getSageSupplierTruth = async (prodEId) => {
   if (!prodEId) {
-    throw new Error("prodEId is required");
+    throw new ApiError(httpStatus.BAD_REQUEST, "prodEId is required");
   }
 
   const payload = {
@@ -146,7 +148,7 @@ const callSageAPI = async (payload) => {
         errNum: data.errNum,
         errMsg: data.errMsg,
       });
-      throw new Error(data.errMsg || `SAGE Error ${data.errNum || "unknown"}`);
+      throw new ApiError(httpStatus.BAD_GATEWAY, data.errMsg || `SAGE Error ${data.errNum || "unknown"}`);
     }
 
     // For Full Product Detail, it may not have "ok" but has "product"
@@ -156,7 +158,7 @@ const callSageAPI = async (payload) => {
 
     // For other services (Search, Categories, etc.)
     if (!data.ok && payload.serviceId !== 105) {
-      throw new Error(data.errMsg || `SAGE Error ${data.errNum || "unknown"}`);
+      throw new ApiError(httpStatus.BAD_GATEWAY, data.errMsg || `SAGE Error ${data.errNum || "unknown"}`);
     }
 
     return data;
@@ -172,7 +174,7 @@ const callSageAPI = async (payload) => {
 // ==================== RESEARCH LIST ====================
 const getResearchList = async (listType = "categories") => {
   if (!["categories", "themes", "compliances", "esg"].includes(listType)) {
-    throw new Error(
+    throw new ApiError(httpStatus.BAD_REQUEST,
       'Invalid listType. Use "categories", "themes", "compliances", or "esg"',
     );
   }
@@ -262,7 +264,7 @@ const getSuppliersByCategory = async (reqBody) => {
     const { category } = reqBody;
 
     if (!category) {
-      throw new Error("Category is required");
+      throw new ApiError(httpStatus.BAD_REQUEST, "Category is required");
     }
 
     const result = await searchProducts({
@@ -411,7 +413,7 @@ const productsWithImportFlag = paginatedProducts.map((p) => ({
 // ==================== PRODUCT DETAILS (Full Data) ====================
 const getProductDetails = async (prodEId, includeSuppInfo = true) => {
   if (!prodEId) {
-    throw new Error("prodEId is required");
+    throw new ApiError(httpStatus.BAD_REQUEST, "prodEId is required");
   }
 
   const payload = {
@@ -1174,7 +1176,7 @@ const importSelectedSageProducts = async (prodEIds = [], batchNotes = "") => {
 
   try {
     if (!Array.isArray(prodEIds) || prodEIds.length === 0) {
-      throw new Error("prodEIds array is required and cannot be empty");
+      throw new ApiError(httpStatus.BAD_REQUEST, "prodEIds array is required and cannot be empty");
     }
 
     // Remove duplicates
@@ -1245,7 +1247,7 @@ const deleteSageProducts = async (reqBody) => {
     const { batchId, supplierId, category } = reqBody;
 
     if (!batchId && !supplierId && !category) {
-      throw new Error("Provide batchId OR supplierId OR category");
+      throw new ApiError(httpStatus.BAD_REQUEST, "Provide batchId OR supplierId OR category");
     }
 
     // Only ever SAGE products, whatever batch or supplier id is passed.
