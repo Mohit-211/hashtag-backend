@@ -24,7 +24,8 @@
     "auth": "node src/config/createSuperAdmin.js",
     "migrate": "node src/config/migrateTable.js",
     "restore:supplier-images": "node src/scripts/restoreSupplierImages.js",
-    "recover:next-images": "node src/scripts/recoverImagesFromNextCache.js"
+    "recover:next-images": "node src/scripts/recoverImagesFromNextCache.js",
+    "report:missing-images": "node src/scripts/reportMissingProductImages.js"
   },
   "author": "CA",
   "license": "UNLICENSED",
