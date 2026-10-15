@@ -17,7 +17,7 @@ const deactivateAccount = catchAsync(async (req, res) => {
 const notificationToogle = catchAsync(async (req, res) => {
     const body = pick(req.body, ['user']);
     const response = await userOpService.notificationToogle(body);
-    message = (response.notification_status === true) ? 'Notification turned On!' : 'Notification turned Off!';
+    const message = (response.notification_status === true) ? 'Notification turned On!' : 'Notification turned Off!';
     return responseWrapper(res, '', message);
 });
 

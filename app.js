@@ -10,12 +10,12 @@ const app = express();
 const config = require("./src/config/config.js");
 const routes = require("./src/routes/v1");
 const morgan = require("./src/config/morgan.js");
-const { authLimiter } = require("./src/middlewares/rateLimiter.js");
 const corsConfigs = require("./src/config/corsConfigs.js");
 const credentials = require("./src/middlewares/credentials.js");
 
 const ApiError = require("./src/utils/ApiError.js");
-const upload = require("./src/config/multer.js");
+const { uploadMiddleware } = require("./src/middlewares/upload.middleware.js");
+const { runAccountCleanup } = require("./src/jobs/accountCleanup.js");
 const errorHandler = require("./src/utils/errorHandler.js");
 const {
   syncImportedSSProducts,
@@ -31,6 +31,13 @@ const {
 } = require("./src/services/Common/sageSync.service.js");
 require("./src/models");
 const PUBLIC_DIR = path.resolve(__dirname, "./public");
+
+// Behind nginx, req.ip must come from X-Forwarded-For for the rate limiters.
+// "loopback" only trusts that header when the request comes from the same server.
+app.set("trust proxy", config.trustProxy);
+
+// Deletes unverified accounts past their deadline and old one-time tokens.
+cron.schedule("*/15 * * * *", runAccountCleanup);
 
 cron.schedule(
   "0 2 15 * *",
@@ -144,11 +151,6 @@ app.use(function (req, res, next) {
 app.use(credentials);
 app.use(cors(corsConfigs));
 
-// limit repeated failed requests to auth endpoints
-if (config.env === "production") {
-  app.use("/v1/auth", authLimiter);
-}
-
 app.get("/api/healthcheck", function (req, res) {
   let data = {
     response: "ok",
@@ -160,8 +162,8 @@ app.get("/test", (req, res, next) => {
   res.status(200).send("Hello World !!");
 });
 
-// Added multer with all v1 api routes
-app.use("/api/v1", upload, routes);
+// Multipart parsing for all v1 api routes; files only on the routes listed in upload.middleware
+app.use("/api/v1", uploadMiddleware, routes);
 
 // All File Apis
 app.use(

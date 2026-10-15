@@ -1,443 +1,422 @@
 /** @format */
 
+const crypto = require("crypto");
 const httpStatus = require("http-status");
 const bcrypt = require("bcryptjs");
-const randomize = require("randomatic");
 const moment = require("moment");
 
 const {
-	OTP,
 	User,
 	UserAttachment,
 	Profile,
 	userLoginTiming,
 	Timezone,
 } = require("../../models");
-const validateEmail = require("../../helpers/validateEmail");
+const config = require("../../config/config");
+const logger = require("../../config/logger");
 const ApiError = require("../../utils/ApiError");
+const validatePassword = require("../../helpers/validatePassword");
 const {
-	sendForgotPasswordOTP,
-	sendEmailVerification,
+	sendVerificationEmail,
+	sendPasswordResetEmail,
 } = require("../Common/email.service");
-const { generateAuthTokens } = require("../Common/token.service");
-const { otpTypes, userStatusTypes } = require("../../config/types");
-const generateRandomString = require("../../utils/randomStringGenrate");
+const {
+	generateAuthTokens,
+	revokeUserTokens,
+} = require("../Common/token.service");
+const {
+	issueToken,
+	wasIssuedRecently,
+	consumeToken,
+	revokeTokens,
+} = require("../Common/accountToken.service");
+const {
+	userStatusTypes,
+	accountTypes,
+	accountTokenPurposes,
+} = require("../../config/types");
+const {
+	UNVERIFIED_ACCOUNT_HOURS,
+	PASSWORD_RESET_MINUTES,
+	LINK_RESEND_SECONDS,
+	links,
+} = require("../../config/accountPolicy");
 
-const sendOTP = async (body, headers) => {
-	try {
-		const { email, type } = body;
-		const { role_id } = headers;
+const PASSWORD_RULES =
+	"Password should have a minimum length of 8 characters and must have at least 2 digits and No Blank Space";
 
-		if (!validateEmail(email) || !Object.values(otpTypes).includes(type)) {
-			throw new ApiError(httpStatus.BAD_REQUEST, "Invalid Email or Type.");
-		}
+const INVALID_LOGIN = "Invalid email or password. Please try again.";
 
-		let userDoc = await User.findOne({
-			where: { email: email, role_id: role_id },
-		});
-		if (!userDoc) throw new ApiError(httpStatus.BAD_REQUEST, "User Not Found");
+// Compared against when the email isn't found, so both cases take about as long.
+const DUMMY_HASH = bcrypt.hashSync(crypto.randomBytes(16).toString("hex"), 10);
 
-		let existingOtp = await OTP.findOne({
-			where: { email: body?.email, type: body?.type, role_id: role_id },
-		});
-		if (existingOtp) await existingOtp.destroy({ force: true });
-		const generatedOTP = randomize("0", 4);
-		const otpObj = {
-			email: email,
-			code: generatedOTP,
-			type: type,
-			role_id: role_id,
-			user_id: userDoc.id,
-		};
-		const otpDoc = await OTP.create(otpObj);
-		if (!otpDoc) {
-			throw new ApiError(
-				httpStatus.INTERNAL_SERVER_ERROR,
-				"Failed to genrate new OTP.",
-			);
-		}
-		if (type === otpTypes.FORGOT_PASSWORD) {
-			await sendForgotPasswordOTP(email, generatedOTP);
-		} else if (type === otpTypes.EMAIL_VERIFICATION) {
-			await sendEmailVerification(email, generatedOTP);
-		}
-		return true;
-	} catch (error) {
-		throw new ApiError(
-			error.statusCode ? error.statusCode : httpStatus.INTERNAL_SERVER_ERROR,
-			error.message,
-		);
-	}
-};
+const normalizeEmail = (email) => String(email || "").trim();
 
-const verifyOTP = async (email, otp, type, role_id) => {
-	try {
-		if (!email || !otp || !type || !role_id) {
-			throw new ApiError(
-				httpStatus.BAD_REQUEST,
-				"Please Enter Required Fields : [email, otp, type, role_id]",
-			);
-		}
+// The verification link stops working when the unverified account is deleted.
+const verificationDeadline = (user) =>
+	new Date(
+		new Date(user.created_at).getTime() + UNVERIFIED_ACCOUNT_HOURS * 60 * 60 * 1000,
+	);
 
-		const otpDoc = await OTP.findOne({
-			where: {
-				email: email,
-				type: type,
-				is_active: true,
-				is_verified: false,
-				role_id: role_id,
-			},
-		});
+const sendVerificationLink = async (user, name) => {
+	const expiresAt = verificationDeadline(user);
+	const hoursLeft = Math.max(
+		1,
+		Math.ceil((expiresAt.getTime() - Date.now()) / (60 * 60 * 1000)),
+	);
 
-		if (!otpDoc || Object.keys(otpDoc).length === 0) {
-			throw new ApiError(httpStatus.BAD_REQUEST, "Invalid Email or Type");
-		}
+	const token = await issueToken({
+		accountType: accountTypes.USER,
+		accountId: user.id,
+		purpose: accountTokenPurposes.EMAIL_VERIFICATION,
+		expiresAt,
+	});
 
-		if (otp !== otpDoc.code) {
-			throw new ApiError(httpStatus.BAD_REQUEST, "Invalid OTP Entered");
-		}
-
-		if (otpDoc.otp_expiration_time < new Date()) {
-			throw new ApiError(httpStatus.BAD_REQUEST, "OTP has been Expired");
-		}
-
-		otpDoc.is_active = false;
-		otpDoc.is_verified = true;
-		let isUpdate = "";
-		let token = "";
-		if (type !== otpTypes.FORGOT_PASSWORD) {
-			isUpdate = await User.update(
-				{ status: "ACCEPTED" },
-				{ where: { email: email, is_active: true, role_id: role_id } },
-			);
-		} else {
-			token = generateRandomString(50);
-			otpDoc.code = token;
-		}
-		await otpDoc.save();
-		return token ? { token } : isUpdate;
-	} catch (error) {
-		throw new ApiError(
-			error.statusCode ? error.statusCode : httpStatus.INTERNAL_SERVER_ERROR,
-			error.message,
-		);
-	}
+	await sendVerificationEmail(user.email, {
+		name,
+		link: links.verifyEmail(token),
+		hours: hoursLeft,
+	});
 };
 
 const register = async (body, files, headers) => {
-	try {
-		const { name, email, mobile, password } = body;
-		const { role_id } = headers;
-		let salt = bcrypt.genSaltSync(10);
-		const userObj = {
-			email: email,
-			password: bcrypt.hashSync(password, salt),
-			role_id: role_id,
-		};
-		const user = await User.create(userObj);
+	const { name, email, mobile, password } = body;
+	const { role_id } = headers;
 
-		if (!user) {
-			throw new ApiError(
-				httpStatus.INTERNAL_SERVER_ERROR,
-				"Failed to create New Record",
-			);
-		}
-		const profileObj = {
-			email: email,
-			name: name,
-			mobile: mobile,
-			user_id: user.id,
-		};
-		const userProfile = await Profile.create(profileObj);
-		if (!userProfile)
-			throw new ApiError(
-				httpStatus.INTERNAL_SERVER_ERROR,
-				"Failed to create New Record",
-			);
+	const user = await User.create({
+		email: normalizeEmail(email),
+		password: bcrypt.hashSync(password, 10),
+		role_id: role_id,
+		status: userStatusTypes.PENDING,
+	});
 
-		let existingOtp = await OTP.findOne({
-			where: {
-				email: email,
-				type: otpTypes.EMAIL_VERIFICATION,
+	await Profile.create({
+		email: normalizeEmail(email),
+		name: name,
+		mobile: mobile,
+		user_id: user.id,
+	});
+
+	if (files?.images?.length) {
+		for (const currImage of files.images) {
+			await UserAttachment.create({
 				role_id: role_id,
-			},
-		});
-		if (existingOtp) await existingOtp.destroy({ force: true });
-		const generatedOTP = randomize("0", 4);
-		const otpObj = {
-			user_id: user.id,
-			email: email,
-			code: generatedOTP,
-			type: otpTypes.EMAIL_VERIFICATION,
-			role_id: role_id,
-		};
-		const otpDoc = await OTP.create(otpObj);
-		if (!otpDoc) {
-			throw new ApiError(
-				httpStatus.INTERNAL_SERVER_ERROR,
-				"Failed to genrate new OTP.",
-			);
+				user_id: user.id,
+				title: "Profile Image",
+				file_type: "Image",
+				file_name: currImage.filename,
+				file_uri: "/images",
+				file_size: currImage.size,
+			});
 		}
-		await sendEmailVerification(email, generatedOTP);
+	}
 
-		if (
-			files &&
-			Object.keys(files).length !== 0 &&
-			files.images &&
-			files.images.length !== 0
-		) {
-			for (let i = 0; i < files.images.length; i++) {
-				let currImage = files.images[i];
-				const userAttachmentObj = {
-					role_id: role_id,
-					user_id: user.id,
-					title: "Profile Image",
-					file_type: "Image",
-					file_name: currImage.filename,
-					file_uri: "/images",
-					file_size: currImage.size,
-				};
-				await UserAttachment.create(userAttachmentObj);
-			}
-		}
-		return {};
+	// The account exists even if the email fails; the user can ask for a new link.
+	try {
+		await sendVerificationLink(user, name);
 	} catch (error) {
+		logger.error(`Verification email to user ${user.id} failed: ${error.message}`);
+	}
+
+	return {};
+};
+
+const verifyEmail = async (token) => {
+	const record = await consumeToken({
+		token,
+		accountType: accountTypes.USER,
+		purposes: [accountTokenPurposes.EMAIL_VERIFICATION],
+	});
+
+	const user = await User.findOne({
+		where: { id: record.account_id, is_active: true },
+	});
+	if (!user) {
 		throw new ApiError(
-			error.statusCode ? error.statusCode : httpStatus.INTERNAL_SERVER_ERROR,
-			error.message,
+			httpStatus.BAD_REQUEST,
+			"This account no longer exists. Please register again.",
 		);
 	}
+
+	if (user.status === userStatusTypes.PENDING) {
+		await user.update({ status: userStatusTypes.ACCEPTED });
+	}
+
+	return { email: user.email };
+};
+
+// Always answers the same way, so it can't be used to find out which emails are registered.
+const resendVerification = async (body, headers) => {
+	const email = normalizeEmail(body.email);
+	if (!email) {
+		throw new ApiError(httpStatus.BAD_REQUEST, "Please enter your email.");
+	}
+
+	const user = await User.findOne({
+		where: {
+			email,
+			role_id: headers.role_id,
+			is_active: true,
+			status: userStatusTypes.PENDING,
+		},
+		include: [{ model: Profile, as: "user_profile", attributes: ["name"] }],
+	});
+
+	if (
+		user &&
+		verificationDeadline(user) > new Date() &&
+		!(await wasIssuedRecently({
+			accountType: accountTypes.USER,
+			accountId: user.id,
+			purpose: accountTokenPurposes.EMAIL_VERIFICATION,
+			seconds: LINK_RESEND_SECONDS,
+		}))
+	) {
+		await sendVerificationLink(user, user.user_profile?.name);
+	}
+
+	return "";
 };
 
 const login = async (reqBody, headers) => {
-	try {
-		const { role_id, timezone } = headers;
-		const user = await User.findOne({
-			where: { email: reqBody.email, is_active: true, role_id: role_id },
-			include: [
-				{
-					model: Profile,
-					as: "user_profile",
-					attributes: ["id", "name", "mobile", "is_active", "created_at"],
-				},
-			],
+	const { role_id, timezone } = headers;
+
+	const user = await User.scope("withPassword").findOne({
+		where: { email: normalizeEmail(reqBody.email), is_active: true, role_id: role_id },
+		include: [
+			{
+				model: Profile,
+				as: "user_profile",
+				attributes: ["id", "name", "mobile", "is_active", "created_at"],
+			},
+		],
+	});
+
+	const validPass = await bcrypt.compare(
+		String(reqBody.password),
+		user?.password || DUMMY_HASH,
+	);
+	if (!user || !user.password || !validPass) {
+		throw new ApiError(httpStatus.BAD_REQUEST, INVALID_LOGIN);
+	}
+
+	if (user.status === userStatusTypes.PENDING) {
+		throw new ApiError(
+			httpStatus.FORBIDDEN,
+			"Please verify your email address first. Check your inbox for the verification link, or request a new one.",
+		);
+	}
+	if (user.status === userStatusTypes.REJECTED) {
+		throw new ApiError(
+			httpStatus.FORBIDDEN,
+			"This account can't sign in. Please contact support.",
+		);
+	}
+
+	const token = await generateAuthTokens(user);
+
+	await saveLoginTiming(user, token, reqBody, timezone);
+
+	delete token.access.id;
+	delete token.refresh.id;
+
+	return {
+		id: user.id,
+		name: user.user_profile?.name,
+		email: user.email,
+		tokens: token,
+		role_id: user.role_id,
+	};
+};
+
+// Always answers the same way, so it can't be used to find out which emails are registered.
+const forgotPassword = async (body, headers) => {
+	const email = normalizeEmail(body.email);
+	if (!email) {
+		throw new ApiError(httpStatus.BAD_REQUEST, "Please enter your email.");
+	}
+
+	const user = await User.findOne({
+		where: { email, role_id: headers.role_id, is_active: true },
+	});
+
+	const canReset =
+		user &&
+		user.status !== userStatusTypes.PENDING &&
+		user.status !== userStatusTypes.REJECTED;
+
+	if (
+		canReset &&
+		!(await wasIssuedRecently({
+			accountType: accountTypes.USER,
+			accountId: user.id,
+			purpose: accountTokenPurposes.PASSWORD_RESET,
+			seconds: LINK_RESEND_SECONDS,
+		}))
+	) {
+		const token = await issueToken({
+			accountType: accountTypes.USER,
+			accountId: user.id,
+			purpose: accountTokenPurposes.PASSWORD_RESET,
+			expiresAt: new Date(Date.now() + PASSWORD_RESET_MINUTES * 60 * 1000),
 		});
-		if (!user) {
-			throw new ApiError(httpStatus.BAD_REQUEST, "User not found.");
-		}
 
-
-		if (user.status === userStatusTypes.PENDING) {
-			let existingOtp = await OTP.findOne({
-				where: {
-					email: user.email,
-					type: otpTypes.EMAIL_VERIFICATION,
-					role_id: user.role_id,
-				},
-			});
-			if (existingOtp) await existingOtp.destroy({ force: true });
-			const generatedOTP = randomize("0", 4);
-			const otpObj = {
-				user_id: user.id,
-				email: user.email,
-				code: generatedOTP,
-				type: otpTypes.EMAIL_VERIFICATION,
-				role_id: user.role_id,
-			};
-			const otpDoc = await OTP.create(otpObj);
-			if (!otpDoc) {
-				throw new ApiError(
-					httpStatus.BAD_REQUEST,
-					"Failed to genrate new OTP.",
-				);
-			}
-			await sendEmailVerification(user.email, generatedOTP);
-			throw new ApiError(
-				httpStatus.BAD_REQUEST,
-				"User is not verified yet.Please verify Your Otp First",
-			);
-		} else if (user.status === userStatusTypes.REJECTED) {
-			throw new ApiError(httpStatus.BAD_REQUEST, "User rejected.");
-		}
-
-		const validPass = await bcrypt.compare(reqBody.password, user.password);
-		if (!validPass) {
-			throw new ApiError(
-				httpStatus.BAD_REQUEST,
-				"Invalid email or password. Please try again.",
-			);
-		}
-
-		const token = await generateAuthTokens(user);
-
-		if (token) {
-			await saveLoginTiming(user, token, reqBody, timezone);
-		}
-		delete token.access.id;
-		delete token.refresh.id;
-		const userObj = {
-			id: user.id,
-			name: user.user_profile.name,
-			email: user.email,
-			tokens: token,
-			role_id: headers.role_id,
-		};
-
-		return userObj;
-	} catch (error) {
-		throw new ApiError(
-			error.statusCode ? error.statusCode : httpStatus.INTERNAL_SERVER_ERROR,
-			error.message,
-		);
+		await sendPasswordResetEmail(user.email, {
+			link: links.resetPassword(token),
+			minutes: PASSWORD_RESET_MINUTES,
+		});
 	}
+
+	return "";
 };
 
+// Sets a new password from an emailed reset or account-setup link, then signs
+// the account out everywhere.
+const resetPasswordWithToken = async (body) => {
+	const { token, password, confirm_password } = body;
+
+	if (!password || !confirm_password) {
+		throw new ApiError(
+			httpStatus.BAD_REQUEST,
+			"Please Enter Required Fields : [ password, confirm_password ]",
+		);
+	}
+	if (password !== confirm_password) {
+		throw new ApiError(
+			httpStatus.BAD_REQUEST,
+			"New Password and Confirm Password Must Be Equal",
+		);
+	}
+	if (!validatePassword(password)) {
+		throw new ApiError(httpStatus.BAD_REQUEST, PASSWORD_RULES);
+	}
+
+	const record = await consumeToken({
+		token,
+		accountType: accountTypes.USER,
+		purposes: [
+			accountTokenPurposes.PASSWORD_RESET,
+			accountTokenPurposes.ACCOUNT_SETUP,
+		],
+	});
+
+	const user = await User.findOne({
+		where: { id: record.account_id, is_active: true },
+	});
+	if (!user) {
+		throw new ApiError(
+			httpStatus.BAD_REQUEST,
+			"This link is invalid or has expired. Please request a new one.",
+		);
+	}
+
+	await user.update({ password: bcrypt.hashSync(password, 10) });
+
+	await revokeUserTokens(user.id);
+	await revokeTokens({
+		accountType: accountTypes.USER,
+		accountId: user.id,
+		purposes: [
+			accountTokenPurposes.PASSWORD_RESET,
+			accountTokenPurposes.ACCOUNT_SETUP,
+		],
+	});
+
+	return "";
+};
+
+// Signed-in password change. Other sessions are signed out; this one gets a new token.
 const resetPassword = async (reqBody) => {
-	try {
-		const { old_password, confirm_password, user, tokenDoc } = reqBody;
+	const { old_password, confirm_password, user } = reqBody;
 
-		const validPass = await bcrypt.compare(old_password, user?.password);
-		if (!validPass) {
-			throw new ApiError(httpStatus.BAD_REQUEST, "Incorrect Old Password.");
-		}
+	const userDoc = await User.scope("withPassword").findOne({
+		where: { id: user.id, is_active: true },
+	});
 
-		let salt = bcrypt.genSaltSync(10);
-
-		user.password = bcrypt.hashSync(confirm_password, salt);
-		let isUserPasswordUpdate = await user.save();
-
-		if (!isUserPasswordUpdate) {
-			throw new ApiError(
-				httpStatus.INTERNAL_SERVER_ERROR,
-				"Failed to Change Password.",
-			);
-		}
-		await tokenDoc.destroy({ force: true });
-		const token = await generateAuthTokens(user);
-		const response = {
-			tokens: token,
-		};
-		return response;
-	} catch (error) {
-		throw new ApiError(
-			error.statusCode ? error.statusCode : httpStatus.INTERNAL_SERVER_ERROR,
-			error.message,
-		);
+	const validPass =
+		userDoc?.password && (await bcrypt.compare(String(old_password), userDoc.password));
+	if (!validPass) {
+		throw new ApiError(httpStatus.BAD_REQUEST, "Incorrect Old Password.");
 	}
-};
 
-const forgotPassword = async (reqBody) => {
-	try {
-		const { password, confirm_password, user, otpDoc } = reqBody;
+	await userDoc.update({ password: bcrypt.hashSync(confirm_password, 10) });
 
-		if (password !== confirm_password) {
-			throw new ApiError(
-				httpStatus.BAD_REQUEST,
-				"New Password and Confirm Password Must Be Equal",
-			);
-		}
+	await revokeUserTokens(userDoc.id);
+	const token = await generateAuthTokens(userDoc);
 
-		let salt = bcrypt.genSaltSync(10);
-		user.password = bcrypt.hashSync(confirm_password, salt);
-
-		const isUserPasswordUpdate = await user.save();
-
-		if (!isUserPasswordUpdate) {
-			throw new ApiError(
-				httpStatus.INTERNAL_SERVER_ERROR,
-				"Failed to Forgot Password.",
-			);
-		}
-		await otpDoc.destroy({ force: true });
-		return "";
-	} catch (error) {
-		throw new ApiError(
-			error.statusCode ? error.statusCode : httpStatus.INTERNAL_SERVER_ERROR,
-			error.message,
-		);
-	}
+	return {
+		tokens: token,
+	};
 };
 
 const logout = async (reqBody, headers) => {
-	try {
-		const { tokenDoc } = reqBody;
-		const { timezone } = headers;
-		if (tokenDoc) {
-			await saveLogoutTiming(tokenDoc, timezone);
-		}
-		const isLoggedout = await tokenDoc.destroy();
+	const { tokenDoc } = reqBody;
 
-		if (!isLoggedout) {
-			throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, "Failed to Logout.");
-		}
+	await saveLogoutTiming(tokenDoc, headers.timezone);
+	await tokenDoc.destroy();
 
-		return "";
-	} catch (error) {
-		throw new ApiError(
-			error.statusCode ? error.statusCode : httpStatus.INTERNAL_SERVER_ERROR,
-			error.message,
-		);
-	}
+	return "";
 };
 
+const resolveTimezone = (timezone) =>
+	timezone && moment.tz.zone(timezone) ? timezone : config.DEFAULT_TIMEZONE;
+
+// Login/logout history is best effort: a missing or unknown timezone header must
+// not stop someone from signing in or out.
 const saveLoginTiming = async (user, token, reqBody, timezone) => {
 	try {
+		const zone = resolveTimezone(timezone);
 		const loginTimeUTC = moment.utc();
-		const loginTimeLocal = moment.tz(loginTimeUTC, timezone);
 
 		const timeZoneDoc = await Timezone.findOne({
-			where: { time_zone: timezone, is_active: true },
+			where: { time_zone: zone, is_active: true },
 		});
+		if (!timeZoneDoc) {
+			logger.warn(`Login timing not saved: timezone "${zone}" is not in the timezones table`);
+			return null;
+		}
 
-		let obj = {
+		return await userLoginTiming.create({
 			user_id: user.id,
 			role_id: user.role_id,
 			login_time_utc: loginTimeUTC,
-			login_time_local: loginTimeLocal.format("YYYY-MM-DD hh:mm:ss"),
+			login_time_local: moment.tz(loginTimeUTC, zone).format("YYYY-MM-DD HH:mm:ss"),
 			ip_address: reqBody.ip_address,
 			token_id: token.access.id,
 			time_zone: timeZoneDoc.id,
-		};
-
-		const timingDetails = await userLoginTiming.create(obj);
-		return timingDetails;
+		});
 	} catch (error) {
-		throw new ApiError(
-			error.statusCode ? error.statusCode : httpStatus.INTERNAL_SERVER_ERROR,
-			error.message,
-		);
+		logger.warn(`Login timing not saved: ${error.message}`);
+		return null;
 	}
 };
 
 const saveLogoutTiming = async (tokenDoc, timezone) => {
 	try {
 		const logoutTimeUTC = moment.utc();
-		const logoutTimeLocal = moment.tz(logoutTimeUTC, timezone);
 
-		let loginTimingDocDoc = await userLoginTiming.findOne({
+		const loginTimingDoc = await userLoginTiming.findOne({
 			where: { token_id: tokenDoc.id },
 		});
-		if (loginTimingDocDoc) {
-			loginTimingDocDoc.logout_time_utc = logoutTimeUTC;
-			loginTimingDocDoc.logout_time_local = logoutTimeLocal;
-			await loginTimingDocDoc.save();
-			return loginTimingDocDoc;
+		if (loginTimingDoc) {
+			loginTimingDoc.logout_time_utc = logoutTimeUTC;
+			loginTimingDoc.logout_time_local = moment
+				.tz(logoutTimeUTC, resolveTimezone(timezone))
+				.format("YYYY-MM-DD HH:mm:ss");
+			await loginTimingDoc.save();
 		}
-		return "";
 	} catch (error) {
-		throw new ApiError(
-			error.statusCode ? error.statusCode : httpStatus.INTERNAL_SERVER_ERROR,
-			error.message,
-		);
+		logger.warn(`Logout timing not saved: ${error.message}`);
 	}
 };
 
 module.exports = {
 	register,
+	verifyEmail,
+	resendVerification,
 	login,
-	resetPassword,
-	sendOTP,
-	verifyOTP,
 	forgotPassword,
+	resetPasswordWithToken,
+	resetPassword,
 	logout,
 };

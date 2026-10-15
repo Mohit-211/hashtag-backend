@@ -171,10 +171,10 @@ const getWishlist = async (body) => {
   }
 };
 
-const removeFromWishlist = async (id) => {
+const removeFromWishlist = async (user, id) => {
   try {
     const item = await Wishlist.findOne({
-      where: { id, is_active: true },
+      where: { id, user_id: user.id, is_active: true },
     });
     if (!item) throw new Error("Wishlist item not found");
 
@@ -1869,9 +1869,11 @@ const addToCart = async (body, files) => {
           sizeItem.quantity || 0,
         );
 
-        if (!finalQty) {
-          throw new Error(
-            `Quantity missing for variant ${sizeItem.variant_id}`,
+        // Negative or fractional quantities would produce negative or partial prices.
+        if (!Number.isInteger(finalQty) || finalQty <= 0) {
+          throw new ApiError(
+            httpStatus.BAD_REQUEST,
+            `Quantity for variant ${sizeItem.variant_id} must be a whole number greater than 0`,
           );
         }
 
@@ -2568,9 +2570,9 @@ const buildSupplierPricingSnapshot = async (variant, customization, quantity) =>
 
 const incrementCart = async (body) => {
   try {
-    const { cart_id } = body;
+    const { cart_id, user } = body;
 
-    const cart = await Cart.findByPk(cart_id);
+    const cart = await Cart.findOne({ where: { id: cart_id, user_id: user.id } });
 
     if (!cart) {
       throw new Error("Cart not found");
@@ -2675,9 +2677,9 @@ const incrementCart = async (body) => {
 
 const decrementCart = async (body) => {
   try {
-    const { cart_id } = body;
+    const { cart_id, user } = body;
 
-    const cart = await Cart.findByPk(cart_id);
+    const cart = await Cart.findOne({ where: { id: cart_id, user_id: user.id } });
 
     if (!cart) {
       throw new Error("Cart not found");
@@ -2766,9 +2768,9 @@ const decrementCart = async (body) => {
 
 const updateCartQuantity = async (body) => {
   try {
-    const { cart_id, quantity } = body;
+    const { cart_id, quantity, user } = body;
 
-    const cart = await Cart.findByPk(cart_id);
+    const cart = await Cart.findOne({ where: { id: cart_id, user_id: user.id } });
 
     if (!cart) {
       throw new Error("Cart not found");
@@ -2800,6 +2802,10 @@ const updateCartQuantity = async (body) => {
       return {
         message: "Item removed from cart",
       };
+    }
+
+    if (!Number.isInteger(finalQty)) {
+      throw new ApiError(httpStatus.BAD_REQUEST, "Quantity must be a whole number");
     }
 
     // =========================================================
@@ -2860,9 +2866,9 @@ const updateCartQuantity = async (body) => {
   }
 };
 
-const removeFromCart = async (cart_id) => {
+const removeFromCart = async (user, cart_id) => {
   try {
-    const cart = await Cart.findByPk(cart_id);
+    const cart = await Cart.findOne({ where: { id: cart_id, user_id: user.id } });
     if (!cart) throw new Error("Cart not found");
     await invalidatePendingOrder(cart.user_id);
     await cart.destroy();

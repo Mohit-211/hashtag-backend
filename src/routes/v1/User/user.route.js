@@ -4,7 +4,7 @@ const router = express.Router();
 const { userOpController } = require('../../../controllers');
 const { userAuthMiddleware } = require('../../../middlewares');
 
-router.use(userAuthMiddleware.setRoleIdIfNotPresent);
+router.use(userAuthMiddleware.useCustomerRole);
 
 router.get('/profile', [userAuthMiddleware.verifyAuthJWTToken], userOpController.getProfile);
 router.post('/notifications', [userAuthMiddleware.verifyAuthJWTToken], userOpController.notificationToogle);

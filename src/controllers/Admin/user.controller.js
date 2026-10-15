@@ -5,6 +5,7 @@ const catchAsync = require("../../utils/catchAsync");
 const { userService } = require("../../services");
 const responseWrapper = require("../../config/responseWrapper");
 const pick = require("../../utils/pick");
+const config = require("../../config/config");
 
 
 const getAllUsers = catchAsync(async (req, res) => {

@@ -3,15 +3,18 @@ const router = express.Router();
 
 const {userAuthController } = require('../../../controllers');
 const {userAuthMiddleware} = require('../../../middlewares');
+const { loginLimiter, emailLimiter, tokenLimiter } = require('../../../middlewares/rateLimiter');
 
-router.use(userAuthMiddleware.setRoleIdIfNotPresent);
+router.use(userAuthMiddleware.useCustomerRole);
 
-router.post('/otp', userAuthController.sendOTP);
-router.post('/verify-otp', userAuthController.verifyOTP);
-router.post('/register', [userAuthMiddleware.validateRegisterUserBody], userAuthController.register);
-router.post('/login', [userAuthMiddleware.validateSignInReqBody],userAuthController.login);
-router.post('/reset-password', [ userAuthMiddleware.verifyAuthJWTToken], userAuthController.resetPassword);
-router.post('/forgot-password',[userAuthMiddleware.validateForgetPassordToken], userAuthController.forgotPassword);
+router.post('/register', [emailLimiter, userAuthMiddleware.validateRegisterUserBody], userAuthController.register);
+router.post('/verify-email', [tokenLimiter], userAuthController.verifyEmail);
+router.post('/verify-email/resend', [emailLimiter], userAuthController.resendVerification);
+router.post('/login', [loginLimiter, userAuthMiddleware.validateSignInReqBody], userAuthController.login);
+router.post('/forgot-password', [emailLimiter], userAuthController.forgotPassword);
+router.post('/forgot-password/reset', [tokenLimiter], userAuthController.resetPasswordWithToken);
+// Signed-in password change.
+router.post('/reset-password', [userAuthMiddleware.verifyAuthJWTToken, userAuthMiddleware.validateResetPassordBody], userAuthController.resetPassword);
 router.get('/logout', [userAuthMiddleware.verifyAuthJWTToken], userAuthController.logout);
 
 

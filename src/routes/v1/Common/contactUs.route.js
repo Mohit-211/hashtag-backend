@@ -1,12 +1,14 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
+const { contactUsController } = require("../../../controllers");
+const { adminAuthMiddleware } = require("../../../middlewares");
+const { publicFormLimiter } = require("../../../middlewares/rateLimiter");
 
-const { contactUsController } = require('../../../controllers');
+const { requireAdmin } = adminAuthMiddleware;
 
-router.post('/', contactUsController.createContactUs);
-router.put('/:id', contactUsController.updateContactUs);
-router.get('/', contactUsController.getAllContactUs);
-router.delete('/:id', contactUsController.deleteContactUs);
-
+router.post("/", publicFormLimiter, contactUsController.createContactUs);
+router.put("/:id", requireAdmin, contactUsController.updateContactUs);
+router.get("/", requireAdmin, contactUsController.getAllContactUs);
+router.delete("/:id", requireAdmin, contactUsController.deleteContactUs);
 
 module.exports = router;

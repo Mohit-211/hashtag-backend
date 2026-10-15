@@ -20,10 +20,24 @@ const envVarsSchema = Joi.object()
     CENTRAL_MYSQL_DB: Joi.string().required().description("Central Mysql DB"),
     CENTRAL_MYSQL_PORT: Joi.string().required().description("Central Port"),
 
-    JWT_SECRET: Joi.string().required().description("JWT secret key"),
-    JWT_ACCESS_EXPIRATION_MINUTES: Joi.number()
-      .default(30)
-      .description("minutes after which access tokens expire"),
+    JWT_SECRET: Joi.string()
+      .min(32)
+      .required()
+      .description("JWT secret key, at least 32 random characters"),
+    JWT_ACCESS_EXPIRATION_DAYS: Joi.number()
+      .default(5)
+      .description("days after which customer access tokens expire"),
+    FRONTEND_URL: Joi.string()
+      .uri()
+      .required()
+      .description("customer website, used in verification and password emails"),
+    ADMIN_FRONTEND_URL: Joi.string()
+      .uri()
+      .required()
+      .description("admin panel, used in admin password emails"),
+    TRUST_PROXY: Joi.string()
+      .default("loopback")
+      .description("Express 'trust proxy' setting; loopback = nginx on the same server"),
     SMTP_HOST: Joi.string().description("server that will send the emails"),
     SMTP_PORT: Joi.number().description("port to connect to the email server"),
     SMTP_USERNAME: Joi.string().description("username for email server"),
@@ -50,7 +64,7 @@ const envVarsSchema = Joi.object()
     PAYPAL_ENVIRONMENT: Joi.string().description("Paypal environment"),
 
     SUP_ADM_ROLE_ID: Joi.string(),
-    USR_ROLE_ID: Joi.string(),
+    USR_ROLE_ID: Joi.string().required().description("roles.id of customer accounts"),
     ADM_DEPT_ID: Joi.string(),
     DEFAULT_AMOUNT: Joi.number().default(5),
     SUPER_ADMIN_NAME: Joi.string(),
@@ -81,7 +95,7 @@ module.exports = {
   },
   jwt: {
     secret: envVars.JWT_SECRET,
-    accessExpirationMinutes: envVars.JWT_ACCESS_EXPIRATION_DAYS,
+    accessExpirationDays: envVars.JWT_ACCESS_EXPIRATION_DAYS,
   },
   email: {
     smtp: {
@@ -97,6 +111,9 @@ module.exports = {
     from: envVars.EMAIL_FROM,
   },
   accessDomains: envVars.ACCESSDOMAINS,
+  frontendUrl: envVars.FRONTEND_URL.replace(/\/+$/, ""),
+  adminFrontendUrl: envVars.ADMIN_FRONTEND_URL.replace(/\/+$/, ""),
+  trustProxy: envVars.TRUST_PROXY,
   defaultLimit: envVars.DEFAULT_API_DATA_LIMIT,
   DEFAULT_TIMEZONE: envVars.DEFAULT_TIMEZONE,
 

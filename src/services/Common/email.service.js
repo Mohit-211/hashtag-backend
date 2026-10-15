@@ -1,8 +1,9 @@
 const nodemailer = require('nodemailer');
 const config = require('../../config/config');
+const httpStatus = require('http-status');
 const logger = require('../../config/logger');
-const { forgotPasswordSendOTPFormat, emailVerificationFormat } = require('../../../public/Email_Template');
 const ApiError = require('../../utils/ApiError');
+const { verificationEmail, passwordResetEmail, accountSetupEmail } = require('../../templates/authEmails');
 const { contactUsConfirmationTemplate, adminContactUsNotificationTemplate, sourcingRequestConfirmationTemplate, sourcingRequestStatusTemplate } = require('../../../public/Email_Template/contactEmailTemplates');
 
 const transport = nodemailer.createTransport(config.email.smtp);
@@ -26,69 +27,20 @@ const sendEmail = async (to, subject, text, html) => {
     }
 };
 
-// OTP mails are sent without waiting for delivery; a failed send is only logged.
-const sendOtpMail = async (to, subject, template, otp) => {
-    try {
-        const message = {
-            from: `${config.email.from}`,
-            to: `${to}`,
-            subject,
-            text: `Please click on the following link to verify your email`,
-            html: `${template(otp)}`,
-        };
-        transport.sendMail(message, (error) => {
-            if (error) {
-                console.log('Email sent error:  ', error);
-            }
-        });
-
-    } catch (error) {
-        throw new ApiError(error.statusCode ? error.statusCode : httpStatus.INTERNAL_SERVER_ERROR, error.message);
-    }
+// Account emails. Delivery is awaited so a failed send surfaces as an error.
+const sendVerificationEmail = (to, { name, link, hours }) => {
+    const mail = verificationEmail({ name, link, hours });
+    return sendEmail(to, mail.subject, mail.text, mail.html);
 };
 
-const sendEmailVerification = (to, otp) =>
-    sendOtpMail(to, 'Please verify your email', emailVerificationFormat, otp);
-
-const sendForgotPasswordOTP = (to, otp) =>
-    sendOtpMail(to, 'Forget Password Request', forgotPasswordSendOTPFormat, otp);
-
-const sendAdminCredentials = async (to, password) => {
-	const subject = "Welcome to Hashtag Billionaire: Your Login Credentials";
-	const text = `Dear User,
-
-  Welcome to Hashtag Billionaire! You have been successfully registered by our admin. Please find your login credentials below:
-
-  Email Address: ${to}
-  Temporary Password: ${password}
-
-  
-  For security reasons, we highly recommend changing your password after your first login. If you did not create this account, please ignore this email.
-  
-  Best Regards,
-  Hashtag Billionaire Team`;
-	return await sendEmail(to, subject, text);
+const sendPasswordResetEmail = (to, { link, minutes }) => {
+    const mail = passwordResetEmail({ link, minutes });
+    return sendEmail(to, mail.subject, mail.text, mail.html);
 };
 
-const sendUserCredentials = async (to, password) => {
-	const subject = "Welcome to Hashtag Billionaire: Your Login Credentials";
-	const text = `Dear User,
-    
-    Welcome to the Hashtag Billionaire! Our admin has successfully registered you. Please find your login credentials below.
-    Now, get ready to embark on an exciting journey of creativity! 
-    To access your account, please visit our secure login page with your login credentials below:
-  
-
-    Email Address: ${to}
-    Password: ${password}
-    
-    Remember to keep these details safe and secure! 
-    If you have any issues or have additional questions, please send an email to support@glamlink.net
-    
-    Best Regards,
-    Hashtag Billionaire Team`;
-
-	return await sendEmail(to, subject, text);
+const sendAccountSetupEmail = (to, { name, link, hours, isAdmin }) => {
+    const mail = accountSetupEmail({ name, link, hours, isAdmin });
+    return sendEmail(to, mail.subject, mail.text, mail.html);
 };
 
 const sendContactUsConfirmation = async (to, name, reason) => {
@@ -117,10 +69,9 @@ const sendSourcingRequestStatusEmail = async (to, name, requestedName, status, a
 
 
 module.exports = {
-    sendForgotPasswordOTP,
-    sendEmailVerification,
-    sendAdminCredentials,
-    sendUserCredentials,
+    sendVerificationEmail,
+    sendPasswordResetEmail,
+    sendAccountSetupEmail,
     sendContactUsConfirmation,
     sendAdminContactUsNotification,
     sendSourcingRequestConfirmation,

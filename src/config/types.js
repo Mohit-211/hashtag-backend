@@ -19,11 +19,16 @@ const paymentModeTypes = {
   UNKNOWN: "UNKNOWN",
 };
 
-const otpTypes = {
-  EMAIL_VERIFICATION: "email_varification",
-  MOBILE_VERIFICATION: "mobile_varification",
-  FORGOT_PASSWORD: "forgot_password",
-  RESET_PASSWORD: "reset_password",
+const accountTypes = {
+  USER: "USER",
+  ADMIN: "ADMIN",
+};
+
+const accountTokenPurposes = {
+  EMAIL_VERIFICATION: "EMAIL_VERIFICATION",
+  PASSWORD_RESET: "PASSWORD_RESET",
+  // Admin-created accounts: the owner sets their first password from an emailed link.
+  ACCOUNT_SETUP: "ACCOUNT_SETUP",
 };
 
 const paymentStatusTypes = {
@@ -73,7 +78,8 @@ const orderStatusTypes = {
 module.exports = {
   userStatusTypes,
   paymentModeTypes,
-  otpTypes,
+  accountTypes,
+  accountTokenPurposes,
   paymentStatusTypes,
   rolesTypes,
   tokenTypes,

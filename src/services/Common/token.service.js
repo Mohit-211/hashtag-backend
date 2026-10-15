@@ -1,78 +1,67 @@
-const jwt = require('jsonwebtoken')
-const moment = require('moment')
+const crypto = require('crypto');
+const httpStatus = require('http-status');
+const jwt = require('jsonwebtoken');
+const moment = require('moment');
 const config = require('../../config/config');
 
 const { tokenTypes } = require('../../config/types');
-const { QueryTypes } = require('sequelize');
-const sequelize = require('../../config/central.db');
+const { UserToken } = require('../../models');
 const ApiError = require('../../utils/ApiError');
 
-
-
+// Customer access tokens are JWTs that are also stored in user_tokens; a token
+// only works while its row is active (see userAuth.middleware).
 const generateToken = (userId, expires, type, role_id, secret = config.jwt.secret) => {
-    try {
-        const payload = {
-            sub: userId,
-            iat: moment().unix(),
-            exp: expires.unix(),
-            type,
-            role_id: role_id
-        };
-        return jwt.sign(payload, secret);
-
-    } catch (error) {
-        throw new ApiError(error.statusCode ? error.statusCode : httpStatus.INTERNAL_SERVER_ERROR, error.message);
-    }
-};
-
-const saveToken = async (token, userId, expires, type, role_id) => {
-    try {
-        let sql = `INSERT INTO user_tokens ( user_id, token_type, token, expired_at, created_at, updated_at, role_id) values (
-            '${userId}', '${type}', '${token}', '${expires}' , now(), now(), ${role_id})`;
-
-        let tokenDoc = await sequelize.query(
-            sql, {
-            type: QueryTypes.INSERT
-        });
-        return tokenDoc;
-
-    } catch (error) {
-        throw new ApiError(error.statusCode ? error.statusCode : httpStatus.INTERNAL_SERVER_ERROR, error.message);
-    }
+    const payload = {
+        sub: userId,
+        iat: moment().unix(),
+        exp: expires.unix(),
+        type,
+        role_id: role_id,
+        // Unique per token: without it, two tokens issued in the same second were identical,
+        // so revoking one session could leave an identical new one working.
+        jti: crypto.randomBytes(16).toString('hex'),
+    };
+    return jwt.sign(payload, secret, { algorithm: 'HS256' });
 };
 
 const generateAuthTokens = async (user) => {
-    try {
-        if (!user) {
-            throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Error: Invalid User');
-        };
+    if (!user) {
+        throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Error: Invalid User');
+    };
 
-        const accessTokenExpires = moment().add(config.jwt.accessExpirationMinutes, 'days');
-        const accessToken = generateToken(user.id, accessTokenExpires, tokenTypes.ACCESS, user.role_id);
+    const accessTokenExpires = moment().add(config.jwt.accessExpirationDays, 'days');
+    const accessToken = generateToken(user.id, accessTokenExpires, tokenTypes.ACCESS, user.role_id);
 
-        let tokenDoc = await saveToken(accessToken, user.id, moment.utc(accessTokenExpires).format('YYYY-MM-DD HH:mm:ss'), tokenTypes.ACCESS, user.role_id);
+    const tokenDoc = await UserToken.create({
+        user_id: user.id,
+        role_id: user.role_id,
+        token_type: tokenTypes.ACCESS,
+        token: accessToken,
+        expired_at: accessTokenExpires.toDate(),
+    });
 
-        return {
-            access: {
-                id : tokenDoc[0],
-                token: accessToken,
-                expires: accessTokenExpires.toDate(),
-            },
-            refresh: {
-                id: '',
-                token: '',
-                expires: ''
-            },
-        };
-
-    } catch (error) {
-        throw new ApiError(error.statusCode ? error.statusCode : httpStatus.INTERNAL_SERVER_ERROR, error.message);
-    }
+    return {
+        access: {
+            id: tokenDoc.id,
+            token: accessToken,
+            expires: accessTokenExpires.toDate(),
+        },
+        refresh: {
+            id: '',
+            token: '',
+            expires: ''
+        },
+    };
 };
 
+// Signs the customer out everywhere (after a password change or reset).
+const revokeUserTokens = (userId) =>
+    UserToken.update(
+        { is_active: false },
+        { where: { user_id: userId, is_active: true } },
+    );
 
 module.exports = {
-    generateToken,
-    saveToken,
-    generateAuthTokens
+    generateAuthTokens,
+    revokeUserTokens,
 };

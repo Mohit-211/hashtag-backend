@@ -41,25 +41,10 @@ Admin.init({
         type: DataTypes.STRING,
         allowNull: true
     },
-    remember_token: {
-        type: DataTypes.STRING,
+    // Admin tokens issued before this moment are rejected.
+    password_changed_at: {
+        type: DataTypes.DATE,
         allowNull: true,
-    },
-    otp: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        set(value) {
-            if (!value) {
-                this.setDataValue('is_otp_valid', false);
-            } else {
-                this.setDataValue('is_otp_valid', true);
-            }
-            this.setDataValue('otp', value);
-        },
-    },
-    is_otp_valid: {
-        type: DataTypes.BOOLEAN,
-        defaultValue: true
     },
     is_active: {
         type: DataTypes.BOOLEAN,
@@ -94,7 +79,15 @@ Admin.init({
     paranoid: true,
     createdAt: 'created_at',
     updatedAt: 'updated_at',
-    deletedAt: 'deleted_at'
+    deletedAt: 'deleted_at',
+    defaultScope: {
+        attributes: { exclude: ['password'] },
+    },
+    scopes: {
+        withPassword: {
+            attributes: { include: ['password'] },
+        },
+    },
 });
 
 Admin.isEmailTaken = async function (email) {

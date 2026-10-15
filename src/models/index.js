@@ -12,12 +12,12 @@ const Admin = require("./admin.model");
 const User = require("./user.model");
 const Profile = require("./profile.model");
 const UserToken = require("./userToken.model");
+const AccountToken = require("./accountToken.model");
 const UserAttachment = require("./userAttachment.model");
 const userLoginTiming = require("./user_login_timings.model");
 
 const ContactUs = require("./contactUs.model");
 const Faq = require("./faq.model");
-const OTP = require("./otp.model");
 
 const Payment = require("./payment.model");
 
@@ -86,12 +86,12 @@ module.exports = {
   User,
   Profile,
   UserToken,
+  AccountToken,
   UserAttachment,
   userLoginTiming,
 
   ContactUs,
   Faq,
-  OTP,
 
   Payment,
 

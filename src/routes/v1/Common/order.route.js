@@ -2,10 +2,10 @@ const express = require('express');
 const router = express.Router();
 
 const {orderController } = require('../../../controllers');
-const {userAuthMiddleware} = require('../../../middlewares');
+const {userAuthMiddleware, adminAuthMiddleware} = require('../../../middlewares');
 
 
-router.get("/admin", orderController.getAdminOrders);
+router.get("/admin", adminAuthMiddleware.requireAdmin, orderController.getAdminOrders);
 
 router.post('/', [userAuthMiddleware.verifyAuthJWTToken], orderController.createOrder);
 router.get('/', [userAuthMiddleware.verifyAuthJWTToken],orderController.getOrders);

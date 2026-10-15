@@ -3,17 +3,24 @@ const router = express.Router();
 
 const {adminAuthController} = require('../../../controllers');
 const {adminAuthMiddleware} = require('../../../middlewares');
+const { loginLimiter, emailLimiter, tokenLimiter } = require('../../../middlewares/rateLimiter');
 
-router.post('/register', adminAuthController.createAdminUser);
-router.post('/login', [adminAuthMiddleware.validateLoginAdminBody], adminAuthController.loginAdminUser);
-router.post('/change-password',  [ adminAuthMiddleware.validateResetPassordBody, adminAuthMiddleware.validateJWTtoken], adminAuthController.resetAdminPassword);
-router.post('/otp',  adminAuthController.sendOTP);
-router.post('/verify-otp',  adminAuthController.verifyOTP);
-router.post('/forgot-password',  adminAuthController.forgotAdminPassword);
-router.put('/updateAdmin/:id',[adminAuthMiddleware.validateJWTtoken],adminAuthController.updateAdmin);
-router.post('/deleteAdmin',[adminAuthMiddleware.validateJWTtoken],adminAuthController.deleteAdmin);
-router.get('/getAllAdmins',[adminAuthMiddleware.validateJWTtoken],adminAuthController.getAllAdmins);
-router.get('/getProfile',[adminAuthMiddleware.validateJWTtoken],adminAuthController.getProfile);
-router.get('/findAdminById/:id',adminAuthController.findAdminById);
+const { requireAdmin, requireSuperAdmin } = adminAuthMiddleware;
+
+// Public: sign in and the emailed-link password flow.
+router.post('/login', [loginLimiter, adminAuthMiddleware.validateLoginAdminBody], adminAuthController.loginAdminUser);
+router.post('/forgot-password', [emailLimiter], adminAuthController.forgotAdminPassword);
+router.post('/forgot-password/reset', [tokenLimiter], adminAuthController.resetAdminPasswordWithToken);
+
+// Any signed-in admin.
+router.post('/change-password', [requireAdmin, adminAuthMiddleware.validateResetPassordBody], adminAuthController.resetAdminPassword);
+router.get('/getProfile', [requireAdmin], adminAuthController.getProfile);
+
+// Super Admin: managing admin accounts.
+router.post('/register', [requireAdmin, requireSuperAdmin, adminAuthMiddleware.validateCreateAdminBody], adminAuthController.createAdminUser);
+router.put('/updateAdmin/:id', [requireAdmin, requireSuperAdmin], adminAuthController.updateAdmin);
+router.post('/deleteAdmin', [requireAdmin, requireSuperAdmin], adminAuthController.deleteAdmin);
+router.get('/getAllAdmins', [requireAdmin, requireSuperAdmin], adminAuthController.getAllAdmins);
+router.get('/findAdminById/:id', [requireAdmin, requireSuperAdmin], adminAuthController.findAdminById);
 
 module.exports = router;

@@ -9,7 +9,7 @@ const addToWishlist = catchAsync(async (req, res) => {
 });
 
 const removeFromWishlist = catchAsync(async (req, res) => {
-    const product = await cartWishlistService.removeFromWishlist(req.params.id);
+    const product = await cartWishlistService.removeFromWishlist(req.body.user, req.params.id);
     return responseWrapper(res, product, "Product Removed from Wishlist Successfully", httpStatus.CREATED);
 });
 
@@ -52,7 +52,7 @@ const decrementCart = catchAsync(async (req, res) => {
 });
 
 const removeFromCart = catchAsync(async (req, res) => {
-    await cartWishlistService.removeFromCart(req.params.id);
+    await cartWishlistService.removeFromCart(req.body.user, req.params.id);
     return responseWrapper(res, "", "Product Removed from Cart Successfully", httpStatus.OK);
 });
 

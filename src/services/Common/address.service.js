@@ -6,6 +6,35 @@ const { Address, Country, State, City } = require("../../models");
 const ApiError = require("../../utils/ApiError");
 const httpStatus = require("http-status");
 
+// Fields a customer may send for an address. Everything else in the request body
+// (the signed-in user, their token, ids we set ourselves) is ignored.
+const ADDRESS_INPUT_FIELDS = [
+  "name",
+  "phone",
+  "address_line1",
+  "address_line2",
+  "postal_code",
+  "country_id",
+  "state_id",
+  "city_id",
+  "is_default",
+];
+
+// raw_input on older rows still holds whole request bodies; never send it back.
+const withoutRawInput = (address) => {
+  const data = address.toJSON();
+  delete data.raw_input;
+  return data;
+};
+
+const pickAddressInput = (body) =>
+  Object.fromEntries(
+    ADDRESS_INPUT_FIELDS.filter((key) => body[key] !== undefined).map((key) => [
+      key,
+      body[key],
+    ]),
+  );
+
 const addAddress = async (body) => {
   try {
     const { user, country_id, state_id, city_id } = body;
@@ -129,10 +158,10 @@ const addAddress = async (body) => {
       is_default: isDefault,
 
       is_verified: true,
-      raw_input: body,
+      raw_input: pickAddressInput(body),
     });
 
-    return address;
+    return withoutRawInput(address);
   } catch (error) {
     throw new ApiError(
       error.statusCode || httpStatus.INTERNAL_SERVER_ERROR,
@@ -146,7 +175,7 @@ const getAddresses = async (body) => {
     const { user } = body;
 
     return await Address.findAll({
-      attributes: { exclude: [] },
+      attributes: { exclude: ["raw_input"] },
       where: { user_id: user.id, is_active: true },
     });
   } catch (error) {
@@ -159,7 +188,8 @@ const getAddresses = async (body) => {
 
 const updateAddress = async (body) => {
   try {
-    const { id, user, country_id, state_id, city_id, ...data } = body;
+    const { id, user } = body;
+    const { country_id, state_id, city_id, ...data } = pickAddressInput(body);
 
     const address = await Address.findOne({
       where: { id, user_id: user.id },
@@ -244,7 +274,7 @@ const updateAddress = async (body) => {
       ...(country_id && { country_id }),
     });
 
-    return address;
+    return withoutRawInput(address);
   } catch (error) {
     throw new ApiError(
       error.statusCode || httpStatus.INTERNAL_SERVER_ERROR,

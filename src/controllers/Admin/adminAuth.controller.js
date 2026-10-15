@@ -2,44 +2,36 @@ const httpStatus = require('http-status');
 const catchAsync = require('../../utils/catchAsync');
 const { adminAuthService } = require('../../services');
 const responseWrapper = require('../../config/responseWrapper');
+const pick = require('../../utils/pick');
 
+const LINK_SENT = 'If an account matches that email, we\'ve sent a link to it. Please check your inbox.';
 
 const createAdminUser = catchAsync(async (req, res) => {
-
     await adminAuthService.createAdminUser(req.body);
-    return responseWrapper(res, '', 'Admin Created Successfully.', httpStatus.CREATED);
+    return responseWrapper(res, '', 'Admin created. They will receive an email to set their password.', httpStatus.CREATED);
 });
 
 const loginAdminUser = catchAsync(async (req, res) => {
     const response = await adminAuthService.loginAdminUser(req.body);
-    responseWrapper(res, response, '', httpStatus.OK);
+    return responseWrapper(res, response, '', httpStatus.OK);
 });
 
+// Signed-in password change.
 const resetAdminPassword = catchAsync(async (req, res) => {
-
     const response = await adminAuthService.resetAdminPassword(req.body);
-    responseWrapper(res, response, '', httpStatus.OK);
+    return responseWrapper(res, response, 'Password Changed Successfully.', httpStatus.OK);
 });
 
-const sendOTP = catchAsync(async (req, res) => {
-
-    await adminAuthService.sendOTP(req.body.email);
-    responseWrapper(res, '', 'OTP has been Sent To Your Email', httpStatus.OK);
-});
-
-const verifyOTP = catchAsync(async (req, res) => {
-
-    const status = await adminAuthService.verifyOTP(req.body.email, req.body.otp, req.body.otp_type);
-    if (!status) {
-        responseWrapper(res, '', 'Ineternal Server Error', httpStatus.INTERNAL_SERVER_ERROR);
-    };
-    responseWrapper(res, status, 'OTP has been verified', httpStatus.OK);
-});
-
+// Step 1 of "forgot password": email a reset link.
 const forgotAdminPassword = catchAsync(async (req, res) => {
+    await adminAuthService.forgotAdminPassword(pick(req.body, ['email']));
+    return responseWrapper(res, '', LINK_SENT, httpStatus.OK);
+});
 
-    const response = await adminAuthService.forgotAdminPassword(req.body);
-    responseWrapper(res, response, '', httpStatus.OK);
+// Step 2: the reset page posts the token from the link with the new password.
+const resetAdminPasswordWithToken = catchAsync(async (req, res) => {
+    const response = await adminAuthService.resetAdminPasswordWithToken(pick(req.body, ['token', 'password', 'confirm_password']));
+    return responseWrapper(res, '', response, httpStatus.OK);
 });
 
 const getProfile = catchAsync(async (req, res) => {
@@ -62,12 +54,12 @@ const findAdminById = catchAsync(async (req, res) => {
 });
 
 const updateAdmin = catchAsync(async (req, res) => {
-  const response = await adminAuthService.updateAdmin(req.params.id, req.body);
+  const response = await adminAuthService.updateAdmin(req.params.id, req.body, req.admin);
   return responseWrapper(res, response, "Admin Updated Successfully");
 });
 
 const deleteAdmin = catchAsync(async (req, res) => {
-  await adminAuthService.deleteAdmin(req.body);
+  await adminAuthService.deleteAdmin(req.body, req.admin);
   res.status(httpStatus.OK).send({
     code: httpStatus.NO_CONTENT,
     message: "Deleted Successfull.",
@@ -79,9 +71,8 @@ module.exports = {
     createAdminUser,
     loginAdminUser,
     resetAdminPassword,
-    sendOTP,
-    verifyOTP,
     forgotAdminPassword,
+    resetAdminPasswordWithToken,
     getProfile,
     getAllAdmins,
     findAdminById,

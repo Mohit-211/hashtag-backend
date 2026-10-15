@@ -1,11 +1,16 @@
 /** @format */
 
 const httpStatus = require("http-status");
+const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 
 const { User, Profile } = require("../../models");
 const ApiError = require("../../utils/ApiError");
-const { sendUserCredentials } = require("../Common/email.service");
+const config = require("../../config/config");
+const { sendAccountSetupEmail } = require("../Common/email.service");
+const { issueToken } = require("../Common/accountToken.service");
+const { accountTypes, accountTokenPurposes, userStatusTypes } = require("../../config/types");
+const { ACCOUNT_SETUP_HOURS, links } = require("../../config/accountPolicy");
 
 const sequelize = require("../../config/central.db");
 
@@ -136,6 +141,8 @@ const deleteUser = async (body) => {
   }
 };
 
+// The customer gets an email link to choose their own password; no password is
+// generated or emailed. Admin-created accounts count as verified.
 const adminAddUser = async (reqBody) => {
   try {
     const { name, email } = reqBody;
@@ -148,16 +155,12 @@ const adminAddUser = async (reqBody) => {
       throw new ApiError(httpStatus.BAD_REQUEST, "Email already exists");
     }
 
-    // ✅ Generate random password and hash it
-    const salt = bcrypt.genSaltSync(10);
-    const password = Math.random().toString(36).substring(2, 12);
-
-    // ✅ Create user
+    // ✅ Create user; the password is unusable until set from the emailed link
     const user = await User.create({
       email,
-      password: bcrypt.hashSync(password, salt),
-      role_id: 6,
-      status: "ACCEPTED",
+      password: bcrypt.hashSync(crypto.randomBytes(32).toString("hex"), 10),
+      role_id: config.USR_ROLE_ID,
+      status: userStatusTypes.ACCEPTED,
     });
 
     // ✅ Create profile
@@ -174,18 +177,24 @@ const adminAddUser = async (reqBody) => {
       );
     }
 
-    // ✅ Send login credentials to user
-    const isSend = await sendUserCredentials(email, password);
-    if (!isSend) {
-      throw new ApiError(
-        httpStatus.INTERNAL_SERVER_ERROR,
-        "Unable to send credentials",
-      );
-    }
+    // ✅ Email a "set your password" link
+    const token = await issueToken({
+      accountType: accountTypes.USER,
+      accountId: user.id,
+      purpose: accountTokenPurposes.ACCOUNT_SETUP,
+      expiresAt: new Date(Date.now() + ACCOUNT_SETUP_HOURS * 60 * 60 * 1000),
+    });
+
+    await sendAccountSetupEmail(email, {
+      name,
+      link: links.resetPassword(token),
+      hours: ACCOUNT_SETUP_HOURS,
+      isAdmin: false,
+    });
   } catch (error) {
     console.error("Error in adminAddUser:", error);
     throw new ApiError(
-      httpStatus.INTERNAL_SERVER_ERROR,
+      error.statusCode || httpStatus.INTERNAL_SERVER_ERROR,
       error.message || "Internal Server Error",
     );
   }

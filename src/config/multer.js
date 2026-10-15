@@ -1,5 +1,8 @@
+const crypto = require("crypto");
 const multer = require("multer");
 const path = require("path");
+const httpStatus = require("http-status");
+const ApiError = require("../utils/ApiError");
 
 const PUBLIC_DIR = path.resolve(__dirname, "../../public");
 
@@ -13,7 +16,7 @@ const storage = multer.diskStorage({
     ) {
       cb(null, PUBLIC_DIR + "/uploads/images");
     } else {
-      cb(new Error("Invalid fieldname"));
+      cb(new ApiError(httpStatus.BAD_REQUEST, "Invalid upload field"));
     }
   },
   filename: function (req, file, cb) {
@@ -25,7 +28,8 @@ const storage = multer.diskStorage({
       ext = getFileExtension(file);
     }
 
-    cb(null, `${file.fieldname}-${Date.now()}.${ext}`);
+    // Random suffix: two uploads in the same millisecond used to overwrite each other.
+    cb(null, `${file.fieldname}-${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${ext}`);
   },
 });
 
@@ -64,7 +68,10 @@ function checkFileType(file, cb) {
     return cb(null, true);
   } else {
     cb(
-      "Error: Images(.jpeg, .jpg, .png,.avif, .webp), videos(.mp4, .mov), Audio(.mp3), and File(.pdf, .doc, .docx) only allow!",
+      new ApiError(
+        httpStatus.BAD_REQUEST,
+        "Error: Images(.jpeg, .jpg, .png,.avif, .webp), videos(.mp4, .mov), Audio(.mp3), and File(.pdf, .doc, .docx) only allow!",
+      ),
     );
   }
 }
@@ -76,7 +83,8 @@ function checkCustomizationArtworkType(file, cb) {
 
   if (!allowedExtensions.includes(fileExtension)) {
     return cb(
-      new Error(
+      new ApiError(
+        httpStatus.BAD_REQUEST,
         "Error: Customization artwork only allows SVG (.svg) and Adobe Illustrator (.ai) files.",
       ),
     );
@@ -90,7 +98,7 @@ function checkCustomizationArtworkType(file, cb) {
    * authoritative check for .ai here.
    */
   if (fileExtension === ".svg" && file.mimetype !== "image/svg+xml") {
-    return cb(new Error("Error: Invalid SVG artwork file."));
+    return cb(new ApiError(httpStatus.BAD_REQUEST, "Error: Invalid SVG artwork file."));
   }
 
   return cb(null, true);
@@ -115,9 +123,18 @@ function getFileExtension(file) {
   return mimeToExtMap[file.mimetype] || "txt";
 }
 
+// Per request: up to 40 files of at most 20 MB each.
+const limits = {
+  fileSize: 20 * 1024 * 1024,
+  files: 40,
+  fields: 200,
+  fieldSize: 2 * 1024 * 1024,
+};
+
 // Init upload
 const upload = multer({
   storage: storage,
+  limits,
   fileFilter: function (req, file, cb) {
     if (file.fieldname === "customization_images") {
       return checkCustomizationArtworkType(file, cb);
@@ -131,4 +148,4 @@ const upload = multer({
   { name: "customization_images", maxCount: 10 },
 ]);
 
-module.exports = upload;
+module.exports = { upload, limits };

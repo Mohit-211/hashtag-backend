@@ -1248,7 +1248,8 @@ const deleteSageProducts = async (reqBody) => {
       throw new Error("Provide batchId OR supplierId OR category");
     }
 
-    let whereClause = {};
+    // Only ever SAGE products, whatever batch or supplier id is passed.
+    let whereClause = { supplier: "SAGE" };
 
     // ✅ 1. Batch-based filter
     if (batchId) {
@@ -1339,7 +1340,14 @@ const deleteSageProducts = async (reqBody) => {
     let deletedRaw = 0;
     let deletedBatch = 0;
 
-    if (batchId) {
+    const sageBatch = batchId
+      ? await ImportBatch.findOne({
+          attributes: ["id"],
+          where: { id: batchId, source_name: { [Op.like]: "SAGE%" } },
+        })
+      : null;
+
+    if (sageBatch) {
       deletedRaw = await SourceRawData.destroy({
         where: { import_batch_id: batchId },
       });
