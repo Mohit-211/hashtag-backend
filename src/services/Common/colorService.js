@@ -6,9 +6,15 @@ const cache = new NodeCache({
   stdTTL: 3600,
 });
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Created on first use: the OpenAI client throws when OPENAI_API_KEY is empty, which
+// must only disable AI color matching, not stop the app from starting.
+let openaiClient = null;
+const getOpenAI = () => {
+  if (!openaiClient) {
+    openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+  return openaiClient;
+};
 
 const BASIC_COLORS = {
   black: "#000000",
@@ -368,7 +374,7 @@ async function getOrCreateColorCode(
       console.log(`🤖 CALLING AI FOR COLOR: ${rawColorName}`);
 
       try {
-        const response = await openai.chat.completions.create({
+        const response = await getOpenAI().chat.completions.create({
           model: "gpt-4o-mini",
 
           messages: [
