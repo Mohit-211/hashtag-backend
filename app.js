@@ -16,6 +16,7 @@ const ApiError = require("./src/utils/ApiError.js");
 const { uploadMiddleware } = require("./src/middlewares/upload.middleware.js");
 const { runAccountCleanup } = require("./src/jobs/accountCleanup.js");
 const errorHandler = require("./src/utils/errorHandler.js");
+const { hideSupplierPricing } = require("./src/utils/publicResponse.js");
 const {
   syncImportedSSProducts,
 } = require("./src/services/Common/ssSync.service.js");
@@ -136,8 +137,9 @@ app.get("/test", (req, res, next) => {
   res.status(200).send("Hello World !!");
 });
 
+// Supplier cost and markup are removed from every response that isn't for an admin.
 // Multipart parsing for all v1 api routes; files only on the routes listed in upload.middleware
-app.use("/api/v1", uploadMiddleware, routes);
+app.use("/api/v1", hideSupplierPricing, uploadMiddleware, routes);
 
 
 // send back a 404 error for any unknown api request

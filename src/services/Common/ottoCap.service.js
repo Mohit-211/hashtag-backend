@@ -16,6 +16,7 @@ const { dirs } = require("../../config/storage");
 const { Op } = require("sequelize");
 const httpStatus = require("http-status");
 const ApiError = require("../../utils/ApiError");
+const { restoreListedVariants, markProductRestored } = require("./supplierStatus.service");
 
 // Public address of this API: OttoCap images are served through its image proxy.
 const API_BASE_URL = (process.env.IMAGE_BASE_URL || "https://node.hashtagbillionaire.com").replace(/\/+$/, "");
@@ -384,13 +385,21 @@ const restoreOttoProduct = async (productId, transaction) => {
     },
   );
 
-  // ProductVariant's soft-delete attribute is deletedAt, so updating `deleted_at` did
-  // nothing and deleted variants stayed deleted. restore() clears it.
-  await ProductVariant.restore({
-    where: {
-      product_id: productId,
-    },
+  // Shown to admins: the sync brought back this product and its variants.
+  // (ProductVariant's soft-delete attribute is deletedAt, so the old update of
+  // `deleted_at` did nothing and deleted variants stayed deleted.)
+  await markProductRestored(productId, transaction);
 
+  const variantSkus = await ProductVariant.findAll({
+    where: { product_id: productId },
+    attributes: ["sku"],
+    paranoid: false,
+    transaction,
+  });
+
+  await restoreListedVariants({
+    productId,
+    skus: variantSkus.map((variant) => variant.sku),
     transaction,
   });
 

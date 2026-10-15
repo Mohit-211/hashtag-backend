@@ -40,6 +40,9 @@ const envVarsSchema = Joi.object()
     TRUST_PROXY: Joi.string()
       .default("loopback")
       .description("Express 'trust proxy' setting; loopback = nginx on the same server"),
+    EXPOSE_SUPPLIER_COST: Joi.boolean()
+      .default(false)
+      .description("true only while the shop switches to price_tiers: keeps supplier cost fields in shopper responses"),
     SMTP_HOST: Joi.string().description("server that will send the emails"),
     SMTP_PORT: Joi.number().description("port to connect to the email server"),
     SMTP_USERNAME: Joi.string().description("username for email server"),
@@ -116,6 +119,7 @@ module.exports = {
   frontendUrl: envVars.FRONTEND_URL.replace(/\/+$/, ""),
   adminFrontendUrl: envVars.ADMIN_FRONTEND_URL.replace(/\/+$/, ""),
   trustProxy: envVars.TRUST_PROXY,
+  exposeSupplierCost: envVars.EXPOSE_SUPPLIER_COST,
   storageDir: envVars.STORAGE_DIR,
   logDir: envVars.LOG_DIR,
   defaultLimit: envVars.DEFAULT_API_DATA_LIMIT,

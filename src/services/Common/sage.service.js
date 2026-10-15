@@ -4,6 +4,10 @@ const axios = require("axios");
 const { Op } = require("sequelize");
 const httpStatus = require("http-status");
 const ApiError = require("../../utils/ApiError");
+
+// SAGE sends onHand as a number, or null when the supplier doesn't share stock levels.
+const isStockReported = (onHand) =>
+  onHand !== null && onHand !== undefined && onHand !== "" && Number.isFinite(Number(onHand));
 const sequelize = require("../../config/central.db");
 const {
   SourceRawData,
@@ -16,6 +20,11 @@ const {
   VariantAttachment,
 } = require("../../models");
 const { downloadSupplierImage } = require("./supplierImage.service");
+const {
+  restoreListedVariants,
+  markProductRestored,
+  retireUnlistedVariants,
+} = require("./supplierStatus.service");
 const { getOrCreateColorCode } = require("./colorService");
 
 const BASE_URL = "https://www.promoplace.com/ws/ws.dll/ConnectAPI";
@@ -62,7 +71,7 @@ const getSageSupplierTruth = async (prodEId) => {
     prc = [],
     net = [],
     pics = [],
-    onHand = 0,
+    onHand = null,
     discontinued = 0,
   } = product;
 
@@ -100,7 +109,7 @@ const getSageSupplierTruth = async (prodEId) => {
     itemNum: itemNum || null,
     spc: spc || null,
     discontinued: !!discontinued,
-    stock: Number(onHand) || null,
+    stock: isStockReported(onHand) ? Number(onHand) : null,
     variantCount: supplierVariants.length,
     variants: supplierVariants,
     generalImages,
@@ -567,26 +576,8 @@ const restoreSageProduct = async (productId, transaction) => {
     },
   );
 
-  // Variants
-  await ProductVariant.restore({
-    where: {
-      product_id: productId,
-    },
-    transaction,
-  });
-
-  await ProductVariant.update(
-    {
-      is_active: true,
-    },
-    {
-      where: {
-        product_id: productId,
-      },
-      paranoid: false,
-      transaction,
-    },
-  );
+  // Variants are not restored here: after the upsert, saveSageProductToDB brings back
+  // only the ones SAGE still lists (restoreListedVariants) and retires the rest.
 
   // Product Attachments
   await ProductAttachment.restore({
@@ -617,25 +608,6 @@ const restoreSageProduct = async (productId, transaction) => {
     },
   );
 
-  // Variant Attachments
-  const variants = await ProductVariant.findAll({
-    where: {
-      product_id: productId,
-    },
-    paranoid: false,
-    transaction,
-  });
-
-  const variantIds = variants.map((v) => v.id);
-
-  if (variantIds.length) {
-    await VariantAttachment.restore({
-      where: {
-        variant_id: variantIds,
-      },
-      transaction,
-    });
-  }
 };
 
 const saveSageProductToDB = async (sageProduct, batchId) => {
@@ -651,7 +623,7 @@ const saveSageProductToDB = async (sageProduct, batchId) => {
     net = [],
     qty = [],
     pics = [],
-    onHand = 0,
+    onHand = null,
     dimensions,
     prodTime,
     themes,
@@ -716,6 +688,11 @@ const saveSageProductToDB = async (sageProduct, batchId) => {
 
     if (existingProduct) {
       await restoreSageProduct(existingProduct.id, transaction);
+
+      // Shown to admins: the sync brought back a product that had been removed.
+      if (existingProduct.deleted_at) {
+        await markProductRestored(existingProduct.id, transaction);
+      }
     }
 
     await Product.update(
@@ -794,6 +771,17 @@ const saveSageProductToDB = async (sageProduct, batchId) => {
         ],
       },
     );
+
+    // MySQL reports no id when the upsert changed nothing (the same data saved twice
+    // within one second); look the row up in that case.
+    if (!product.id) {
+      const saved = await Product.findOne({
+        where: { supplier: "SAGE", external_style_id: String(prodEid) },
+        attributes: ["id"],
+        transaction,
+      });
+      product.id = saved.id;
+    }
 
     await Product.update(
       {
@@ -963,7 +951,11 @@ const saveSageProductToDB = async (sageProduct, batchId) => {
 
           retail_price: netPrice,
 
-          stock: Number(onHand) || 999999,
+          // SAGE's onHand is the supplier's stock (0 = none) or null when the supplier
+          // doesn't report stock. Unreported stock isn't tracked, so it never blocks an order;
+          // it used to be stored as 999999, and a reported 0 was too.
+          stock: isStockReported(onHand) ? Number(onHand) : null,
+          track_inventory: isStockReported(onHand),
 
           size: "One Size",
 
@@ -982,6 +974,8 @@ const saveSageProductToDB = async (sageProduct, batchId) => {
           is_active: !discontinued,
 
           is_discontinued: !!discontinued,
+
+          discontinued_at: discontinued ? new Date() : null,
 
           meta: {
             priceTiers,
@@ -1036,20 +1030,13 @@ const saveSageProductToDB = async (sageProduct, batchId) => {
       const staleIds = staleVariants.map((v) => v.id);
 
       console.log(
-        `🧹 Removing ${staleIds.length} stale SAGE variant row(s) for product ${product.id}`,
+        `🧹 Retiring ${staleIds.length} stale SAGE variant row(s) for product ${product.id}`,
       );
 
-      await VariantAttachment.destroy({
-        where: { variant_id: staleIds },
-        force: true,
-        transaction,
-      });
-
-      await ProductVariant.destroy({
-        where: { id: staleIds },
-        force: true,
-        transaction,
-      });
+      // Marked discontinued and soft-deleted, not erased: order lines point at
+      // variants (erasing an ordered one made every later sync of the product fail),
+      // and a color SAGE lists again comes back below.
+      await retireUnlistedVariants({ ids: staleIds, transaction });
     }
 
     await ProductVariant.bulkCreate(variantPayload, {
@@ -1059,36 +1046,42 @@ const saveSageProductToDB = async (sageProduct, batchId) => {
         "color_code",
         "retail_price",
         "stock",
+        "track_inventory",
         "is_active",
         "is_discontinued",
+        "discontinued_at",
         "last_supplier_sync_at",
         "meta",
       ],
       transaction,
     });
 
+    // Every color SAGE lists is on sale, including ones it marks discontinued (those
+    // carry is_discontinued for the admin panel). Listed variants that had been removed
+    // come back, with restored_at set.
+    await restoreListedVariants({ productId: product.id, skus: currentSkus, transaction });
+
     await ProductVariant.update(
       {
-        deleted_at: null,
         is_active: true,
-        discontinued_at: null,
       },
       {
         where: {
           product_id: product.id,
+          sku: currentSkus,
         },
-        paranoid: false,
         transaction,
       },
     );
 
     // ====================== VARIANT IMAGES ======================
 
+    // Images only for the variants SAGE lists (retired ones keep theirs, soft-deleted).
     const createdVariants = await ProductVariant.findAll({
       where: {
         product_id: product.id,
+        sku: currentSkus,
       },
-      paranoid: false,
       transaction,
     });
 
@@ -1388,4 +1381,5 @@ module.exports = {
   saveSageProductToDB,
   importSelectedSageProducts,
   deleteSageProducts,
+  isStockReported,
 };

@@ -21,10 +21,12 @@
     "start": "pm2 start ecosystem.config.json --no-daemon",
     "staging": "pm2 start ecosystem.stagging-config.json --no-daemon",
     "dev": "nodemon --ext js,mjs,json,yaml index.js",
-    "auth": "node src/config/createSuperAdmin.js",
+    "auth": "node src/config/createSuperAdmin.js",
     "restore:supplier-images": "node src/scripts/restoreSupplierImages.js",
     "recover:next-images": "node src/scripts/recoverImagesFromNextCache.js",
-    "report:missing-images": "node src/scripts/reportMissingProductImages.js"
+    "report:missing-images": "node src/scripts/reportMissingProductImages.js",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
   },
   "author": "CA",
   "license": "UNLICENSED",
@@ -58,6 +60,8 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "eslint": "^9.39.5",
+    "globals": "^15.15.0",
     "nodemon": "^2.0.22"
   }
 }

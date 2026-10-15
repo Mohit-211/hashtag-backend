@@ -89,4 +89,34 @@ const buildPricingTiers = (meta, markupPercent = 0, isAdmin = false) => {
     .filter(Boolean);
 };
 
-module.exports = { buildPricingTiers };
+// Selling price per quantity tier, for shoppers: each SAGE net tier plus the supplier's
+// markup, which is exactly what the cart charges (buildSagePricingSnapshot). Tiers are
+// paired by position, empty ones skipped, sorted by quantity:
+//   [{ min_qty: 100, max_qty: 249, unit_price: 4.64 }, ..., { min_qty: 2500, max_qty: null, unit_price: 3.81 }]
+// Products without quantity tiers get [].
+const buildSellingTiers = (meta, markupPercent = 0) => {
+  let parsedMeta = meta;
+  if (typeof meta === "string") {
+    try {
+      parsedMeta = JSON.parse(meta);
+    } catch {
+      return [];
+    }
+  }
+
+  const { qtyTiers = [], netTiers = [] } = parsedMeta || {};
+  if (!Array.isArray(qtyTiers) || !Array.isArray(netTiers)) return [];
+
+  const tiers = qtyTiers
+    .map((qty, i) => ({ min_qty: Number(qty), net: Number(netTiers[i]) }))
+    .filter((tier) => tier.min_qty > 0 && Number.isFinite(tier.net) && tier.net > 0)
+    .sort((a, b) => a.min_qty - b.min_qty);
+
+  return tiers.map((tier, i) => ({
+    min_qty: tier.min_qty,
+    max_qty: i < tiers.length - 1 ? tiers[i + 1].min_qty - 1 : null,
+    unit_price: applyMarkup(tier.net, markupPercent),
+  }));
+};
+
+module.exports = { buildPricingTiers, buildSellingTiers };

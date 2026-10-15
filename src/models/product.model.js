@@ -84,6 +84,12 @@ Product.init(
       type: DataTypes.DATE,
       allowNull: true,
     },
+    // When a supplier sync brought back this product after it had been removed
+    // (migration 2026-10-16).
+    restored_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
 
     sync_locked: {
       type: DataTypes.BOOLEAN,

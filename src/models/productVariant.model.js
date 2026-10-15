@@ -148,6 +148,21 @@ ProductVariant.init(
       type: DataTypes.BOOLEAN,
       defaultValue: true,
     },
+    // Status markers (migration 2026-10-16). The supplier marks the variant
+    // discontinued or stops listing it; a sync brought back a removed variant.
+    is_discontinued: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+    discontinued_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    restored_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
   },
   {
     sequelize,

@@ -27,10 +27,11 @@ const ssClient = require("../../config/ssClient");
 const sequelize = require("../../config/central.db");
 const { calculatePricing, getMarkupPercent } = require("../../config/pricing");
 const { downloadSupplierImage } = require("./supplierImage.service");
+const { restoreListedVariants, markProductRestored, variantStatus } = require("./supplierStatus.service");
 const decodeHtmlEntities = require("../../utils/decodeHtmlEntities");
 const sortSizes = require("../../utils/sortSizes");
 const { COLOR_FILTERS } = require("../../utils/colorFilter");
-const { buildPricingTiers } = require("../../utils/pricing/pricing.util");
+const { buildPricingTiers, buildSellingTiers } = require("../../utils/pricing/pricing.util");
 const {
   resolveTierProductIds,
   resolveAllTierProductIds,
@@ -1737,7 +1738,12 @@ const getAllProducts = async (query) => {
 
       if (size?.length) variantWhere.size = { [Op.in]: size };
       if (color?.length) variantWhere[Op.or] = buildColorFilter(color);
-      if (in_stock === "true") variantWhere.stock = { [Op.gt]: 0 };
+      // Variants whose stock isn't tracked (the supplier doesn't report it) count as in stock.
+      if (in_stock === "true") {
+        variantWhere[Op.and] = [
+          { [Op.or]: [{ stock: { [Op.gt]: 0 } }, { track_inventory: false }] },
+        ];
+      }
 
       const matchingVariants = await ProductVariant.findAll({
         where: variantWhere,
@@ -2407,6 +2413,9 @@ const getProductById = async (id, reqBody) => {
             markupPercent,
             false,
           ),
+
+          // Selling price per quantity tier (what the cart charges).
+          price_tiers: buildSellingTiers(v.meta, markupPercent),
         };
       }),
     );
@@ -2521,6 +2530,8 @@ const getVariantById = async (id) => {
   data.case_price = Number(data.case_price || 0);
   data.used_case_price = Number(data.case_price) > 0;
 
+  data.price_tiers = buildSellingTiers(data.meta, pricing.markup_percent);
+
   data.pricing_tiers = buildPricingTiers(
     data.meta,
     pricing.markup_percent,
@@ -2571,6 +2582,9 @@ const getGuestProductById = async (id) => {
         used_case_price: !!v.case_price && Number(v.case_price) > 0,
 
         pricing_tiers: buildPricingTiers(v.meta, markupPercent, false),
+
+        // Selling price per quantity tier (what the cart charges).
+        price_tiers: buildSellingTiers(v.meta, markupPercent),
       };
     });
 
@@ -2627,6 +2641,16 @@ const getProductVariant = async (body) => {
   }
 
   data.title = decodeHtmlEntities(data.title);
+
+  // Selling price, like the other storefront endpoints; this used to send the
+  // supplier's price as `price`.
+  const effectivePrice =
+    data.case_price && Number(data.case_price) > 0
+      ? Number(data.case_price)
+      : Number(data.price || 0);
+  const pricing = await calculatePricing(effectivePrice, data.supplier);
+  data.price = pricing.final_price;
+  data.price_tiers = buildSellingTiers(data.meta, pricing.markup_percent);
 
   return {
     ...data,
@@ -3467,6 +3491,8 @@ const saveSSProductToDB = async (data, batchId) => {
     if (product) {
       if (product.deleted_at) {
         await product.restore({ transaction });
+        // Shown to admins: the sync brought back a product that had been removed.
+        await markProductRestored(product.id, transaction);
       }
 
       await product.update(
@@ -3689,6 +3715,13 @@ const saveSSProductToDB = async (data, batchId) => {
         "supplier_last_hash",
         "meta",
       ],
+      transaction,
+    });
+
+    // Variants S&S lists that had been removed come back, with restored_at set.
+    await restoreListedVariants({
+      productId: product.id,
+      skus: variantPayload.map((v) => v.sku),
       transaction,
     });
 
@@ -3933,6 +3966,15 @@ const deleteSSProductByStyle = async (styleId) => {
   }
 };
 
+// ?status= on the admin variant list.
+const ADMIN_VARIANT_STATUS_FILTERS = {
+  active: { is_active: true, is_discontinued: false },
+  inactive: { is_active: false },
+  discontinued: { is_discontinued: true },
+  restored: { restored_at: { [Op.ne]: null } },
+  removed: { deletedAt: { [Op.ne]: null } },
+};
+
 // What the admin variant list and the admin single-variant endpoint load for a variant.
 const adminVariantInclude = () => [
   {
@@ -3970,6 +4012,10 @@ const adminVariantInclude = () => [
 const formatAdminVariant = (variant) => {
   const data = variant.toJSON();
 
+  // active / inactive / discontinued / removed, alongside is_discontinued,
+  // discontinued_at and restored_at.
+  data.status = variantStatus(data);
+
   // Decode product name
   if (data.product) {
     data.product.name = decodeHtmlEntities(data.product.name || "");
@@ -3995,6 +4041,7 @@ const getProductVariantByIdAdmin = async (id) => {
   const variant = await ProductVariant.findOne({
     where: { id },
     include: adminVariantInclude(),
+    paranoid: false,
   });
 
   if (!variant) {
@@ -4006,14 +4053,20 @@ const getProductVariantByIdAdmin = async (id) => {
 
 const getProductVariantByAdmin = async (query) => {
   try {
-    const { page = 1, limit = 20, search = "" } = query;
+    const { page = 1, limit = 20, search = "", status } = query;
     const offset = (page - 1) * limit;
 
-    // Discontinued is a product flag; variants have no such column.
-    let where = {
-      is_active: true,
-      "$product.is_discontinued$": false,
-    };
+    if (status && !ADMIN_VARIANT_STATUS_FILTERS[status]) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        `status must be one of: ${Object.keys(ADMIN_VARIANT_STATUS_FILTERS).join(", ")}`,
+      );
+    }
+
+    // Without a status: variants on sale, of products that aren't discontinued.
+    let where = status
+      ? { ...ADMIN_VARIANT_STATUS_FILTERS[status] }
+      : { is_active: true, "$product.is_discontinued$": false };
 
     if (search) {
       const encodedSearch = search
@@ -4056,6 +4109,9 @@ const getProductVariantByAdmin = async (query) => {
       distinct: true,
 
       include: adminVariantInclude(),
+
+      // Removed variants are soft-deleted rows.
+      paranoid: status !== "removed",
     });
 
     const formattedRows = rows.map(formatAdminVariant);
@@ -4110,6 +4166,12 @@ const getProductByIdAdmin = async (id) => {
       // Preview of what the customer will actually see/pay, so admin can
       // sanity-check markup without needing to open the live site.
       pricing_tiers_customer: buildPricingTiers(v.meta, markupPercent, false),
+
+      // Status markers for the admin panel.
+      status: variantStatus(v),
+      is_discontinued: !!v.is_discontinued,
+      discontinued_at: v.discontinued_at || null,
+      restored_at: v.restored_at || null,
     }));
 
     return {

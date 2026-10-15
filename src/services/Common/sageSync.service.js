@@ -6,17 +6,28 @@ const {
 } = require("../../models");
 
 const sequelize = require("../../config/central.db");
-const { getProductDetails, saveSageProductToDB } = require("./sage.service");
+const { getProductDetails, saveSageProductToDB, isStockReported } = require("./sage.service");
+
+// meta comes back as text from MariaDB.
+const parseMeta = (meta) => {
+  if (!meta || typeof meta !== "string") return meta || {};
+  try {
+    return JSON.parse(meta);
+  } catch {
+    return {};
+  }
+};
 
 const syncImportedSageProducts = async () => {
   try {
     console.log("🚀 Starting SAGE sync");
 
+    // Inactive (e.g. discontinued) products are checked too, so one SAGE offers again
+    // comes back. Deleted products are left alone.
     const importedStyles = await Product.findAll({
       where: {
         supplier: "SAGE",
         sync_locked: false,
-        is_active: true,
       },
 
       attributes: ["external_style_id"],
@@ -98,17 +109,19 @@ const syncImportedSageProducts = async () => {
         // PRODUCT CHECK
         // ====================
 
+        // Prices live on the variants and in meta, which are compared below (products
+        // have no price columns, so comparing them flagged every product as changed).
         if (
           existingProduct.name !== sageProduct.prName ||
           existingProduct.description !== (sageProduct.description || "") ||
-          Number(existingProduct.price) !== listPrice ||
-          Number(existingProduct.case_price) !== listPrice ||
-          Number(existingProduct.retail_price) !== netPrice
+          !!existingProduct.is_discontinued !== !!sageProduct.discontinued
         ) {
-          console.log(`💲 Product pricing/details changed`);
+          console.log(`📝 Product details or discontinued status changed`);
 
           hasChanges = true;
         }
+
+        const productMeta = parseMeta(existingProduct.meta);
 
         // ====================
         // META CHECK (compares actual tier values, not just presence)
@@ -134,12 +147,12 @@ const syncImportedSageProducts = async () => {
         const incomingQtyTiers = (sageProduct.qty || []).map((v) => String(v));
 
         if (
-          !existingProduct.meta?.priceTiers ||
-          !existingProduct.meta?.netTiers ||
-          !existingProduct.meta?.qtyTiers ||
-          !arraysMatch(existingProduct.meta.priceTiers, incomingPriceTiers) ||
-          !arraysMatch(existingProduct.meta.netTiers, incomingNetTiers) ||
-          !arraysMatch(existingProduct.meta.qtyTiers, incomingQtyTiers)
+          !productMeta?.priceTiers ||
+          !productMeta?.netTiers ||
+          !productMeta?.qtyTiers ||
+          !arraysMatch(productMeta.priceTiers, incomingPriceTiers) ||
+          !arraysMatch(productMeta.netTiers, incomingNetTiers) ||
+          !arraysMatch(productMeta.qtyTiers, incomingQtyTiers)
         ) {
           console.log(`📝 Tier data missing or changed`);
 
@@ -168,11 +181,18 @@ const syncImportedSageProducts = async () => {
             .map((x) => x.trim())
             .filter(Boolean) || [];
 
-        if (colors.length !== existingProduct.variants.length) {
-          console.log(`🎨 Variant count changed`);
+        const localColors = existingProduct.variants.map((v) => v.color).sort();
+
+        if (colors.length && colors.slice().sort().join("|") !== localColors.join("|")) {
+          console.log(`🎨 Colors changed`);
 
           hasChanges = true;
         }
+
+        // Stock as saveSageProductToDB stores it: SAGE's number, or untracked when SAGE
+        // doesn't report one.
+        const stockReported = isStockReported(sageProduct.onHand);
+        const expectedStock = stockReported ? Number(sageProduct.onHand) : null;
 
         for (const variant of existingProduct.variants) {
           if (
@@ -181,6 +201,18 @@ const syncImportedSageProducts = async () => {
             Number(variant.retail_price) !== netPrice
           ) {
             console.log(`💲 Variant pricing changed`);
+
+            hasChanges = true;
+
+            break;
+          }
+
+          if (
+            (variant.stock ?? null) !== expectedStock ||
+            !!variant.track_inventory !== stockReported ||
+            !!variant.is_discontinued !== !!sageProduct.discontinued
+          ) {
+            console.log(`📦 Stock or discontinued status changed`);
 
             hasChanges = true;
 

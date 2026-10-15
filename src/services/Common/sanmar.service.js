@@ -16,6 +16,7 @@ const { BRAND_LOGO_MAP, getBrandLogo } = require("../../config/sanmarBrand");
 const sequelize = require("../../config/central.db");
 const { downloadSupplierImage } = require("./supplierImage.service");
 const { getOrCreateColorCode } = require("./colorService");
+const { restoreListedVariants, markProductRestored } = require("./supplierStatus.service");
 
 const syncSanmarBrands = async () => {
   let batch;
@@ -301,19 +302,10 @@ const restoreSanmarProduct = async (styleId, transaction) => {
     },
   );
 
-  await ProductVariant.update(
-    {
-      deletedAt: null,
-      is_active: true,
-    },
-    {
-      where: {
-        product_id: product.id,
-      },
-      paranoid: false,
-      transaction,
-    },
-  );
+  // Shown to admins: the sync brought back a product that had been removed.
+  // Variants are restored after the upsert, only the ones SanMar lists
+  // (restoreListedVariants in saveSanmarProductToDB).
+  await markProductRestored(product.id, transaction);
 
   await ProductAttachment.update(
     {
@@ -356,31 +348,6 @@ const restoreSanmarProduct = async (styleId, transaction) => {
       transaction,
     },
   );
-
-  const variants = await ProductVariant.findAll({
-    where: {
-      product_id: product.id,
-    },
-    paranoid: false,
-    transaction,
-  });
-
-  const variantIds = variants.map((v) => v.id);
-
-  if (variantIds.length) {
-    await VariantAttachment.update(
-      {
-        deleted_at: null,
-      },
-      {
-        where: {
-          variant_id: variantIds,
-        },
-        paranoid: false,
-        transaction,
-      },
-    );
-  }
 
   return product;
 };
@@ -566,6 +533,17 @@ const saveSanmarProductToDB = async (data, batchId) => {
         ],
       },
     );
+
+    // MySQL reports no id when the upsert changed nothing (the same data saved twice
+    // within one second); look the row up in that case.
+    if (!product.id) {
+      const saved = await Product.findOne({
+        where: { supplier: "SANMAR", external_style_id: String(style) },
+        attributes: ["id"],
+        transaction,
+      });
+      product.id = saved.id;
+    }
 
     // =========================
     // ✅ CATEGORY
@@ -851,10 +829,30 @@ const saveSanmarProductToDB = async (data, batchId) => {
         "is_discontinued",
         "discontinued_at",
         "last_supplier_sync_at",
-        "deleted_at",
       ],
       transaction,
     });
+
+    // Every variant SanMar lists is on sale, including ones it marks Discontinued
+    // (those carry is_discontinued for the admin panel). Listed variants that had been
+    // removed come back, with restored_at set. (The old restore checked
+    // variant.deleted_at, which variants don't have, so it never ran.)
+    const listedSkus = variantPayload.map((p) => String(p.sku));
+
+    await restoreListedVariants({ productId: product.id, skus: listedSkus, transaction });
+
+    await ProductVariant.update(
+      {
+        is_active: true,
+      },
+      {
+        where: {
+          product_id: product.id,
+          sku: listedSkus,
+        },
+        transaction,
+      },
+    );
 
     // =========================
     // ✅ FETCH VARIANTS
@@ -863,23 +861,10 @@ const saveSanmarProductToDB = async (data, batchId) => {
     const createdVariants = await ProductVariant.findAll({
       where: {
         product_id: product.id,
+        sku: listedSkus,
       },
-      paranoid: false,
       transaction,
     });
-    await ProductVariant.update(
-      {
-        deleted_at: null,
-        is_active: true,
-      },
-      {
-        where: {
-          product_id: product.id,
-        },
-        paranoid: false,
-        transaction,
-      },
-    );
 
     const variantMap = new Map(createdVariants.map((v) => [v.sku, v]));
 
@@ -889,28 +874,6 @@ const saveSanmarProductToDB = async (data, batchId) => {
 
     for (const v of variants) {
       const variant = variantMap.get(String(v.sku));
-
-      // ✅ RESTORE SOFT DELETED VARIANT
-
-      if (variant?.deleted_at) {
-        console.log("♻️ Restoring variant:", variant.sku);
-
-        await ProductVariant.update(
-          {
-            deleted_at: null,
-            is_active: true,
-          },
-          {
-            where: {
-              id: variant.id,
-            },
-
-            paranoid: false,
-
-            transaction,
-          },
-        );
-      }
 
       if (!variant) continue;
 
