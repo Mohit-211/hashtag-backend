@@ -203,11 +203,11 @@ if (require.main === module) {
     const needed = byProduct.filter((p) => p.needs_reupload === "yes");
     console.table({
       "products with missing images": { count: byProduct.length },
-      "  of which need re-upload": { count: needed.length },
-      "  of which are deleted or only lost deleted images": { count: byProduct.length - needed.length },
+      "products to fix": { count: needed.length },
+      "products not to fix (deleted, or only removed images)": { count: byProduct.length - needed.length },
+      "products to fix whose main image is missing": { count: needed.filter((p) => p.main_image_missing === "yes").length },
       "missing image files": { count: detail.length },
-      "  of which need re-upload": { count: detail.filter((i) => i.needs_reupload === "yes").length },
-      "products whose main image is missing": { count: needed.filter((p) => p.main_image_missing === "yes").length },
+      "image files to re-upload": { count: detail.filter((i) => i.needs_reupload === "yes").length },
     });
     console.log(`Per image:   ${detailFile}`);
     console.log(`Per product: ${productFile}`);
