@@ -4,7 +4,6 @@ const cors = require("cors");
 const compression = require("compression");
 const httpStatus = require("http-status");
 const cron = require("node-cron");
-const path = require("path");
 const app = express();
 
 const config = require("./src/config/config.js");
@@ -29,8 +28,11 @@ const {
 const {
   syncImportedSageProducts,
 } = require("./src/services/Common/sageSync.service.js");
+const { dirs, ensureStorageDirs } = require("./src/config/storage.js");
 require("./src/models");
-const PUBLIC_DIR = path.resolve(__dirname, "./public");
+
+// Uploads, supplier images, imports and logs live outside the repo (see src/config/storage.js).
+ensureStorageDirs();
 
 // Behind nginx, req.ip must come from X-Forwarded-For for the rate limiters.
 // "loopback" only trusts that header when the request comes from the same server.
@@ -132,8 +134,10 @@ if (config.env !== "test") {
   app.use(morgan.errorHandler);
 }
 
+// Every file under <storage>/uploads, e.g. /uploads/images/x.png and /uploads/suppliers/...
 app.use(
-  express.static(PUBLIC_DIR, {
+  "/uploads",
+  express.static(dirs.uploads, {
     setHeaders: (res) => {
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
@@ -168,7 +172,7 @@ app.use("/api/v1", uploadMiddleware, routes);
 // All File Apis
 app.use(
   "/images",
-  express.static(`${PUBLIC_DIR}/uploads/images`, {
+  express.static(dirs.images, {
     setHeaders: (res, filePath) => {
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
@@ -184,16 +188,6 @@ app.use(
   }),
 );
 
-
-app.use(
-  "/uploads/suppliers",
-  (req, res, next) => {
-    res.header("Access-Control-Allow-Origin", "*");
-    res.header("Cross-Origin-Resource-Policy", "cross-origin");
-    next();
-  },
-  express.static(path.join(PUBLIC_DIR, "uploads/suppliers")),
-);
 
 // send back a 404 error for any unknown api request
 app.use((req, res, next) => {

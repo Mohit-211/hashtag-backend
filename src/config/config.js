@@ -35,6 +35,8 @@ const envVarsSchema = Joi.object()
       .uri()
       .required()
       .description("admin panel, used in admin password emails"),
+    STORAGE_DIR: Joi.string().description("uploads and imports; default: ../storage next to the repo"),
+    LOG_DIR: Joi.string().description("log files; default: ../logs next to the repo"),
     TRUST_PROXY: Joi.string()
       .default("loopback")
       .description("Express 'trust proxy' setting; loopback = nginx on the same server"),
@@ -114,6 +116,8 @@ module.exports = {
   frontendUrl: envVars.FRONTEND_URL.replace(/\/+$/, ""),
   adminFrontendUrl: envVars.ADMIN_FRONTEND_URL.replace(/\/+$/, ""),
   trustProxy: envVars.TRUST_PROXY,
+  storageDir: envVars.STORAGE_DIR,
+  logDir: envVars.LOG_DIR,
   defaultLimit: envVars.DEFAULT_API_DATA_LIMIT,
   DEFAULT_TIMEZONE: envVars.DEFAULT_TIMEZONE,
 

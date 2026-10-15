@@ -4,7 +4,7 @@ const path = require("path");
 const httpStatus = require("http-status");
 const ApiError = require("../utils/ApiError");
 
-const PUBLIC_DIR = path.resolve(__dirname, "../../public");
+const { dirs } = require("./storage");
 
 // Set storage engine
 const storage = multer.diskStorage({
@@ -14,7 +14,7 @@ const storage = multer.diskStorage({
       file.fieldname === "variant_images" ||
       file.fieldname === "customization_images"
     ) {
-      cb(null, PUBLIC_DIR + "/uploads/images");
+      cb(null, dirs.images);
     } else {
       cb(new ApiError(httpStatus.BAD_REQUEST, "Invalid upload field"));
     }

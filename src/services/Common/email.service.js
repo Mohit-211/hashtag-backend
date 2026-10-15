@@ -3,8 +3,15 @@ const config = require('../../config/config');
 const httpStatus = require('http-status');
 const logger = require('../../config/logger');
 const ApiError = require('../../utils/ApiError');
-const { verificationEmail, passwordResetEmail, accountSetupEmail } = require('../../templates/authEmails');
-const { contactUsConfirmationTemplate, adminContactUsNotificationTemplate, sourcingRequestConfirmationTemplate, sourcingRequestStatusTemplate } = require('../../../public/Email_Template/contactEmailTemplates');
+const {
+    verificationEmail,
+    passwordResetEmail,
+    accountSetupEmail,
+    contactUsConfirmationTemplate,
+    adminContactUsNotificationTemplate,
+    sourcingRequestConfirmationTemplate,
+    sourcingRequestStatusTemplate,
+} = require('../../templates');
 
 const transport = nodemailer.createTransport(config.email.smtp);
 

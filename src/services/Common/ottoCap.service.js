@@ -10,7 +10,9 @@ const {
   OttocapCatalog,
 } = require("../../models");
 const sequelize = require("../../config/central.db");
+const path = require("path");
 const XLSX = require("xlsx");
+const { dirs } = require("../../config/storage");
 const { Op } = require("sequelize");
 const { downloadSupplierImage } = require("./supplierImage.service");
 const { getOrCreateColorCode } = require("./colorService");
@@ -20,7 +22,7 @@ const importOttoCapInventory = async () => {
     console.log("🚀 Starting OttoCap Inventory Import...");
 
     // Read Excel
-    const workbook = XLSX.readFile("/var/www/ottocap/otto_inventory.xlsx");
+    const workbook = XLSX.readFile(path.join(dirs.ottocapImports, "otto_inventory.xlsx"));
 
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
 
@@ -78,7 +80,7 @@ const importOttoCapCatalog = async () => {
   try {
     console.log("🚀 Starting OttoCap Catalog Import...");
 
-    const workbook = XLSX.readFile("/var/www/ottocap/otto_catalog.xlsx");
+    const workbook = XLSX.readFile(path.join(dirs.ottocapImports, "otto_catalog.xlsx"));
 
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
 

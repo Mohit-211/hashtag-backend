@@ -4,12 +4,10 @@ const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
 
-// 🔥 ALWAYS USE ROOT PROJECT PATH
-const PUBLIC_DIR = path.join(process.cwd(), "public");
+const { dirs } = require("../../config/storage");
 
-// 🔥 FINAL STORAGE:
-// /public/uploads/suppliers/ss/7456/....
-const SUPPLIER_IMAGE_DIR = path.join(PUBLIC_DIR, "uploads", "suppliers");
+// Stored as <storage>/uploads/suppliers/<supplier>/<style>/..., served at /uploads/suppliers/...
+const SUPPLIER_IMAGE_DIR = dirs.suppliers;
 
 // 🔥 PUBLIC BASE URL
 const BASE_URL = "https://node.hashtagbillionaire.com";

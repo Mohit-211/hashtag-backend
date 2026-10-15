@@ -1,4 +1,7 @@
+const fs = require("fs");
+const path = require("path");
 const ssClient = require("../../config/ssClient");
+const { dirs } = require("../../config/storage");
 const { Brand, ImportBatch } = require("../../models");
 const ApiError = require("../../utils/ApiError");
 const httpStatus = require("http-status");
@@ -150,11 +153,7 @@ const publishBrand = async (body, files) => {
         try {
           const fileName = brand.logo_url.split("/").pop();
 
-          const filePath = path.join(
-            process.cwd(),
-            "public/uploads/images",
-            fileName,
-          );
+          const filePath = path.join(dirs.images, path.basename(fileName));
 
           if (fs.existsSync(filePath)) {
             fs.unlinkSync(filePath);
