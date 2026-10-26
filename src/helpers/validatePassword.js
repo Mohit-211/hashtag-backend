@@ -1,26 +1,19 @@
+// The one password rule, for every password a customer or an admin sets. It matches the
+// shop's sign-up form (hashtag-next src/lib/validation.ts), as the client chose on 26 Oct 2026:
+// 8 to 128 characters, with an uppercase letter, a number and a special character
+// (anything that isn't a letter or a digit).
+const MIN_LENGTH = 8;
+const MAX_LENGTH = 128;
 
-const passwordValidator = require('password-validator');
+const PASSWORD_RULES = `Password must be ${MIN_LENGTH} to ${MAX_LENGTH} characters long and include an uppercase letter, a number and a special character.`;
 
-
-// Create a schema
-var schema = new passwordValidator();
-
-// .has().uppercase()                              // Must have uppercase letters
-// .has().lowercase()                              // Must have lowercase letters
-
-// Add properties to it
-schema
-    .is().min(8)                                    // Minimum length 8
-    .is().max(100)                                  // Maximum length 100
-    .has().digits(2)                                // Must have at least 2 digits
-    .has().not().spaces()                           // Should not have spaces
-    .is().not().oneOf(['Passw0rd', 'Password123']); // Blacklist these values
-
-
-
-const validatePassword = function (pass) {
-    return schema.validate(pass)
-};
-
+const validatePassword = (pass) =>
+    typeof pass === 'string' &&
+    pass.length >= MIN_LENGTH &&
+    pass.length <= MAX_LENGTH &&
+    /[A-Z]/.test(pass) &&
+    /[0-9]/.test(pass) &&
+    /[^A-Za-z0-9]/.test(pass);
 
 module.exports = validatePassword;
+module.exports.PASSWORD_RULES = PASSWORD_RULES;

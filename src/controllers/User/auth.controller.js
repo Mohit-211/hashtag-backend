@@ -1,11 +1,11 @@
 const httpStatus = require('http-status');
 
 const validatePassword = require('../../helpers/validatePassword');
+const { PASSWORD_RULES } = require('../../helpers/validatePassword');
 const catchAsync = require('../../utils/catchAsync');
 const { userAuthService } = require('../../services');
 const pick = require('../../utils/pick');
 const responseWrapper = require('../../config/responseWrapper');
-const { PASSWORD_RULES } = require('../../middlewares/userAuth.middleware');
 const { UNVERIFIED_ACCOUNT_HOURS } = require('../../config/accountPolicy');
 
 const LINK_SENT = 'If an account matches that email, we\'ve sent a link to it. Please check your inbox.';

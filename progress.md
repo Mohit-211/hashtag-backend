@@ -55,7 +55,7 @@ Found after the audit: N1 to N3 (bottom of this file).
    - `SHIP_FROM_NAME`: the business name, once the client confirms the spelling.
    - `SHIP_FROM_PHONE`, `SHIP_FROM_ADDRESS_LINE1`, `SHIP_FROM_CITY`, `SHIP_FROM_STATE`, `SHIP_FROM_POSTAL_CODE`: the phone and address the client confirmed, the ones hard-coded until now (`git show 11b645d:src/config/shipstation.js`).
    - Optional: `DEFAULT_PACKAGE_WEIGHT_LB` (1 when unset).
-3. **Deploy:** `git pull`, then `pm2 restart backend --update-env`.
+3. **Deploy:** `git pull`, then `npm install --omit=dev`, then `pm2 restart backend --update-env`.
 
 Changes the shop and the admin panel need: [docs/frontend-changes.md](docs/frontend-changes.md), [docs/admin-panel-changes.md](docs/admin-panel-changes.md).
 
@@ -203,7 +203,7 @@ The client answered on 26 October; the questions are in `docs/client-questions.m
 | 38 | Every order email; a confirmation page | Order emails | ❌ | | Payments; client: a team email too? |
 | 39 | Tracking for signed-in customers; the admin picks ShipStation or manual updates | Tracking mode per order; manual status endpoint | ❌ | | Payments |
 | 40 | Erase unverified accounts completely, past ones too | Hard delete in the cleanup job | ❌ | | |
-| 42 | The shop's password rule everywhere | `validatePassword` and every place a password is set | ❌ | | |
+| 42 | The shop's password rule everywhere | `validatePassword` checks the shop's rule (8 to 128 characters, an uppercase letter, a number, a special character) wherever a customer or admin sets a password; one message for all of them; `password-validator` removed | ✅ | | |
 | 43 | Phone optional at sign-up, US only | Registration check | ❌ | | |
 | 44 | Every admin has full access; Super Admins can add Super Admins | Admin management rules | ❌ | | |
 | 45 | Admins can set a password to share (viewing isn't possible) | Set-password endpoints | ❌ | | Client: OK without viewing? |

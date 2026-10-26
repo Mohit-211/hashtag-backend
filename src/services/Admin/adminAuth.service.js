@@ -7,6 +7,7 @@ const ApiError = require("../../utils/ApiError");
 const config = require("../../config/config");
 const validateEmail = require("../../helpers/validateEmail");
 const validatePassword = require("../../helpers/validatePassword");
+const { PASSWORD_RULES } = require("../../helpers/validatePassword");
 const {
 	sendPasswordResetEmail,
 	sendAccountSetupEmail,
@@ -28,9 +29,6 @@ const {
 	ADMIN_TOKEN_TYPE,
 	isSuperAdminRecord,
 } = require("../../middlewares/adminAuth.middleware");
-
-const PASSWORD_RULES =
-	"Password should have a minimum length of 8 characters and must have at least 2 digits and No Blank Space";
 
 const INVALID_LOGIN = "Invalid email or password. Please try again.";
 

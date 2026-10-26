@@ -4,6 +4,7 @@ const { Op } = require('sequelize');
 const { User, UserToken, Profile } = require('../models');
 const validateEmail = require('../helpers/validateEmail');
 const validatePassword = require('../helpers/validatePassword');
+const { PASSWORD_RULES } = require('../helpers/validatePassword');
 const { tokenTypes, userStatusTypes } = require('../config/types');
 const catchAsync = require('../utils/catchAsync');
 const ApiError = require('../utils/ApiError');
@@ -11,8 +12,6 @@ const { getRequestToken, verifyJwt } = require('../utils/authToken');
 
 const config = require('../config/config');
 const responseWrapper = require('../config/responseWrapper');
-
-const PASSWORD_RULES = 'Password should have a minimum length of 8 characters and must have at least 2 digits and No Blank Space';
 
 const validateRegisterUserBody = catchAsync(async (req, res, next) => {
     const { name, email, mobile, password, confirm_password } = req.body;
@@ -124,7 +123,6 @@ const useCustomerRole = (req, res, next) => {
 };
 
 module.exports = {
-    PASSWORD_RULES,
     validateRegisterUserBody,
     verifyAuthJWTToken,
     validateResetPassordBody,
