@@ -54,6 +54,17 @@ const envVarsSchema = Joi.object()
       .email()
       .required()
       .description("team inbox for contact-form messages and new sourcing requests"),
+    SHIP_FROM_NAME: Joi.string().required().description("sender name on shipping labels"),
+    SHIP_FROM_PHONE: Joi.string().required().description("sender phone on shipping labels"),
+    SHIP_FROM_ADDRESS_LINE1: Joi.string().required().description("sender street address"),
+    SHIP_FROM_CITY: Joi.string().required().description("sender city"),
+    SHIP_FROM_STATE: Joi.string().length(2).required().description("sender state, two-letter code"),
+    SHIP_FROM_POSTAL_CODE: Joi.string().required().description("sender ZIP code"),
+    SHIP_FROM_COUNTRY: Joi.string().length(2).default("US").description("sender country, two-letter code"),
+    DEFAULT_PACKAGE_WEIGHT_LB: Joi.number()
+      .positive()
+      .default(1)
+      .description("weight per item, in pounds, for variants that have none"),
     DEFAULT_API_DATA_LIMIT: Joi.number().default(15),
     ACCESSDOMAINS: Joi.string().description(
       "All allow origin URL coma seprated",
@@ -119,6 +130,19 @@ module.exports = {
     },
     from: envVars.EMAIL_FROM,
     contactInbox: envVars.CONTACT_INBOX,
+  },
+  shipping: {
+    // ShipStation v2 address fields.
+    from: {
+      name: envVars.SHIP_FROM_NAME,
+      phone: envVars.SHIP_FROM_PHONE,
+      address_line1: envVars.SHIP_FROM_ADDRESS_LINE1,
+      city_locality: envVars.SHIP_FROM_CITY,
+      state_province: envVars.SHIP_FROM_STATE,
+      postal_code: envVars.SHIP_FROM_POSTAL_CODE,
+      country_code: envVars.SHIP_FROM_COUNTRY,
+    },
+    defaultWeightLb: envVars.DEFAULT_PACKAGE_WEIGHT_LB,
   },
   accessDomains: envVars.ACCESSDOMAINS,
   frontendUrl: envVars.FRONTEND_URL.replace(/\/+$/, ""),

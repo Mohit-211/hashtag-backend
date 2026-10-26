@@ -66,6 +66,7 @@ These need the backend changes on branch `feature/client-decisions`, listed unde
 On branch `feature/client-decisions`. This section grows with each change until the branch is released.
 
 - **SAGE markup is 49.25%** (Q11), the rate the shop applies itself today. Once the backend's migration has run, SAGE prices in the cart and in `price_tiers` match what the product page shows.
+- **Shipping quotes:** an item without a weight now counts as 1 lb instead of 0.5 lb (Q31), so some quotes go up. Nothing changes in the request or the response.
 
 ---
 

@@ -6,6 +6,7 @@ const {
   ProductVariant,
 } = require("../models");
 const { calculatePricing } = require("./pricing");
+const config = require("./config");
 const httpStatus = require("http-status");
 const ApiError = require("../utils/ApiError");
 
@@ -31,15 +32,8 @@ const mapAddress = (address) => ({
   country_code: address.country_code || address.country || "US",
 });
 
-const getShipFromAddress = () => ({
-  name: "Patrick LaFleur",
-  phone: "8327526450",
-  address_line1: "4027 Spyder Spoiler Court",
-  city_locality: "Katy",
-  state_province: "TX",
-  postal_code: "77494",
-  country_code: "US",
-});
+// The sender on every label and rate request, from the SHIP_FROM_* settings.
+const getShipFromAddress = () => ({ ...config.shipping.from });
 
 // ====================== CREATE ORDER + SHIPMENT IN DASHBOARD ======================
 const createShipstationOrderV2 = async (
@@ -263,7 +257,7 @@ const createShipmentForOrder = async (order) => {
 
     const address = await Address.findByPk(order.address_id);
     const totalWeight = orderItems.reduce((sum, i) => {
-      return sum + i.quantity * Number(i.variant?.unit_weight || 0.5);
+      return sum + i.quantity * Number(i.variant?.unit_weight || config.shipping.defaultWeightLb);
     }, 0);
 
     // Create Order in Dashboard
@@ -316,7 +310,7 @@ const purchaseLabelForOrder = async (order) => {
 
     const totalWeight = orderItems.reduce(
       (sum, i) => {
-        return sum + i.quantity * Number(i.variant?.unit_weight || 0.5);
+        return sum + i.quantity * Number(i.variant?.unit_weight || config.shipping.defaultWeightLb);
       },
 
       0,
@@ -376,7 +370,7 @@ const cancelShipstationShipment = async (order) => {
 const getShippingRates = async ({ address, items }) => {
   try {
     const totalWeight = items.reduce((sum, i) => {
-      const weight = Number(i.variant?.unit_weight || 0.5);
+      const weight = Number(i.variant?.unit_weight || config.shipping.defaultWeightLb);
       return sum + i.quantity * weight;
     }, 0);
 

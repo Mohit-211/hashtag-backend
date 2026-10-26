@@ -52,6 +52,9 @@ Found after the audit: N1 to N3 (bottom of this file).
 1. **Any time:** run `migrations/2026-10-26_supplier_markups.sql`.
 2. **In `.env`** (each one is required; the app won't start without it):
    - `CONTACT_INBOX=patrick@hashtagbillionaire.com`
+   - `SHIP_FROM_NAME`: the business name, once the client confirms the spelling.
+   - `SHIP_FROM_PHONE`, `SHIP_FROM_ADDRESS_LINE1`, `SHIP_FROM_CITY`, `SHIP_FROM_STATE`, `SHIP_FROM_POSTAL_CODE`: the phone and address the client confirmed, the ones hard-coded until now (`git show 11b645d:src/config/shipstation.js`).
+   - Optional: `DEFAULT_PACKAGE_WEIGHT_LB` (1 when unset).
 3. **Deploy:** `git pull`, then `pm2 restart backend --update-env`.
 
 Changes the shop and the admin panel need: [docs/frontend-changes.md](docs/frontend-changes.md), [docs/admin-panel-changes.md](docs/admin-panel-changes.md).
@@ -89,7 +92,7 @@ Changes the shop and the admin panel need: [docs/frontend-changes.md](docs/front
 | H9 | Admin product endpoints failed | ✅ | `44141b0` | |
 | H10 | Undefined names | ◐ | `335d27b`, `44141b0` | 4 left, all in payment code (`npm run lint`). Payments |
 | H11 | Error handler closed connections | ✅ | `335d27b` | |
-| H12 | Hard-coded personal data | ◐ | `335d27b`, `44141b0` | Contact inbox moved to `CONTACT_INBOX` (Q58); ship-from address answered (Q30); PayPal return URLs (Payments) |
+| H12 | Hard-coded personal data | ◐ | `335d27b`, `44141b0` | Contact inbox moved to `CONTACT_INBOX` (Q58) and the sender to `SHIP_FROM_*` (Q30). Left: PayPal return URLs (Payments) |
 | H13 | SAGE handling charge missing at add-to-cart | ✅ | `44141b0` | |
 | H14 | Tax fixed at 8.25% | ◐ | | The client keeps a flat 8.25% (Q29). Open: whether shipping is taxed. Payments |
 | H15 | Decoration priced per size | ❌ | | The client chose per artwork (Q1); follow-ups open |
@@ -190,8 +193,8 @@ The client answered on 26 October; the questions are in `docs/client-questions.m
 | 21 | AI, PDF, EPS, JPG, SVG, PSD; 250 MB | Upload rules per field | ❌ | | Client: PNG? 250 MB is over Cloudflare's 100 MB |
 | 27, 28 | The team buys labels in ShipStation; the customer pays the quoted rate | C8, H8, H16 | ❌ | | Payments |
 | 29 | A flat 8.25% "to total order amount" | H14 | ◐ | | Client: is shipping included? |
-| 30 | Ship-from: the business name, at the same address | Sender in `.env` (H12) | ❌ | | Client: the exact name |
-| 31 | Default 1 lb; supplier weights; admins can set a weight | Default in settings; weight on admin edits; OttoCap weight (H22) | ❌ | | |
+| 30 | Ship-from: the business name, at the same address | Sender moved from the code to `SHIP_FROM_*` in `.env` (H12) | ✅ | | Client: the exact name to put in `SHIP_FROM_NAME` |
+| 31 | Default 1 lb; supplier weights; admins can set a weight | Done: default 1 lb (`DEFAULT_PACKAGE_WEIGHT_LB`, was 0.5). Open: weight on admin edits; OttoCap weight (H22) | ◐ | | |
 | 32 | US mainland only | Switch off other regions and refuse addresses there | ❌ | | Client: Alaska? DC? |
 | 34 | Cancel within 2 hours; refunds by hand in 5–7 days | C10, M9; mark the order for a manual refund | ❌ | | Payments |
 | 35 | Keep the unpaid-order flow | H8 only | ❌ | | Payments |
