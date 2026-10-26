@@ -34,6 +34,7 @@ Found after the audit: N1 to N3 (bottom of this file).
 | `127e0e3`, `247b90e`, `e2f8366` | 15 Oct | Image recovery from the shop's cache; missing-image report | yes |
 | `44141b0` | 15 Oct | Bug sweep: admin panel reports and audit items needing no client input | yes |
 | `aba0065` | 16 Oct | Supplier pricing hidden from shoppers; SAGE stock; supplier status markers; ESLint | yes |
+| `8f53487` to `96d6432` | 26 Oct | Client decisions, first batch: markups, contact inbox, label sender and default weight, syncs on the 1st, one password rule, optional US phone, Super Admin management and set-password, unverified accounts erased, all-orders filter for the admin panel | no |
 
 ### Deploying `fix/bug-sweep`
 
@@ -187,15 +188,15 @@ The client answered on 26 October; the questions are in `docs/client-questions.m
 | 3 | No setup fee for screen print, DTF or DTG; $20 when the artwork isn't vector | Detect raster artwork and add the fee | ❌ | | Client: per artwork? embroidery too? |
 | 4, 5 | Price tables are correct and should be editable in the admin; hoodie Full Front and Full Back embroidery allowed | Tables in the database, admin endpoints, public read endpoint | ❌ | | Client: the hoodie price (Q5) |
 | 10 | Unanswered; proposed: refuse choices that aren't on the price list | Allow-list, with the price tables (C4) | ❌ | | |
-| 11 | Markups: SAGE 49.25%; SanMar, S&S and OttoCap 66.67% | Set the rates (`migrations/2026-10-26_supplier_markups.sql`); 49.25% as the SAGE fallback | ✅ | | |
+| 11 | Markups: SAGE 49.25%; SanMar, S&S and OttoCap 66.67% | Set the rates (`migrations/2026-10-26_supplier_markups.sql`); 49.25% as the SAGE fallback | ✅ | `1693774` | |
 | 12 | "Where do you see this?" | None: no SAGE setup charge is imported, so none is shown or charged | ❌ | | Client: charge SAGE setup fees? |
 | 18 | Hide supplier cost from shoppers | Built in `aba0065`; remove `EXPOSE_SUPPLIER_COST` after the shop's release | ◐ | `aba0065` | Shop |
 | 19, 20 | Original artwork files; artwork, size and colours can differ per location | One decoration per location on cart and order items; download in the admin | ❌ | | Client: does "cdi" mean CDR? |
 | 21 | AI, PDF, EPS, JPG, SVG, PSD; 250 MB | Upload rules per field | ❌ | | Client: PNG? 250 MB is over Cloudflare's 100 MB |
 | 27, 28 | The team buys labels in ShipStation; the customer pays the quoted rate | C8, H8, H16 | ❌ | | Payments |
 | 29 | A flat 8.25% "to total order amount" | H14 | ◐ | | Client: is shipping included? |
-| 30 | Ship-from: the business name, at the same address | Sender moved from the code to `SHIP_FROM_*` in `.env` (H12) | ✅ | | Client: the exact name to put in `SHIP_FROM_NAME` |
-| 31 | Default 1 lb; supplier weights; admins can set a weight | Done: default 1 lb (`DEFAULT_PACKAGE_WEIGHT_LB`, was 0.5). Open: weight on admin edits; OttoCap weight (H22) | ◐ | | |
+| 30 | Ship-from: the business name, at the same address | Sender moved from the code to `SHIP_FROM_*` in `.env` (H12) | ✅ | `ea702b5` | Client: the exact name to put in `SHIP_FROM_NAME` |
+| 31 | Default 1 lb; supplier weights; admins can set a weight | Done: default 1 lb (`DEFAULT_PACKAGE_WEIGHT_LB`, was 0.5). Open: weight on admin edits; OttoCap weight (H22) | ◐ | `ea702b5` | |
 | 32 | US mainland only | Switch off other regions and refuse addresses there | ❌ | | Client: Alaska? DC? |
 | 34 | Cancel within 2 hours; refunds by hand in 5–7 days | C10, M9; mark the order for a manual refund | ❌ | | Payments |
 | 35 | Keep the unpaid-order flow | H8 only | ❌ | | Payments |
@@ -203,18 +204,18 @@ The client answered on 26 October; the questions are in `docs/client-questions.m
 | 37 | Card, Google Pay, Cash App, PayPal and Apple Pay, on current APIs | C11, Apple Pay, upgrades | ❌ | | Payments |
 | 38 | Every order email; a confirmation page | Order emails | ❌ | | Payments; client: a team email too? |
 | 39 | Tracking for signed-in customers; the admin picks ShipStation or manual updates | Tracking mode per order; manual status endpoint | ❌ | | Payments |
-| 40 | Erase unverified accounts completely, past ones too | The 2-hour cleanup erases the account with its profile, photo, tokens, cart, wishlist and addresses, including the accounts the old job only hid | ✅ | | |
-| 42 | The shop's password rule everywhere | `validatePassword` checks the shop's rule (8 to 128 characters, an uppercase letter, a number, a special character) wherever a customer or admin sets a password; one message for all of them; `password-validator` removed | ✅ | | |
-| 43 | Phone optional at sign-up, US only | Sign-up takes no phone, or a US number (formatting and +1 allowed), stored as 10 digits | ✅ | | |
-| 44 | Every admin has full access; Super Admins can add Super Admins | A Super Admin can create or promote Super Admins and delete other Super Admins; nobody can change their own role or delete themselves | ✅ | | |
-| 45 | Admins can set a password to share (viewing isn't possible) | `PUT admin/user/setPassword/:id` (any admin) and `PUT admin/auth/setAdminPassword/:id` (Super Admin); the account's sessions and emailed links stop working | ✅ | | Client: OK without viewing? |
+| 40 | Erase unverified accounts completely, past ones too | The 2-hour cleanup erases the account with its profile, photo, tokens, cart, wishlist and addresses, including the accounts the old job only hid | ✅ | `ddb990d` | |
+| 42 | The shop's password rule everywhere | `validatePassword` checks the shop's rule (8 to 128 characters, an uppercase letter, a number, a special character) wherever a customer or admin sets a password; one message for all of them; `password-validator` removed | ✅ | `16cca53` | |
+| 43 | Phone optional at sign-up, US only | Sign-up takes no phone, or a US number (formatting and +1 allowed), stored as 10 digits | ✅ | `60a9d7a` | |
+| 44 | Every admin has full access; Super Admins can add Super Admins | A Super Admin can create or promote Super Admins and delete other Super Admins; nobody can change their own role or delete themselves | ✅ | `9f41993` | |
+| 45 | Admins can set a password to share (viewing isn't possible) | `PUT admin/user/setPassword/:id` (any admin) and `PUT admin/auth/setAdminPassword/:id` (Super Admin); the account's sessions and emailed links stop working | ✅ | `9f41993` | Client: OK without viewing? |
 | 46 | A closed account is kept 30 days, restored by signing in, then deleted | Grace period and purge | ❌ | | Client: keep orders without personal details? |
 | 47 | Identical prices for guests and signed-in customers; SAGE cards show the lowest tier price | One pricing path; lowest price in the product list | ❌ | | |
 | 48 | Zero stock can't be ordered | Built in `aba0065` | ✅ | `aba0065` | |
 | 49 | "Show them all, they should only disappear if quantity goes to zero" | | ❌ | | Client: what it means |
-| 51 | All supplier syncs on the 1st | One cron at 2 AM New York time on the 1st runs SAGE, SanMar, S&S and OttoCap one after another (were the 5th, 10th, 15th and 25th) | ✅ | | |
+| 51 | All supplier syncs on the 1st | One cron at 2 AM New York time on the 1st runs SAGE, SanMar, S&S and OttoCap one after another (were the 5th, 10th, 15th and 25th) | ✅ | `0bd4ccd` | |
 | 56 | The team manages the gallery in the admin | Gallery table, admin endpoints, public list | ❌ | | |
-| 58 | patrick@hashtagbillionaire.com everywhere | Contact-form messages and new sourcing requests are emailed to `CONTACT_INBOX` (sourcing requests notified no one before) | ✅ | | |
+| 58 | patrick@hashtagbillionaire.com everywhere | Contact-form messages and new sourcing requests are emailed to `CONTACT_INBOX` (sourcing requests notified no one before) | ✅ | `e691cce` | |
 
 ## Next
 
