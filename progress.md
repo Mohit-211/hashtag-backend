@@ -56,6 +56,7 @@ Found after the audit: N1 to N3 (bottom of this file).
    - `SHIP_FROM_PHONE`, `SHIP_FROM_ADDRESS_LINE1`, `SHIP_FROM_CITY`, `SHIP_FROM_STATE`, `SHIP_FROM_POSTAL_CODE`: the phone and address the client confirmed, the ones hard-coded until now (`git show 11b645d:src/config/shipstation.js`).
    - Optional: `DEFAULT_PACKAGE_WEIGHT_LB` (1 when unset).
 3. **Deploy:** `git pull`, then `npm install --omit=dev`, then `pm2 restart backend --update-env`.
+4. **Within 15 minutes:** the account cleanup erases every account left unverified for 2 hours, including the ones hidden since 15 October, as the client asked (Q40). Take a database backup first if a copy should be kept.
 
 Changes the shop and the admin panel need: [docs/frontend-changes.md](docs/frontend-changes.md), [docs/admin-panel-changes.md](docs/admin-panel-changes.md).
 
@@ -202,7 +203,7 @@ The client answered on 26 October; the questions are in `docs/client-questions.m
 | 37 | Card, Google Pay, Cash App, PayPal and Apple Pay, on current APIs | C11, Apple Pay, upgrades | ❌ | | Payments |
 | 38 | Every order email; a confirmation page | Order emails | ❌ | | Payments; client: a team email too? |
 | 39 | Tracking for signed-in customers; the admin picks ShipStation or manual updates | Tracking mode per order; manual status endpoint | ❌ | | Payments |
-| 40 | Erase unverified accounts completely, past ones too | Hard delete in the cleanup job | ❌ | | |
+| 40 | Erase unverified accounts completely, past ones too | The 2-hour cleanup erases the account with its profile, photo, tokens, cart, wishlist and addresses, including the accounts the old job only hid | ✅ | | |
 | 42 | The shop's password rule everywhere | `validatePassword` checks the shop's rule (8 to 128 characters, an uppercase letter, a number, a special character) wherever a customer or admin sets a password; one message for all of them; `password-validator` removed | ✅ | | |
 | 43 | Phone optional at sign-up, US only | Sign-up takes no phone, or a US number (formatting and +1 allowed), stored as 10 digits | ✅ | | |
 | 44 | Every admin has full access; Super Admins can add Super Admins | A Super Admin can create or promote Super Admins and delete other Super Admins; nobody can change their own role or delete themselves | ✅ | | |
