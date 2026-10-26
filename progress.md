@@ -211,7 +211,7 @@ The client answered on 26 October; the questions are in `docs/client-questions.m
 | 47 | Identical prices for guests and signed-in customers; SAGE cards show the lowest tier price | One pricing path; lowest price in the product list | ❌ | | |
 | 48 | Zero stock can't be ordered | Built in `aba0065` | ✅ | `aba0065` | |
 | 49 | "Show them all, they should only disappear if quantity goes to zero" | | ❌ | | Client: what it means |
-| 51 | All supplier syncs on the 1st | Cron schedule | ❌ | | |
+| 51 | All supplier syncs on the 1st | One cron at 2 AM New York time on the 1st runs SAGE, SanMar, S&S and OttoCap one after another (were the 5th, 10th, 15th and 25th) | ✅ | | |
 | 56 | The team manages the gallery in the admin | Gallery table, admin endpoints, public list | ❌ | | |
 | 58 | patrick@hashtagbillionaire.com everywhere | Contact-form messages and new sourcing requests are emailed to `CONTACT_INBOX` (sourcing requests notified no one before) | ✅ | | |
 

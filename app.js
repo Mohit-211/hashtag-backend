@@ -42,35 +42,39 @@ app.set("trust proxy", config.trustProxy);
 // Deletes unverified accounts past their deadline and old one-time tokens.
 cron.schedule("*/15 * * * *", runAccountCleanup);
 
-// Monthly supplier syncs (New York time). A run is skipped if the previous one of the same
-// sync is still going; this app runs as a single process.
-const running = new Set();
-const scheduleMonthlySync = (name, expression, sync) =>
-  cron.schedule(
-    expression,
-    async () => {
-      if (running.has(name)) {
-        logger.warn(`Monthly ${name} sync skipped: the previous run is still going`);
-        return;
-      }
-      running.add(name);
+// Monthly supplier syncs: all on the 1st at 2 AM New York time, one after another so they
+// don't compete for the database. A failed sync is logged and the next one still runs. A run
+// is skipped if the previous one is still going; this app runs as a single process.
+const monthlySyncs = [
+  ["SAGE", syncImportedSageProducts],
+  ["SanMar", syncImportedSanmarProducts],
+  ["S&S", syncImportedSSProducts],
+  ["OttoCap", syncImportedOttoProducts],
+];
+let monthlySyncsRunning = false;
+
+const runMonthlySyncs = async () => {
+  if (monthlySyncsRunning) {
+    logger.warn("Monthly supplier syncs skipped: the previous run is still going");
+    return;
+  }
+  monthlySyncsRunning = true;
+  try {
+    for (const [name, sync] of monthlySyncs) {
       logger.info(`Monthly ${name} sync started`);
       try {
         await sync();
         logger.info(`Monthly ${name} sync finished`);
       } catch (err) {
         logger.error(`Monthly ${name} sync failed: ${err?.stack || err}`);
-      } finally {
-        running.delete(name);
       }
-    },
-    { timezone: "America/New_York" },
-  );
+    }
+  } finally {
+    monthlySyncsRunning = false;
+  }
+};
 
-scheduleMonthlySync("SAGE", "0 2 5 * *", syncImportedSageProducts);
-scheduleMonthlySync("SanMar", "0 2 10 * *", syncImportedSanmarProducts);
-scheduleMonthlySync("S&S", "0 2 15 * *", syncImportedSSProducts);
-scheduleMonthlySync("OttoCap", "0 2 25 * *", syncImportedOttoProducts);
+cron.schedule("0 2 1 * *", runMonthlySyncs, { timezone: "America/New_York" });
 
 // set security HTTP headers
 app.use(
