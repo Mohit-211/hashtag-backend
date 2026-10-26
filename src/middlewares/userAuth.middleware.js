@@ -3,6 +3,7 @@ const httpStatus = require('http-status');
 const { Op } = require('sequelize');
 const { User, UserToken, Profile } = require('../models');
 const validateEmail = require('../helpers/validateEmail');
+const normalizeUsPhone = require('../helpers/normalizeUsPhone');
 const validatePassword = require('../helpers/validatePassword');
 const { PASSWORD_RULES } = require('../helpers/validatePassword');
 const { tokenTypes, userStatusTypes } = require('../config/types');
@@ -17,12 +18,23 @@ const validateRegisterUserBody = catchAsync(async (req, res, next) => {
     const { name, email, mobile, password, confirm_password } = req.body;
     const { role_id } = req.headers;
 
-    if (!name || !email || !mobile || !password || !confirm_password) {
-        return responseWrapper(res, '', 'Please Enter Required Fields : [ name || email || mobile || password || confirm_password ]', httpStatus.BAD_REQUEST);
+    if (!name || !email || !password || !confirm_password) {
+        return responseWrapper(res, '', 'Please Enter Required Fields : [ name || email || password || confirm_password ]', httpStatus.BAD_REQUEST);
     };
 
     if (!validateEmail(email) || String(name).trim().length === 0) {
         return responseWrapper(res, '', 'Invalid Name or Email', httpStatus.BAD_REQUEST);
+    };
+
+    // The phone number is optional; when given it must be a US number, stored as 10 digits.
+    if (mobile === undefined || mobile === null || String(mobile).trim() === '') {
+        req.body.mobile = null;
+    } else {
+        const usMobile = normalizeUsPhone(mobile);
+        if (!usMobile) {
+            return responseWrapper(res, '', 'Please enter a valid 10-digit US phone number, or leave it empty.', httpStatus.BAD_REQUEST);
+        };
+        req.body.mobile = usMobile;
     };
 
     if (await User.isEmailTaken(email, role_id)) {
