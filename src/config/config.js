@@ -50,6 +50,10 @@ const envVarsSchema = Joi.object()
     EMAIL_FROM: Joi.string().description(
       "the from field in the emails sent by the app",
     ),
+    CONTACT_INBOX: Joi.string()
+      .email()
+      .required()
+      .description("team inbox for contact-form messages and new sourcing requests"),
     DEFAULT_API_DATA_LIMIT: Joi.number().default(15),
     ACCESSDOMAINS: Joi.string().description(
       "All allow origin URL coma seprated",
@@ -114,6 +118,7 @@ module.exports = {
       },
     },
     from: envVars.EMAIL_FROM,
+    contactInbox: envVars.CONTACT_INBOX,
   },
   accessDomains: envVars.ACCESSDOMAINS,
   frontendUrl: envVars.FRONTEND_URL.replace(/\/+$/, ""),

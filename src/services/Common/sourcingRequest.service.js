@@ -4,6 +4,7 @@ const { SourcingRequest, SourcingRequestAttachment } = require("../../models");
 const ApiError = require("../../utils/ApiError");
 const {
   sendSourcingRequestConfirmation,
+  sendAdminSourcingRequestNotification,
   sendSourcingRequestStatusEmail,
 } = require("./email.service");
 
@@ -77,6 +78,22 @@ const createSourcingRequest = async (body, files) => {
     } catch (emailError) {
       console.error(
         "Sourcing request confirmation email failed:",
+        emailError.message,
+      );
+    }
+
+    try {
+      await sendAdminSourcingRequestNotification(
+        request.name,
+        request.email,
+        request.company,
+        request.requested_name,
+        request.details,
+        images.length,
+      );
+    } catch (emailError) {
+      console.error(
+        "Sourcing request team notification failed:",
         emailError.message,
       );
     }

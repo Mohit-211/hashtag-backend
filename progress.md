@@ -50,7 +50,9 @@ Found after the audit: N1 to N3 (bottom of this file).
 ### Deploying `feature/client-decisions` (not released)
 
 1. **Any time:** run `migrations/2026-10-26_supplier_markups.sql`.
-2. **Deploy:** `git pull`, then `pm2 restart backend --update-env`.
+2. **In `.env`** (each one is required; the app won't start without it):
+   - `CONTACT_INBOX=patrick@hashtagbillionaire.com`
+3. **Deploy:** `git pull`, then `pm2 restart backend --update-env`.
 
 Changes the shop and the admin panel need: [docs/frontend-changes.md](docs/frontend-changes.md), [docs/admin-panel-changes.md](docs/admin-panel-changes.md).
 
@@ -87,7 +89,7 @@ Changes the shop and the admin panel need: [docs/frontend-changes.md](docs/front
 | H9 | Admin product endpoints failed | ✅ | `44141b0` | |
 | H10 | Undefined names | ◐ | `335d27b`, `44141b0` | 4 left, all in payment code (`npm run lint`). Payments |
 | H11 | Error handler closed connections | ✅ | `335d27b` | |
-| H12 | Hard-coded personal data | ◐ | `335d27b`, `44141b0` | Ship-from address and contact-notification inbox answered (Q30, Q58); PayPal return URLs (Payments) |
+| H12 | Hard-coded personal data | ◐ | `335d27b`, `44141b0` | Contact inbox moved to `CONTACT_INBOX` (Q58); ship-from address answered (Q30); PayPal return URLs (Payments) |
 | H13 | SAGE handling charge missing at add-to-cart | ✅ | `44141b0` | |
 | H14 | Tax fixed at 8.25% | ◐ | | The client keeps a flat 8.25% (Q29). Open: whether shipping is taxed. Payments |
 | H15 | Decoration priced per size | ❌ | | The client chose per artwork (Q1); follow-ups open |
@@ -208,7 +210,7 @@ The client answered on 26 October; the questions are in `docs/client-questions.m
 | 49 | "Show them all, they should only disappear if quantity goes to zero" | | ❌ | | Client: what it means |
 | 51 | All supplier syncs on the 1st | Cron schedule | ❌ | | |
 | 56 | The team manages the gallery in the admin | Gallery table, admin endpoints, public list | ❌ | | |
-| 58 | patrick@hashtagbillionaire.com everywhere | Contact-form and sourcing-request notifications | ❌ | | |
+| 58 | patrick@hashtagbillionaire.com everywhere | Contact-form messages and new sourcing requests are emailed to `CONTACT_INBOX` (sourcing requests notified no one before) | ✅ | | |
 
 ## Next
 

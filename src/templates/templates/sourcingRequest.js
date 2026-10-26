@@ -1,4 +1,4 @@
-// Sourcing-request emails to the customer who asked for a product or brand.
+// Sourcing-request emails to the customer who asked for a product or brand, and to the team inbox.
 
 const { greeting, renderEmail } = require("./layout");
 
@@ -10,6 +10,22 @@ const sourcingRequestConfirmationTemplate = (name, requestedName) =>
       `${greeting(name)} thanks for your request${requestedName ? ` for "${requestedName}"` : ""}.`,
       "Our team will look into it and let you know by email when its status changes.",
     ],
+  });
+
+// To the team inbox, when the request is submitted. Returns the HTML body.
+const adminSourcingRequestNotificationTemplate = (name, email, company, requestedName, details, imageCount) =>
+  renderEmail({
+    heading: "New sourcing request",
+    paragraphs: ["Someone asked for a product or brand on the website."],
+    details: [
+      ["Name", name],
+      ["Email", email],
+      ["Company", company],
+      ["Asked for", requestedName],
+      ["Images", imageCount ? String(imageCount) : "none"],
+    ],
+    quote: details || "(no details)",
+    note: "You can also see this request in the admin panel under Sourcing Requests.",
   });
 
 // Wording per status (sourcing_requests.status). PENDING sends nothing.
@@ -57,5 +73,6 @@ const sourcingRequestStatusTemplate = (name, requestedName, status, adminNotes) 
 
 module.exports = {
   sourcingRequestConfirmationTemplate,
+  adminSourcingRequestNotificationTemplate,
   sourcingRequestStatusTemplate,
 };

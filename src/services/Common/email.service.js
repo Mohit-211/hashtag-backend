@@ -10,6 +10,7 @@ const {
     contactUsConfirmationTemplate,
     adminContactUsNotificationTemplate,
     sourcingRequestConfirmationTemplate,
+    adminSourcingRequestNotificationTemplate,
     sourcingRequestStatusTemplate,
 } = require('../../templates');
 
@@ -59,13 +60,19 @@ const sendContactUsConfirmation = async (to, name, reason) => {
 const sendAdminContactUsNotification = async (name, email, mobile, reason, message) => {
   const subject = "New Contact Us Inquiry";
   const html = adminContactUsNotificationTemplate(name, email, mobile, reason, message);
-  return await sendEmail("anshita.varyani@mypageseo.com", subject, `New contact us inquiry from ${name} (${email}): ${message}`, html);
+  return await sendEmail(config.email.contactInbox, subject, `New contact us inquiry from ${name} (${email}): ${message}`, html);
 };
 
 const sendSourcingRequestConfirmation = async (to, name, requestedName) => {
   const subject = "We've Received Your Sourcing Request";
   const html = sourcingRequestConfirmationTemplate(name, requestedName);
   return await sendEmail(to, subject, `We've received your sourcing request for ${requestedName}.`, html);
+};
+
+const sendAdminSourcingRequestNotification = async (name, email, company, requestedName, details, imageCount) => {
+  const subject = "New Sourcing Request";
+  const html = adminSourcingRequestNotificationTemplate(name, email, company, requestedName, details, imageCount);
+  return await sendEmail(config.email.contactInbox, subject, `New sourcing request from ${name} (${email}) for ${requestedName}`, html);
 };
 
 const sendSourcingRequestStatusEmail = async (to, name, requestedName, status, adminNotes) => {
@@ -82,5 +89,6 @@ module.exports = {
     sendContactUsConfirmation,
     sendAdminContactUsNotification,
     sendSourcingRequestConfirmation,
+    sendAdminSourcingRequestNotification,
     sendSourcingRequestStatusEmail
 };
