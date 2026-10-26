@@ -71,12 +71,9 @@ const validateCreateAdminBody = catchAsync(async (req, res, next) => {
         return responseWrapper(res, '', 'Invalid Name or Email', httpStatus.BAD_REQUEST);
     };
 
+    // Any role, Super Admin included: only a Super Admin reaches this route.
     const role = await Role.findByPk(parseInt(role_id));
     if (!role) return responseWrapper(res, '', 'Invalid Role Id', httpStatus.BAD_REQUEST);
-
-    if (isSuperAdminRecord({ role_id: role.id, admin_role: role })) {
-        return responseWrapper(res, '', 'You are not authorized to create this role.', httpStatus.FORBIDDEN);
-    };
 
     const department = await Department.findByPk(parseInt(department_id));
     if (!department) return responseWrapper(res, '', 'Invalid Department Id', httpStatus.BAD_REQUEST);

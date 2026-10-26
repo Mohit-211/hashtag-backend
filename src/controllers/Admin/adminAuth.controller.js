@@ -67,6 +67,11 @@ const deleteAdmin = catchAsync(async (req, res) => {
   });
 });
 
+const setAdminPassword = catchAsync(async (req, res) => {
+  await adminAuthService.setAdminPassword(req.params.id, pick(req.body, ["password", "confirm_password"]), req.admin);
+  return responseWrapper(res, "", "Password set. Share it with the admin; they can change it after signing in.");
+});
+
 module.exports = {
     createAdminUser,
     loginAdminUser,
@@ -78,4 +83,5 @@ module.exports = {
     findAdminById,
     updateAdmin,
     deleteAdmin,
+    setAdminPassword,
 };

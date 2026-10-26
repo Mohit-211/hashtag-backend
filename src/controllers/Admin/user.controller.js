@@ -46,10 +46,16 @@ const adminAddUser = catchAsync(async (req, res) => {
 	return responseWrapper(res, response, "Successfully add user", httpStatus.OK);
 });
 
+const setUserPassword = catchAsync(async (req, res) => {
+	await userService.setUserPassword(req.params.id, pick(req.body, ["password", "confirm_password"]));
+	return responseWrapper(res, "", "Password set. Share it with the customer; they can change it after signing in.", httpStatus.OK);
+});
+
 
 module.exports = {
 	getAllUsers,
 	getUserById,
 	deleteUser,
 	adminAddUser,
+	setUserPassword,
 };

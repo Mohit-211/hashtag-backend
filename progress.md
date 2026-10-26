@@ -205,8 +205,8 @@ The client answered on 26 October; the questions are in `docs/client-questions.m
 | 40 | Erase unverified accounts completely, past ones too | Hard delete in the cleanup job | ❌ | | |
 | 42 | The shop's password rule everywhere | `validatePassword` checks the shop's rule (8 to 128 characters, an uppercase letter, a number, a special character) wherever a customer or admin sets a password; one message for all of them; `password-validator` removed | ✅ | | |
 | 43 | Phone optional at sign-up, US only | Sign-up takes no phone, or a US number (formatting and +1 allowed), stored as 10 digits | ✅ | | |
-| 44 | Every admin has full access; Super Admins can add Super Admins | Admin management rules | ❌ | | |
-| 45 | Admins can set a password to share (viewing isn't possible) | Set-password endpoints | ❌ | | Client: OK without viewing? |
+| 44 | Every admin has full access; Super Admins can add Super Admins | A Super Admin can create or promote Super Admins and delete other Super Admins; nobody can change their own role or delete themselves | ✅ | | |
+| 45 | Admins can set a password to share (viewing isn't possible) | `PUT admin/user/setPassword/:id` (any admin) and `PUT admin/auth/setAdminPassword/:id` (Super Admin); the account's sessions and emailed links stop working | ✅ | | Client: OK without viewing? |
 | 46 | A closed account is kept 30 days, restored by signing in, then deleted | Grace period and purge | ❌ | | Client: keep orders without personal details? |
 | 47 | Identical prices for guests and signed-in customers; SAGE cards show the lowest tier price | One pricing path; lowest price in the product list | ❌ | | |
 | 48 | Zero stock can't be ordered | Built in `aba0065` | ✅ | `aba0065` | |

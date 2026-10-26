@@ -20,6 +20,7 @@ router.get('/getProfile', [requireAdmin], adminAuthController.getProfile);
 router.post('/register', [requireAdmin, requireSuperAdmin, adminAuthMiddleware.validateCreateAdminBody], adminAuthController.createAdminUser);
 router.put('/updateAdmin/:id', [requireAdmin, requireSuperAdmin], adminAuthController.updateAdmin);
 router.post('/deleteAdmin', [requireAdmin, requireSuperAdmin], adminAuthController.deleteAdmin);
+router.put('/setAdminPassword/:id', [requireAdmin, requireSuperAdmin], adminAuthController.setAdminPassword);
 router.get('/getAllAdmins', [requireAdmin, requireSuperAdmin], adminAuthController.getAllAdmins);
 router.get('/findAdminById/:id', [requireAdmin, requireSuperAdmin], adminAuthController.findAdminById);
 

@@ -61,6 +61,11 @@ On branch `feature/client-decisions`. This section grows with each change until 
 - **Markups** (Q11): once `migrations/2026-10-26_supplier_markups.sql` has run, `GET product/pricing/markup` lists SAGE at 49.25% and SANMAR, SS and OTTOCAP at 66.67%. Any of the four rows that didn't exist is created, so each one can be edited from the Pricing page.
 - **Supplier syncs** (Q51): all four run on the 1st of each month at 2 AM New York time, one after another, instead of the 5th, 10th, 15th and 25th. The SAGE stock change from [2026-10-16](#2026-10-16) lands on the first 1st after this release.
 - **Password rule** (Q42): the reset and set-password page and `POST admin/auth/change-password` now check: 8 to 128 characters, with an uppercase letter, a number and a special character (anything that isn't a letter or a digit, so a space counts). It replaces "8 to 100 characters, 2 digits, no spaces, not `Passw0rd` or `Password123`", which the panel's form mirrors today. A password that fails gets `400` with *"Password must be 8 to 128 characters long and include an uppercase letter, a number and a special character."* Existing passwords keep working.
+- **Super Admins** (Q44): `POST admin/auth/register` and `PUT admin/auth/updateAdmin/:id` accept the Super Admin role (until now they answered `403`), and `POST admin/auth/deleteAdmin` can delete another Super Admin. Still refused with `400`: changing your own role and deleting yourself, so the Super Admin doing it always remains. These routes stay Super Admin only.
+- **Set a password** (Q45). Both take `{ password, confirm_password }` and the password rule above:
+  - `PUT admin/user/setPassword/:id`, any admin: a customer's password. The customer is signed out everywhere, and any emailed reset or set-password link stops working. A customer who hasn't verified their email yet still has to.
+  - `PUT admin/auth/setAdminPassword/:id`, Super Admin only: another admin's password. Their sessions end (`401`, then they sign in with the new password). For your own password use `change-password`; this one answers `400`.
+  - `200` on success, `400` for the rule or a mismatch, `404` for an unknown or deleted account. The password isn't returned or emailed, so show the admin what they typed (or generated) before sending, for them to share.
 
 ---
 

@@ -7,8 +7,11 @@ const bcrypt = require("bcryptjs");
 const { User, Profile } = require("../../models");
 const ApiError = require("../../utils/ApiError");
 const config = require("../../config/config");
+const validatePassword = require("../../helpers/validatePassword");
+const { PASSWORD_RULES } = require("../../helpers/validatePassword");
 const { sendAccountSetupEmail } = require("../Common/email.service");
-const { issueToken } = require("../Common/accountToken.service");
+const { issueToken, revokeTokens } = require("../Common/accountToken.service");
+const { revokeUserTokens } = require("../Common/token.service");
 const { accountTypes, accountTokenPurposes, userStatusTypes } = require("../../config/types");
 const { ACCOUNT_SETUP_HOURS, links } = require("../../config/accountPolicy");
 
@@ -200,9 +203,51 @@ const adminAddUser = async (reqBody) => {
   }
 };
 
+// Sets a customer's password, for the admin to share by hand. Passwords are stored one-way,
+// so it can't be shown again later. The customer is signed out everywhere, and any emailed
+// reset or set-password link stops working. The account's status doesn't change: an account
+// that hasn't verified its email still has to.
+const setUserPassword = async (id, reqBody) => {
+  const { password, confirm_password } = reqBody;
+
+  if (!password || !confirm_password) {
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      "Please Enter Required Fields : [ password, confirm_password ]",
+    );
+  }
+  if (password !== confirm_password) {
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      "New Password and Confirm Password Must Be Equal",
+    );
+  }
+  if (!validatePassword(password)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, PASSWORD_RULES);
+  }
+
+  const user = await User.findOne({ where: { id, is_active: true } });
+  if (!user) {
+    throw new ApiError(httpStatus.NOT_FOUND, "User not found");
+  }
+
+  await user.update({ password: bcrypt.hashSync(password, 10) });
+
+  await revokeUserTokens(user.id);
+  await revokeTokens({
+    accountType: accountTypes.USER,
+    accountId: user.id,
+    purposes: [
+      accountTokenPurposes.PASSWORD_RESET,
+      accountTokenPurposes.ACCOUNT_SETUP,
+    ],
+  });
+};
+
 module.exports = {
   getAllUsers,
   getUserById,
   deleteUser,
   adminAddUser,
+  setUserPassword,
 };

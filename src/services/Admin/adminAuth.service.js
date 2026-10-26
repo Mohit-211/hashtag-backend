@@ -25,10 +25,7 @@ const {
 	LINK_RESEND_SECONDS,
 	links,
 } = require("../../config/accountPolicy");
-const {
-	ADMIN_TOKEN_TYPE,
-	isSuperAdminRecord,
-} = require("../../middlewares/adminAuth.middleware");
+const { ADMIN_TOKEN_TYPE } = require("../../middlewares/adminAuth.middleware");
 
 const INVALID_LOGIN = "Invalid email or password. Please try again.";
 
@@ -246,7 +243,8 @@ const findAdminById = async (id) => {
 	return adminDoc ? adminDoc : {};
 };
 
-// Super Admin only. Name, email, role and department can change.
+// Super Admin only. Name, email, role (Super Admin included) and department can change,
+// but not your own role.
 const updateAdmin = async (id, reqBody, actingAdmin) => {
 	const adminDoc = await Admin.findOne({
 		where: { id: id, is_active: true },
@@ -282,9 +280,6 @@ const updateAdmin = async (id, reqBody, actingAdmin) => {
 		if (!role) {
 			throw new ApiError(httpStatus.BAD_REQUEST, "Invalid Role Id");
 		}
-		if (isSuperAdminRecord({ role_id: role.id, admin_role: role })) {
-			throw new ApiError(httpStatus.FORBIDDEN, "You are not authorized to assign this role.");
-		}
 		updates.role_id = role.id;
 	}
 
@@ -297,7 +292,8 @@ const updateAdmin = async (id, reqBody, actingAdmin) => {
 	return findAdminById(adminDoc.id);
 };
 
-// Super Admin only. Admins can't delete themselves, and Super Admins can't be deleted here.
+// Super Admin only, Super Admins included. Nobody can delete themselves, so the Super Admin
+// doing the deleting always remains.
 const deleteAdmin = async (reqBody, actingAdmin) => {
 	const admin = await Admin.findOne({
 		where: { id: reqBody.admin_id, is_active: true },
@@ -309,11 +305,53 @@ const deleteAdmin = async (reqBody, actingAdmin) => {
 	if (String(admin.id) === String(actingAdmin.id)) {
 		throw new ApiError(httpStatus.BAD_REQUEST, "You can't delete your own account.");
 	}
-	if (isSuperAdminRecord(admin)) {
-		throw new ApiError(httpStatus.FORBIDDEN, "A Super Admin can't be deleted.");
-	}
 
 	await admin.destroy();
+};
+
+// Super Admin only: sets another admin's password, for the Super Admin to share by hand.
+// Passwords are stored one-way, so it can't be shown again later. The admin's sessions and
+// emailed links stop working. Admins change their own password with change-password.
+const setAdminPassword = async (id, reqBody, actingAdmin) => {
+	const { password, confirm_password } = reqBody;
+
+	if (!password || !confirm_password) {
+		throw new ApiError(
+			httpStatus.BAD_REQUEST,
+			"Please Enter Required Fields : [ password, confirm_password ]",
+		);
+	}
+	if (password !== confirm_password) {
+		throw new ApiError(
+			httpStatus.BAD_REQUEST,
+			"New Password and Confirm Password Must Be Equal",
+		);
+	}
+	if (!validatePassword(password)) {
+		throw new ApiError(httpStatus.BAD_REQUEST, PASSWORD_RULES);
+	}
+
+	const admin = await Admin.findOne({ where: { id, is_active: true } });
+	if (!admin) {
+		throw new ApiError(httpStatus.NOT_FOUND, "Admin not found");
+	}
+	if (String(admin.id) === String(actingAdmin.id)) {
+		throw new ApiError(httpStatus.BAD_REQUEST, "Use Change Password to change your own password.");
+	}
+
+	await admin.update({
+		password: bcrypt.hashSync(password, 10),
+		password_changed_at: new Date(),
+	});
+
+	await revokeTokens({
+		accountType: accountTypes.ADMIN,
+		accountId: admin.id,
+		purposes: [
+			accountTokenPurposes.PASSWORD_RESET,
+			accountTokenPurposes.ACCOUNT_SETUP,
+		],
+	});
 };
 
 const getAllAdmins = async () =>
@@ -334,4 +372,5 @@ module.exports = {
 	findAdminById,
 	updateAdmin,
 	deleteAdmin,
+	setAdminPassword,
 };
