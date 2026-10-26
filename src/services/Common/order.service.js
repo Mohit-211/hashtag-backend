@@ -989,7 +989,10 @@ const getAdminOrders = async ({
     where.status = status;
   }
 
-  if (payment_status) {
+  // Paid orders by default; "ALL" lists every payment status.
+  if (payment_status === "ALL") {
+    delete where.payment_status;
+  } else if (payment_status) {
     where.payment_status = payment_status;
   }
 
