@@ -4,6 +4,7 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
+| [2026-10-26: client decisions, first backend changes](#2026-10-26) | branch `feature/client-decisions`, not released | Read the notes; Q42, Q44 and Q45 in the to-do list |
 | [2026-10-16: status markers, SAGE stock, supplier pricing](#2026-10-16) | `aba0065` | **Recommended**: show variant status, add a status filter |
 | [2026-10-15: bug sweep](#2026-10-15) | `44141b0` | Optional: new endpoints and fields |
 | [2026-10-14: security release](#2026-10-14) | `335d27b` | Done |
@@ -49,6 +50,15 @@ These need the backend changes on branch `feature/client-decisions`, listed unde
 
 1. **`payment_status=ALL`:** coming in the next release: `GET order/admin?payment_status=ALL` lists orders of every payment status. Without the parameter it still lists paid orders only.
 2. **The 2 unpaid orders the panel doesn't show:** when a customer's cart changes, the backend soft-deletes their latest unpaid order (`invalidatePendingOrder` in `cartWishlist.service.js`), and orders are paranoid, so those two are hidden from every list. Nothing is missing on the panel's side; the behaviour itself is on the payments list (audit H8).
+
+---
+
+<a id="2026-10-26"></a>
+## 2026-10-26: client decisions, first backend changes (not released)
+
+On branch `feature/client-decisions`. This section grows with each change until the branch is released.
+
+- **Markups** (Q11): once `migrations/2026-10-26_supplier_markups.sql` has run, `GET product/pricing/markup` lists SAGE at 49.25% and SANMAR, SS and OTTOCAP at 66.67%. Any of the four rows that didn't exist is created, so each one can be edited from the Pricing page.
 
 ---
 

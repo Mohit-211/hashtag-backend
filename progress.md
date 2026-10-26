@@ -47,6 +47,11 @@ Found after the audit: N1 to N3 (bottom of this file).
 3. **Deploy:** `git pull`, then `npm install --omit=dev`, then `pm2 restart backend --update-env`.
 4. **After the shop's release:** remove `EXPOSE_SUPPLIER_COST` and restart.
 
+### Deploying `feature/client-decisions` (not released)
+
+1. **Any time:** run `migrations/2026-10-26_supplier_markups.sql`.
+2. **Deploy:** `git pull`, then `pm2 restart backend --update-env`.
+
 Changes the shop and the admin panel need: [docs/frontend-changes.md](docs/frontend-changes.md), [docs/admin-panel-changes.md](docs/admin-panel-changes.md).
 
 ---
@@ -176,7 +181,7 @@ The client answered on 26 October; the questions are in `docs/client-questions.m
 | 3 | No setup fee for screen print, DTF or DTG; $20 when the artwork isn't vector | Detect raster artwork and add the fee | ❌ | | Client: per artwork? embroidery too? |
 | 4, 5 | Price tables are correct and should be editable in the admin; hoodie Full Front and Full Back embroidery allowed | Tables in the database, admin endpoints, public read endpoint | ❌ | | Client: the hoodie price (Q5) |
 | 10 | Unanswered; proposed: refuse choices that aren't on the price list | Allow-list, with the price tables (C4) | ❌ | | |
-| 11 | Markups: SAGE 49.25%; SanMar, S&S and OttoCap 66.67% | Set the rates; 49.25% as the SAGE fallback | ❌ | | |
+| 11 | Markups: SAGE 49.25%; SanMar, S&S and OttoCap 66.67% | Set the rates (`migrations/2026-10-26_supplier_markups.sql`); 49.25% as the SAGE fallback | ✅ | | |
 | 12 | "Where do you see this?" | None: no SAGE setup charge is imported, so none is shown or charged | ❌ | | Client: charge SAGE setup fees? |
 | 18 | Hide supplier cost from shoppers | Built in `aba0065`; remove `EXPOSE_SUPPLIER_COST` after the shop's release | ◐ | `aba0065` | Shop |
 | 19, 20 | Original artwork files; artwork, size and colours can differ per location | One decoration per location on cart and order items; download in the admin | ❌ | | Client: does "cdi" mean CDR? |

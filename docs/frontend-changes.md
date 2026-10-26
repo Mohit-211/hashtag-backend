@@ -6,6 +6,7 @@ The client's answers of 26 October, and what they mean for the shop, are in [Cli
 
 | Release | Backend commit | Shop action |
 |---|---|---|
+| [2026-10-26: client decisions, first backend changes](#2026-10-26) | branch `feature/client-decisions`, not released | Read the notes; A37 and B4 in the to-do list |
 | [2026-10-16: supplier pricing removed, status markers, SAGE stock](#2026-10-16) | `aba0065` | **Required**: switch SAGE pricing to `price_tiers` |
 | [2026-10-15: bug sweep](#2026-10-15) | `44141b0` | None required; read the notes |
 | [2026-10-14: security release](#2026-10-14) | `335d27b` | Done (hashtag-next `7b3f110`) |
@@ -56,6 +57,15 @@ These need the backend changes on branch `feature/client-decisions`, listed unde
 | — | 47 | Guests and signed-in customers see the same prices; SAGE cards show the lowest price with "+" | Show "$X+" on SAGE product cards, from a field the product list will return. |
 
 **Waiting on the client:** A44, "Only N left" (Q49). **Later, by the client's choice:** A42 price filter (Q54), A46 Back button (Q57). **Unanswered, no change for now:** A6, A7, A8, A9, A14, A15, A16, A20, A21, A22, A23, A24, A32.
+
+---
+
+<a id="2026-10-26"></a>
+## 2026-10-26: client decisions, first backend changes (not released)
+
+On branch `feature/client-decisions`. This section grows with each change until the branch is released.
+
+- **SAGE markup is 49.25%** (Q11), the rate the shop applies itself today. Once the backend's migration has run, SAGE prices in the cart and in `price_tiers` match what the product page shows.
 
 ---
 

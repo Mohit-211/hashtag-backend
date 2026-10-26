@@ -18,3 +18,4 @@ There is no `npm run migrate`. It used `sequelize.sync({ alter: true })`, which 
 | `2026-10-14_auth_links_before_deploy.sql` | before deploying `335d27b` | run 15 Oct |
 | `2026-10-14_auth_links_after_deploy.sql` | after deploying `335d27b` | run 15 Oct |
 | `2026-10-16_supplier_status_markers_before_deploy.sql` | before deploying `aba0065` | run (its columns answer in production on 26 Oct) |
+| `2026-10-26_supplier_markups.sql` | any time (data only) | not yet |
