@@ -8,6 +8,48 @@ What each backend release changes for the admin panel, and what the panel has to
 | [2026-10-15: bug sweep](#2026-10-15) | `44141b0` | Optional: new endpoints and fields |
 | [2026-10-14: security release](#2026-10-14) | `335d27b` | Done |
 
+The client's answers of 26 October, and what they mean for the panel, are in [Client decisions](#client-decisions) below.
+
+---
+
+<a id="client-decisions"></a>
+## Client decisions (26 Oct 2026): the panel's to-do list
+
+The client answered the questions in `client-questions.md` on 26 October; Q numbers are that document's.
+
+### Can start now
+
+| Q | Decision | What the panel does |
+|---|---|---|
+| — | The 15 Oct bug sweep is live (checked 26 Oct) | The switches promised in `BACKEND_QUESTIONS.md` E2: Contact Us with `page`, `limit`, `search` and `status`; the variant detail page loading `GET product/admin/variant/:id`; sourcing requests with server paging and search; the Remove button on a saved add-on image. |
+| — | The 16 Oct release is live | Variant status badges, the `?status=` filter, product `restored_at` and the SAGE stock display ([2026-10-16](#2026-10-16)). |
+| 11 | Markups: SAGE 49.25%; SanMar, S&S and OttoCap 66.67% | Nothing to build: the Pricing page shows the rates once the backend has set them. |
+
+### With the next backend release
+
+These need the backend changes on branch `feature/client-decisions`, listed under [2026-10-26](#2026-10-26) once it is released.
+
+| Q | Decision | What the panel does |
+|---|---|---|
+| 42 | One password rule everywhere: 8+ characters with an uppercase letter, a number and a special character | Update the form check, which mirrors the old backend rule (2 digits, no spaces). |
+| 44 | Every admin has full access; Super Admins can add more Super Admins | Offer the Super Admin role when a Super Admin creates or edits an admin, and allow deleting another Super Admin (never yourself or the last one). |
+| 45 | Admins can set a password and share it; viewing a password isn't possible, since passwords are stored one-way | A "Set password" action on customers and on admins. |
+
+### After later backend work
+
+| Q | Decision | What the panel will do |
+|---|---|---|
+| 4, 5 | Decoration price tables editable in the admin | Price-table screens. |
+| 31 | Admins can set a product's weight | A weight field on product and variant edit. |
+| 34 | Cancellation within 2 hours; refunds by hand | A "refund done" action on cancelled orders. |
+| 39 | Per order: ShipStation tracking or manual updates | A tracking-mode switch and a status form on the order. |
+| 56 | The team manages the gallery | A gallery screen. |
+
+### Answers to `BACKEND_QUESTIONS.md` E3
+
+1. **`payment_status=ALL`:** coming in the next release: `GET order/admin?payment_status=ALL` lists orders of every payment status. Without the parameter it still lists paid orders only.
+2. **The 2 unpaid orders the panel doesn't show:** when a customer's cart changes, the backend soft-deletes their latest unpaid order (`invalidatePendingOrder` in `cartWishlist.service.js`), and orders are paranoid, so those two are hidden from every list. Nothing is missing on the panel's side; the behaviour itself is on the payments list (audit H8).
+
 ---
 
 <a id="2026-10-16"></a>

@@ -2,6 +2,8 @@
 
 Companion to [client-questions.md](client-questions.md). Same question numbers.
 
+**Answered 26 October 2026:** the client answered 45 of the 62 questions. What each answer means, and what is still open, is in [progress.md](../progress.md#client-decisions) (backend), [frontend-changes.md](frontend-changes.md#client-decisions) (shop) and [admin-panel-changes.md](admin-panel-changes.md#client-decisions) (admin panel). The notes below describe the code as it was before the answers.
+
 It merges two sources, checked against the code:
 - The website's list (`hashtag-next/docs/client-confirmation-questions.md`, items A1–A46 and B1–B9, written against frontend commit `5ea83e3`).
 - The backend's list. That was `docs/CLIENT_CONFIRMATIONS.md`, now folded into this one.

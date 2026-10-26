@@ -2,13 +2,13 @@
 
 Tracks every finding in [AUDIT_REPORT.md](AUDIT_REPORT.md) (audit of 8 October 2026, commit `268b548`) and what has been done about it. Update this file in the same commit as the fix.
 
-**Last updated:** 16 October 2026, at commit `aba0065` (branch `fix/bug-sweep`, not yet merged into `main`).
+**Last updated:** 26 October 2026, on branch `feature/client-decisions`. `fix/bug-sweep` was merged into `main` on 16 October and is live in production.
 
 **Status:** ✅ done · ◐ partly done · ❌ open.
 
 **Waiting on:**
 - **Payments:** held for the payments phase.
-- **Client:** needs the client's answer (see `docs/client-questions.md`).
+- **Client:** the client answered on 26 October; what's still open is in [Client decisions](#client-decisions).
 - **DB:** needs an archive-first SQL change (see `migrations/README.md`).
 - **Server:** a setting on the server, not code.
 
@@ -32,10 +32,12 @@ Found after the audit: N1 to N3 (bottom of this file).
 | `24de211` | 15 Oct | Uploads, imports and logs moved to a storage folder; email templates in the repo | yes |
 | `f7ecf00` | 15 Oct | Missing packages added; supplier image restore script | yes |
 | `127e0e3`, `247b90e`, `e2f8366` | 15 Oct | Image recovery from the shop's cache; missing-image report | yes |
-| `44141b0` | 15 Oct | Bug sweep: admin panel reports and audit items needing no client input | no |
-| `aba0065` | 16 Oct | Supplier pricing hidden from shoppers; SAGE stock; supplier status markers; ESLint | no |
+| `44141b0` | 15 Oct | Bug sweep: admin panel reports and audit items needing no client input | yes |
+| `aba0065` | 16 Oct | Supplier pricing hidden from shoppers; SAGE stock; supplier status markers; ESLint | yes |
 
 ### Deploying `fix/bug-sweep`
+
+**Status (26 Oct):** steps 1 to 3 are done; production answers with the new columns and still sends supplier cost to shoppers. Step 4 waits for the shop.
 
 1. **Before pulling:** run `migrations/2026-10-16_supplier_status_markers_before_deploy.sql`. The new code needs its columns.
 2. **In `.env`:**
@@ -56,7 +58,7 @@ Changes the shop and the admin panel need: [docs/frontend-changes.md](docs/front
 | C1 | Admin API had no authentication | ◐ | `335d27b` | Three payment admin routes still public. Payments |
 | C2 | Admin account takeover | ✅ | `335d27b` | Confirm `JWT_SECRET` was changed at deploy. Server |
 | C3 | Payment webhooks not verified | ❌ | | Payments |
-| C4 | Customer-controlled prices | ◐ | `335d27b`, `44141b0` | Shipping amount from the client (Payments); decoration options not on the price list priced at $0 (Client); minimum quantity not checked when a quantity is typed in |
+| C4 | Customer-controlled prices | ◐ | `335d27b`, `44141b0` | Shipping amount from the client (Payments); decoration options not on the price list priced at $0 (Q10 unanswered; proposed: refuse them); minimum quantity not checked when a quantity is typed in (Q36) |
 | C5 | Image proxy fetched any URL | ✅ | `335d27b` | |
 | C6 | Customer and business data exposed | ◐ | `335d27b`, `aba0065` | Supplier cost now hidden from shoppers. The payment admin list is still public (C1). Payments |
 | C7 | Unauthenticated destructive operations | ✅ | `335d27b`, `44141b0` | |
@@ -80,10 +82,10 @@ Changes the shop and the admin panel need: [docs/frontend-changes.md](docs/front
 | H9 | Admin product endpoints failed | ✅ | `44141b0` | |
 | H10 | Undefined names | ◐ | `335d27b`, `44141b0` | 4 left, all in payment code (`npm run lint`). Payments |
 | H11 | Error handler closed connections | ✅ | `335d27b` | |
-| H12 | Hard-coded personal data | ◐ | `335d27b`, `44141b0` | Ship-from address and contact-notification inbox (Client); PayPal return URLs (Payments) |
+| H12 | Hard-coded personal data | ◐ | `335d27b`, `44141b0` | Ship-from address and contact-notification inbox answered (Q30, Q58); PayPal return URLs (Payments) |
 | H13 | SAGE handling charge missing at add-to-cart | ✅ | `44141b0` | |
-| H14 | Tax fixed at 8.25% | ❌ | | Client |
-| H15 | Decoration priced per size | ❌ | | Client |
+| H14 | Tax fixed at 8.25% | ◐ | | The client keeps a flat 8.25% (Q29). Open: whether shipping is taxed. Payments |
+| H15 | Decoration priced per size | ❌ | | The client chose per artwork (Q1); follow-ups open |
 | H16 | Label purchase rewrites the total | ❌ | | Payments |
 | H17 | Shipping webhook substring matching | ❌ | | Payments |
 | H18 | Token lifetime misread | ✅ | `335d27b` | |
@@ -127,7 +129,7 @@ Changes the shop and the admin panel need: [docs/frontend-changes.md](docs/front
 | M25 | Country by id ignored the id | ✅ | `44141b0` | |
 | M26 | Size update ignored the URL id | ✅ | `44141b0` | |
 | M27 | Grand category brand filter unreachable | ✅ | `44141b0` | |
-| M28 | Quantity tiers used as a total | ❌ | | Client |
+| M28 | Quantity tiers used as a total | ❌ | | The client chose per artwork (Q1); follow-ups open |
 | M29 | SAGE tiers misaligned | ✅ | `44141b0` | |
 | M30 | 0% markup read as unset | ✅ | `44141b0` | |
 | M31 | Multi-step product writes without a transaction | ❌ | | |
@@ -161,13 +163,52 @@ Changes the shop and the admin panel need: [docs/frontend-changes.md](docs/front
 | # | Finding | Status | Remaining |
 |---|---|---|---|
 | N1 | Rate limits count per Cloudflare server, not per visitor | ❌ | Set `TRUST_PROXY` to `loopback` plus Cloudflare's ranges (see `.env.example`). Server |
-| N2 | The repository is public and contains the audit | ❌ | Make the GitHub repository private |
+| N2 | The repository is public and contains the audit | ❌ | Make the GitHub repository private. Still public on 26 October, as are hashtag-next and the admin panel |
 | N3 | Public uploads saved before the rate limit | ✅ | `44141b0` |
+
+## Client decisions
+
+The client answered on 26 October; the questions are in `docs/client-questions.md` and Q numbers are theirs. This is the backend side. The shop's side is in [docs/frontend-changes.md](docs/frontend-changes.md#client-decisions), the admin panel's in [docs/admin-panel-changes.md](docs/admin-panel-changes.md#client-decisions).
+
+| Q | Decision | Backend work | Status | Commit | Waiting on |
+|---|---|---|---|---|---|
+| 1, 2 | Digitizing fee, tiers and minimums per artwork (meaning A): one fee per distinct artwork | Group cart lines by artwork; reprice the group when a line changes | ❌ | | Client: tier per location? the same file added twice? |
+| 3 | No setup fee for screen print, DTF or DTG; $20 when the artwork isn't vector | Detect raster artwork and add the fee | ❌ | | Client: per artwork? embroidery too? |
+| 4, 5 | Price tables are correct and should be editable in the admin; hoodie Full Front and Full Back embroidery allowed | Tables in the database, admin endpoints, public read endpoint | ❌ | | Client: the hoodie price (Q5) |
+| 10 | Unanswered; proposed: refuse choices that aren't on the price list | Allow-list, with the price tables (C4) | ❌ | | |
+| 11 | Markups: SAGE 49.25%; SanMar, S&S and OttoCap 66.67% | Set the rates; 49.25% as the SAGE fallback | ❌ | | |
+| 12 | "Where do you see this?" | None: no SAGE setup charge is imported, so none is shown or charged | ❌ | | Client: charge SAGE setup fees? |
+| 18 | Hide supplier cost from shoppers | Built in `aba0065`; remove `EXPOSE_SUPPLIER_COST` after the shop's release | ◐ | `aba0065` | Shop |
+| 19, 20 | Original artwork files; artwork, size and colours can differ per location | One decoration per location on cart and order items; download in the admin | ❌ | | Client: does "cdi" mean CDR? |
+| 21 | AI, PDF, EPS, JPG, SVG, PSD; 250 MB | Upload rules per field | ❌ | | Client: PNG? 250 MB is over Cloudflare's 100 MB |
+| 27, 28 | The team buys labels in ShipStation; the customer pays the quoted rate | C8, H8, H16 | ❌ | | Payments |
+| 29 | A flat 8.25% "to total order amount" | H14 | ◐ | | Client: is shipping included? |
+| 30 | Ship-from: the business name, at the same address | Sender in `.env` (H12) | ❌ | | Client: the exact name |
+| 31 | Default 1 lb; supplier weights; admins can set a weight | Default in settings; weight on admin edits; OttoCap weight (H22) | ❌ | | |
+| 32 | US mainland only | Switch off other regions and refuse addresses there | ❌ | | Client: Alaska? DC? |
+| 34 | Cancel within 2 hours; refunds by hand in 5–7 days | C10, M9; mark the order for a manual refund | ❌ | | Payments |
+| 35 | Keep the unpaid-order flow | H8 only | ❌ | | Payments |
+| 36 | Quantities editable in the cart; "−" stops at the minimum | Refuse quantities below the minimum on every change | ❌ | | |
+| 37 | Card, Google Pay, Cash App, PayPal and Apple Pay, on current APIs | C11, Apple Pay, upgrades | ❌ | | Payments |
+| 38 | Every order email; a confirmation page | Order emails | ❌ | | Payments; client: a team email too? |
+| 39 | Tracking for signed-in customers; the admin picks ShipStation or manual updates | Tracking mode per order; manual status endpoint | ❌ | | Payments |
+| 40 | Erase unverified accounts completely, past ones too | Hard delete in the cleanup job | ❌ | | |
+| 42 | The shop's password rule everywhere | `validatePassword` and every place a password is set | ❌ | | |
+| 43 | Phone optional at sign-up, US only | Registration check | ❌ | | |
+| 44 | Every admin has full access; Super Admins can add Super Admins | Admin management rules | ❌ | | |
+| 45 | Admins can set a password to share (viewing isn't possible) | Set-password endpoints | ❌ | | Client: OK without viewing? |
+| 46 | A closed account is kept 30 days, restored by signing in, then deleted | Grace period and purge | ❌ | | Client: keep orders without personal details? |
+| 47 | Identical prices for guests and signed-in customers; SAGE cards show the lowest tier price | One pricing path; lowest price in the product list | ❌ | | |
+| 48 | Zero stock can't be ordered | Built in `aba0065` | ✅ | `aba0065` | |
+| 49 | "Show them all, they should only disappear if quantity goes to zero" | | ❌ | | Client: what it means |
+| 51 | All supplier syncs on the 1st | Cron schedule | ❌ | | |
+| 56 | The team manages the gallery in the admin | Gallery table, admin endpoints, public list | ❌ | | |
+| 58 | patrick@hashtagbillionaire.com everywhere | Contact-form and sourcing-request notifications | ❌ | | |
 
 ## Next
 
 1. **Payments phase:** C3, C4 (shipping), C8, C10, C11, H7, H8, H16, H17, M9, M22, M23, M36, M38, the payment parts of C1/C6/H12, and the 4 lint errors.
-2. **After the client answers:** H14, H15, M28, the C4 decoration list, and the H12 addresses.
+2. **Client decisions:** the rows above that wait on nothing.
 3. **Database changes (archive-first SQL):** H4 purge, M1, M2, M4, M5, M8, M14.
 4. **Remaining code:** H20 (products), H22 (the rest), H26, M31, M33, M37, M16, C4 minimum quantity.
 5. **Tooling:** tests and CI in the repo, `npm audit fix`, declare `moment-timezone`, set `engines` to Node 18.
