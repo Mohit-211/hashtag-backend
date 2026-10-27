@@ -73,7 +73,7 @@ Changes the shop and the admin panel need: [docs/frontend-changes.md](docs/front
 | C1 | Admin API had no authentication | ◐ | `335d27b` | Three payment admin routes still public. Payments |
 | C2 | Admin account takeover | ✅ | `335d27b` | Confirm `JWT_SECRET` was changed at deploy. Server |
 | C3 | Payment webhooks not verified | ❌ | | Payments |
-| C4 | Customer-controlled prices | ◐ | `335d27b`, `44141b0` | Shipping amount from the client (Payments); decoration options not on the price list priced at $0 (the client wants them refused, Q10); minimum quantity not checked when a quantity is typed in (Q36) |
+| C4 | Customer-controlled prices | ◐ | `335d27b`, `44141b0` | Shipping amount from the client (Payments); decoration options not on the price list priced at $0 (the client wants them refused, Q10) |
 | C5 | Image proxy fetched any URL | ✅ | `335d27b` | |
 | C6 | Customer and business data exposed | ◐ | `335d27b`, `aba0065` | Supplier cost now hidden from shoppers. The payment admin list is still public (C1). Payments |
 | C7 | Unauthenticated destructive operations | ✅ | `335d27b`, `44141b0` | |
@@ -207,7 +207,7 @@ The client answered on 26 October and answered the follow-ups on 27 October; the
 | 32 | US mainland only: the 48 contiguous states and DC; not Alaska, Hawaii, Puerto Rico, the territories or APO/FPO | `src/config/shippingRegions.js` lists the 49. The US state list offers only those; saving or moving an address elsewhere, shipping rates and order creation answer 400, including an address ShipStation matches to a military code; saved addresses carry `shippable` | ✅ | | |
 | 34 | Cancel within 2 hours; refunds by hand in 5–7 days | C10, M9; mark the order for a manual refund | ❌ | | Payments |
 | 35 | Keep the unpaid-order flow | H8 only | ❌ | | Payments |
-| 36 | Quantities editable in the cart; "−" stops at the minimum | Refuse quantities below the minimum on every change | ❌ | | |
+| 36 | Quantities editable in the cart; "−" stops at the minimum | "−" and typed quantities stop at the line's minimum (`lineMinimum`: the variant's minimum, SAGE's first price tier, 12 for screen print) with a 400 instead of removing the line, 0 included; cart lines carry `min_quantity` (C4) | ✅ | | |
 | 37 | Card, Google Pay, Cash App, PayPal and Apple Pay, on current APIs | C11, Apple Pay, upgrades | ❌ | | Payments |
 | 38 | Every order email for customers, a confirmation page, and a new-order email to patrick@hashtagbillionaire.com | Order emails, once payment notices are verified (C3) so a forged one can't send them | ❌ | | Payments |
 | 39 | Tracking for signed-in customers; the admin picks ShipStation or manual updates | Tracking mode per order; manual status endpoint | ❌ | | Payments |

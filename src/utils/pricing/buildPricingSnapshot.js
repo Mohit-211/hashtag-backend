@@ -555,12 +555,9 @@ const buildPricingSnapshot = async ({
   };
 };
 
-const buildSagePricingSnapshot = async ({
-  variant,
-  product = null,
-  quantity = 1,
-  customization = null,
-}) => {
+// A SAGE variant's quantity and price tiers, kept as pairs: filtering the two lists
+// separately shifted prices onto the wrong quantity whenever a tier in the middle was empty.
+const sageTiers = (variant) => {
   let meta = variant.meta || {};
 
   if (typeof meta === "string") {
@@ -571,12 +568,39 @@ const buildSagePricingSnapshot = async ({
     }
   }
 
-  // Quantity and price tiers are kept as pairs: filtering the two lists separately
-  // shifted prices onto the wrong quantity whenever a tier in the middle was empty.
   const rawNetTiers = meta.netTiers || [];
-  const tiers = (meta.qtyTiers || [])
+  return (meta.qtyTiers || [])
     .map((q, i) => ({ qty: Number(q), net: Number(rawNetTiers[i]) }))
     .filter((tier) => tier.qty > 0 && !isNaN(tier.net) && tier.net > 0);
+};
+
+const SCREEN_PRINT_MINIMUM = 12;
+
+// The fewest pieces a cart line can have (client decision Q36: "−" and typed quantities stop
+// here instead of removing the line): the variant's own minimum, SAGE's first price tier, and
+// 12 for screen print. The pricing below enforces the last two as well.
+const lineMinimum = (variant, customization) => {
+  let minimum = Number(variant.min_order_quantity) || 1;
+
+  if (variant.supplier === "SAGE") {
+    const tiers = sageTiers(variant);
+    if (tiers.length) minimum = Math.max(minimum, Math.min(...tiers.map((tier) => tier.qty)));
+  }
+
+  if (customization?.print_method === "SCREEN_PRINT") {
+    minimum = Math.max(minimum, SCREEN_PRINT_MINIMUM);
+  }
+
+  return minimum;
+};
+
+const buildSagePricingSnapshot = async ({
+  variant,
+  product = null,
+  quantity = 1,
+  customization = null,
+}) => {
+  const tiers = sageTiers(variant);
 
   const qtyTiers = tiers.map((tier) => tier.qty);
 
@@ -802,4 +826,4 @@ const isSageHandlingChargeApplicable = (product) => {
   );
 };
 
-module.exports = { buildPricingSnapshot, buildSagePricingSnapshot };
+module.exports = { buildPricingSnapshot, buildSagePricingSnapshot, lineMinimum };

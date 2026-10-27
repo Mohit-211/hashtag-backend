@@ -30,6 +30,7 @@ const httpStatus = require("http-status");
 const {
   buildPricingSnapshot,
   buildSagePricingSnapshot,
+  lineMinimum,
 } = require("../../utils/pricing/buildPricingSnapshot");
 const decodeHtmlEntities = require("../../utils/decodeHtmlEntities");
 // A stored value that doesn't parse comes back as null instead of failing the whole cart.
@@ -2301,11 +2302,10 @@ const getCart = async (body) => {
                   v.stock || 0,
                 )),
 
+          min_quantity: lineMinimum(v, parseJson(customization_config)),
+
           can_decrease:
-            item.quantity >
-            Number(
-              v.min_order_quantity || 1,
-            ),
+            item.quantity > lineMinimum(v, parseJson(customization_config)),
         };
       }),
     );
@@ -2684,25 +2684,6 @@ const decrementCart = async (body) => {
 
     /*
      * ---------------------------------------------------------
-     * Minimum quantity validation
-     * ---------------------------------------------------------
-     *
-     * Existing behavior:
-     * when quantity reaches below minimum, remove
-     * the cart item completely.
-     */
-
-    if (newQty < Number(variant.min_order_quantity || 1)) {
-      await cart.destroy();
-
-      return {
-        success: true,
-        message: "Item removed from cart",
-      };
-    }
-
-    /*
-     * ---------------------------------------------------------
      * Parse stored customization
      * ---------------------------------------------------------
      */
@@ -2711,6 +2692,13 @@ const decrementCart = async (body) => {
 
     if (customization && typeof customization === "string") {
       customization = JSON.parse(customization);
+    }
+
+    // "−" stops at the line's minimum (Q36); removing the line is a separate action.
+    const minimum = lineMinimum(variant, customization);
+
+    if (newQty < minimum) {
+      throw new ApiError(httpStatus.BAD_REQUEST, `The minimum for this item is ${minimum}.`);
     }
 
     if (variant.supplier === "MANUAL") {
@@ -2773,17 +2761,6 @@ const updateCartQuantity = async (body) => {
 
     const finalQty = Number(quantity);
 
-    // =========================================================
-    // REMOVE ITEM WHEN QUANTITY IS 0 OR LESS
-    // =========================================================
-    if (!finalQty || finalQty <= 0) {
-      await cart.destroy();
-
-      return {
-        message: "Item removed from cart",
-      };
-    }
-
     if (!Number.isInteger(finalQty)) {
       throw new ApiError(httpStatus.BAD_REQUEST, "Quantity must be a whole number");
     }
@@ -2814,6 +2791,14 @@ const updateCartQuantity = async (body) => {
 
     if (customization && typeof customization === "string") {
       customization = JSON.parse(customization);
+    }
+
+    // A typed quantity below the line's minimum is refused (Q36), 0 included: removing the
+    // line is a separate action.
+    const minimum = lineMinimum(variant, customization);
+
+    if (finalQty < minimum) {
+      throw new ApiError(httpStatus.BAD_REQUEST, `The minimum for this item is ${minimum}.`);
     }
 
     if (variant.supplier === "MANUAL") {
