@@ -1066,6 +1066,9 @@ const getAdminOrders = async ({
 
       required: false,
 
+      // A closed account's orders keep showing who placed them.
+      paranoid: false,
+
       include: [
         {
           model: Profile,
@@ -1196,6 +1199,7 @@ const getAdminOrders = async ({
           as: "user",
           attributes: [],
           required: false,
+          paranoid: false,
           include: [{ model: Profile, as: "user_profile", attributes: [], required: false }],
         },
         {

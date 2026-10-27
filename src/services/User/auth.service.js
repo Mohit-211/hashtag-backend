@@ -4,7 +4,9 @@ const crypto = require("crypto");
 const httpStatus = require("http-status");
 const bcrypt = require("bcryptjs");
 const moment = require("moment");
+const { Op } = require("sequelize");
 
+const sequelize = require("../../config/central.db");
 const {
 	User,
 	UserAttachment,
@@ -38,6 +40,7 @@ const {
 } = require("../../config/types");
 const {
 	UNVERIFIED_ACCOUNT_HOURS,
+	CLOSED_ACCOUNT_DAYS,
 	PASSWORD_RESET_MINUTES,
 	LINK_RESEND_SECONDS,
 	links,
@@ -176,19 +179,41 @@ const resendVerification = async (body, headers) => {
 	return "";
 };
 
+// An account its owner closed (deleted_by is their own id, see deactivateAccount) less than
+// CLOSED_ACCOUNT_DAYS ago. Signing in to it restores it.
+const findClosedAccount = (email, role_id, include) =>
+	User.scope("withPassword").findOne({
+		where: {
+			email,
+			role_id,
+			deleted_at: {
+				[Op.gte]: new Date(Date.now() - CLOSED_ACCOUNT_DAYS * 24 * 60 * 60 * 1000),
+			},
+			[Op.and]: [
+				sequelize.where(sequelize.col("User.deleted_by"), Op.eq, sequelize.col("User.id")),
+			],
+		},
+		include,
+		paranoid: false,
+		order: [["deleted_at", "DESC"]],
+	});
+
 const login = async (reqBody, headers) => {
 	const { role_id, timezone } = headers;
+	const email = normalizeEmail(reqBody.email);
+	const include = [
+		{
+			model: Profile,
+			as: "user_profile",
+			attributes: ["id", "name", "mobile", "is_active", "created_at"],
+		},
+	];
 
-	const user = await User.scope("withPassword").findOne({
-		where: { email: normalizeEmail(reqBody.email), is_active: true, role_id: role_id },
-		include: [
-			{
-				model: Profile,
-				as: "user_profile",
-				attributes: ["id", "name", "mobile", "is_active", "created_at"],
-			},
-		],
-	});
+	const user =
+		(await User.scope("withPassword").findOne({
+			where: { email, is_active: true, role_id: role_id },
+			include,
+		})) || (await findClosedAccount(email, role_id, include));
 
 	const validPass = await bcrypt.compare(
 		String(reqBody.password),
@@ -209,6 +234,13 @@ const login = async (reqBody, headers) => {
 			httpStatus.FORBIDDEN,
 			"This account can't sign in. Please contact support.",
 		);
+	}
+
+	if (user.deleted_at) {
+		user.is_active = true;
+		user.deleted_by = null;
+		await user.restore();
+		logger.info(`User ${user.id} restored their closed account by signing in`);
 	}
 
 	const token = await generateAuthTokens(user);

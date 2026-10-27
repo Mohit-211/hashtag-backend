@@ -2,6 +2,7 @@ const httpStatus = require('http-status');
 
 const { User, UserAttachment, Profile } = require('../../models');
 const ApiError = require('../../utils/ApiError');
+const { revokeUserTokens } = require('../Common/token.service');
 
 
 const getProfile = async (body, headers) => {
@@ -37,15 +38,20 @@ const getProfile = async (body, headers) => {
     }
 };
 
+// Closing an account hides it and signs the customer out everywhere. deleted_by set to their own
+// id marks it as closed by them (an admin's delete leaves it empty): signing in within
+// CLOSED_ACCOUNT_DAYS restores it, and after that the account cleanup deletes it.
 const deactivateAccount = async (reqBody) => {
 
     try {
         const { user } = reqBody;
+        user.deleted_by = user.id;
         const isDeactivated = await user.destroy();
 
         if (!isDeactivated) {
             throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to Deactive your account.');
         };
+        await revokeUserTokens(user.id);
         return '';
 
     } catch (error) {

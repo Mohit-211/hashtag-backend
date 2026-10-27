@@ -798,6 +798,9 @@ const getAllPayments = async (query) => {
 
           required: false,
 
+          // A closed account's payments keep showing who made them.
+          paranoid: false,
+
           where: userWhere,
 
           attributes: ["id", "email"],
