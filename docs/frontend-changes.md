@@ -6,7 +6,7 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
-| [2026-10-26: client decisions, first backend changes](#2026-10-26) | branch `feature/client-decisions`, not released | Read the notes; A36, A37, B4 and Delete account in the to-do list |
+| [2026-10-26: client decisions, first backend changes](#2026-10-26) | branch `feature/client-decisions`, not released | Read the notes; A36, A37, A44, B4 and Delete account in the to-do list |
 | [2026-10-16: supplier pricing removed, status markers, SAGE stock](#2026-10-16) | `aba0065` | **Required**: switch SAGE pricing to `price_tiers` |
 | [2026-10-15: bug sweep](#2026-10-15) | `44141b0` | None required; read the notes |
 | [2026-10-14: security release](#2026-10-14) | `335d27b` | Done (hashtag-next `7b3f110`) |
@@ -40,6 +40,7 @@ These need the backend changes on branch `feature/client-decisions`, listed unde
 | Shop item | Q | Decision | What the shop does |
 |---|---|---|---|
 | A36 | 32 | US mainland only: the 48 contiguous states and Washington DC | Nothing required: the state list only has those 49. Show the API's message when an address is refused, and use `shippable` to keep older saved addresses outside them out of checkout. |
+| A44 | 49 | Out-of-stock products aren't shown; a cart item that runs out shows as out of stock | Show the cart line's `stock_message` when `stock_status` isn't `AVAILABLE`; checkout refuses those lines. Drop the "In stock only" filter, which no longer changes anything. |
 | — | 46 | A closed account is kept 30 days and restored by signing in | A "Delete account" option in profile settings that calls `DELETE user/deactivate` and says the account can be restored by signing in within 30 days. |
 | A37 | 43 | Phone optional at sign-up; US numbers only | Make the sign-up phone optional; keep the 10-digit check when one is entered. |
 | B4 | 42 | The shop's rule everywhere: 8+ characters with an uppercase letter, a number and a special character | Make sign-up enforce all four (today "Ab1!" passes, audit B8), and stop trimming the password on sign-up only (audit B8). |
@@ -57,7 +58,6 @@ These need the backend changes on branch `feature/client-decisions`, listed unde
 | A29 | 34 | Cancel within 2 hours | A Cancel button on orders under 2 hours old, once the API's cancel works. |
 | A33, B3 | 37 | Card, Google Pay, Cash App, PayPal and Apple Pay | Add Apple Pay; build the Google Pay and Cash App request with the order's real total (`amount: "1.00"` today, audit B1). |
 | A35 | 39 | Tracking for signed-in customers; the admin picks ShipStation or manual updates | Show the order's status and tracking from the API, whichever way it's updated. |
-| A44 | 49 | Out-of-stock products aren't shown; a cart item that runs out shows as out of stock | Show the out-of-stock mark the cart will return. |
 | A45 | 56 | The team manages the gallery in the admin | Load gallery photos and captions from the API. |
 | — | 47 | Guests and signed-in customers see the same prices; SAGE cards show the lowest price with "+" | Show "$X+" on SAGE product cards, from a field the product list will return. |
 | — | 60 | Cloudflare Turnstile on the contact and sourcing forms | The Turnstile widget on both forms, sending its token. |
@@ -81,6 +81,12 @@ On branch `feature/client-decisions`. This section grows with each change until 
   - `POST address` and `PUT address` refuse a state outside them, and an address ShipStation matches to one (military APO/FPO addresses, for example), with `400` *"We only ship to the 48 contiguous US states and Washington DC."*
   - `GET address` adds `shippable` (true or false) to each saved address; an address saved before this release can be outside.
   - `POST order/shipping/rates` and `POST order` refuse an address that isn't `shippable` with `400` and the same message, plus *"Please choose another address."*
+- **Only products in stock** (Q49): the client doesn't want stock numbers shown, nor products that can't be bought.
+  - `GET product`, `product/grand-category-products`, `product/product-by-brand` and `industry/use-case/products` leave out products with no variant in stock. Stock a supplier doesn't report (SAGE) counts as in stock. Prices and the size, colour and price filters use variants in stock only. `in_stock` is ignored, since it's now always on.
+  - Cart lines: `stock_status` is `AVAILABLE`, `OUT_OF_STOCK` or `NOT_ENOUGH_STOCK` (fewer in stock than the line's quantity), with `stock_message` to show ("In stock", "Out of stock", "Not enough in stock for this quantity"). `FEW_LEFT` and "Only N left" are gone, and so is the `stock` number. `is_purchasable` is false unless the line is `AVAILABLE`.
+  - Wishlist items: `stock_status` is `AVAILABLE` or `OUT_OF_STOCK`, without `stock`.
+  - `PUT product/cart/increment` past the stock answers `400` *"There isn't enough in stock to add more."* (was "Only N left").
+  - Product and variant pages still send `stock`, so the shop can stop a quantity at it; don't show the number.
 - **Closing an account** (Q46): `DELETE user/deactivate` keeps working as before and now means:
   - The customer is signed out on every device.
   - Signing in with the same email and password within 30 days restores the account, with its orders, addresses, cart and wishlist. Sign-in answers as usual.

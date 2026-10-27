@@ -31,6 +31,7 @@ const { restoreListedVariants, markProductRestored, variantStatus } = require(".
 const decodeHtmlEntities = require("../../utils/decodeHtmlEntities");
 const sortSizes = require("../../utils/sortSizes");
 const { COLOR_FILTERS } = require("../../utils/colorFilter");
+const { variantInStock, productInStock } = require("../../utils/stock");
 const { buildPricingTiers, buildSellingTiers } = require("../../utils/pricing/pricing.util");
 const {
   resolveTierProductIds,
@@ -1664,7 +1665,6 @@ const getAllProducts = async (query) => {
       sort = "newest",
       size,
       color,
-      in_stock,
       min_price,
       max_price,
       gender,
@@ -1715,10 +1715,10 @@ const getAllProducts = async (query) => {
 
     let filteredProductIds = null;
 
+    // Lists show only products in stock (Q49), so ?in_stock= is no longer needed and is ignored.
     const hasVariantFilters =
       size?.length ||
       color?.length ||
-      in_stock === "true" ||
       min_price !== null ||
       max_price !== null;
 
@@ -1734,16 +1734,11 @@ const getAllProducts = async (query) => {
     });
 
     if (hasVariantFilters) {
-      const variantWhere = { is_active: true };
+      // Only variants in stock match a size, colour or price.
+      const variantWhere = { is_active: true, [Op.and]: [variantInStock()] };
 
       if (size?.length) variantWhere.size = { [Op.in]: size };
       if (color?.length) variantWhere[Op.or] = buildColorFilter(color);
-      // Variants whose stock isn't tracked (the supplier doesn't report it) count as in stock.
-      if (in_stock === "true") {
-        variantWhere[Op.and] = [
-          { [Op.or]: [{ stock: { [Op.gt]: 0 } }, { track_inventory: false }] },
-        ];
-      }
 
       const matchingVariants = await ProductVariant.findAll({
         where: variantWhere,
@@ -1787,6 +1782,7 @@ const getAllProducts = async (query) => {
     const whereCondition = {
       is_active: true,
       is_discontinued: false,
+      [Op.and]: [productInStock()],
     };
 
     if (filteredProductIds) {
@@ -1995,7 +1991,7 @@ const getAllProducts = async (query) => {
     const productIds = rows.map((p) => p.id);
 
     const variants = await ProductVariant.findAll({
-      where: { product_id: { [Op.in]: productIds }, is_active: true },
+      where: { product_id: { [Op.in]: productIds }, is_active: true, [Op.and]: [variantInStock()] },
       attributes: [
         "product_id",
         "price",
@@ -2089,6 +2085,7 @@ const getAllProductsByGrandCategory = async (query) => {
     const whereCondition = {
       is_active: true,
       is_discontinued: false,
+      [Op.and]: [productInStock()],
     };
 
     // An empty brand_id (?brand_id=) means no brand filter.
@@ -2166,6 +2163,7 @@ const getAllProductsByGrandCategory = async (query) => {
           [Op.in]: productIds,
         },
         is_active: true,
+        [Op.and]: [variantInStock()],
       },
       attributes: ["product_id", "price", "case_price", "supplier"],
       raw: true,
@@ -2218,6 +2216,7 @@ const getProductsByBrand = async (query) => {
       is_active: true,
       is_discontinued: false,
       brand_id,
+      [Op.and]: [productInStock()],
     };
 
     if (search) {
@@ -2286,6 +2285,7 @@ const getProductsByBrand = async (query) => {
           [Op.in]: productIds,
         },
         is_active: true,
+        [Op.and]: [variantInStock()],
       },
 
       attributes: ["product_id", "price", "case_price", "supplier"],

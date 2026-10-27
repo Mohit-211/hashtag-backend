@@ -18,6 +18,7 @@ const { getSearchVariants } = require("./product.service");
 const { getCurrentTiersForProducts, resolveAllTierProductIds, resolveTierProductIds } = require("./tier.service");
 const decodeHtmlEntities = require("../../utils/decodeHtmlEntities");
 const pick = require("../../utils/pick");
+const { productInStock } = require("../../utils/stock");
 
 // Fields an admin may set; anything else in the request body is ignored. Images come
 // from the upload, not the body.
@@ -736,12 +737,14 @@ const getProductsForMultipleUseCases = async (useCaseIds, query) => {
   const offset =
     (Number(page) - 1) * Number(limit);
 
+  // The shop's use-case pages show only products in stock (Q49).
   const { rows, count } =
     await Product.findAndCountAll({
       where: {
         id: {
           [Op.in]: finalProductIds,
         },
+        [Op.and]: [productInStock()],
       },
 
       include: [

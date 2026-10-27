@@ -127,18 +127,10 @@ const getWishlist = async (body) => {
 
           const pricing = await calculatePricing(effectivePrice, v.supplier);
 
-          let stock_status = "AVAILABLE";
-          let stock_message = "In stock";
-
-          if (v.track_inventory) {
-            if (v.stock === 0) {
-              stock_status = "OUT_OF_STOCK";
-              stock_message = "Out of stock";
-            } else if (v.stock < 10) {
-              stock_status = "FEW_LEFT";
-              stock_message = `Only ${v.stock} left`;
-            }
-          }
+          // Shoppers never see a stock number (Q49): in stock or out of stock.
+          const outOfStock = v.track_inventory && Number(v.stock) <= 0;
+          const stock_status = outOfStock ? "OUT_OF_STOCK" : "AVAILABLE";
+          const stock_message = outOfStock ? "Out of stock" : "In stock";
 
           return {
             id: item.id,
@@ -157,7 +149,6 @@ const getWishlist = async (body) => {
 
             image: getVariantImage(v),
 
-            stock: v.stock,
             stock_status,
             stock_message,
           };
@@ -2191,30 +2182,16 @@ const getCart = async (body) => {
          * -----------------------------------------------------
          */
 
-        let stock_status =
-          "AVAILABLE";
+        // Shoppers never see a stock number (Q49), only whether the line can be filled.
+        let stock_status = "AVAILABLE";
+        let stock_message = "In stock";
 
-        let stock_message =
-          "In stock";
-
-        if (v.track_inventory) {
-          if (
-            Number(v.stock) <= 0
-          ) {
-            stock_status =
-              "OUT_OF_STOCK";
-
-            stock_message =
-              "Out of stock";
-          } else if (
-            Number(v.stock) < 10
-          ) {
-            stock_status =
-              "FEW_LEFT";
-
-            stock_message =
-              `Only ${v.stock} left`;
-          }
+        if (v.track_inventory && Number(v.stock) <= 0) {
+          stock_status = "OUT_OF_STOCK";
+          stock_message = "Out of stock";
+        } else if (v.track_inventory && Number(v.stock) < item.quantity) {
+          stock_status = "NOT_ENOUGH_STOCK";
+          stock_message = "Not enough in stock for this quantity";
         }
 
         /*
@@ -2307,16 +2284,12 @@ const getCart = async (body) => {
 
           image,
 
-          stock:
-            Number(v.stock || 0),
-
           stock_status,
 
           stock_message,
 
           is_purchasable:
-            !v.track_inventory ||
-            Number(v.stock || 0) > 0,
+            stock_status === "AVAILABLE",
 
           can_increase:
             (!v.max_order_quantity ||
@@ -2612,7 +2585,7 @@ const incrementCart = async (body) => {
       variant.track_inventory &&
       newQty > Number(variant.stock)
     ) {
-      throw new ApiError(httpStatus.BAD_REQUEST, `Only ${variant.stock} left`);
+      throw new ApiError(httpStatus.BAD_REQUEST, "There isn't enough in stock to add more.");
     }
 
     /*

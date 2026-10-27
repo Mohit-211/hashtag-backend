@@ -58,6 +58,7 @@ Found after the audit: N1 to N3 (bottom of this file).
    - Optional: `DEFAULT_PACKAGE_WEIGHT_LB` (1 when unset).
 3. **Deploy:** `git pull`, then `npm install --omit=dev`, then `pm2 restart backend --update-env`.
 4. **Within 15 minutes:** the account cleanup erases every account left unverified for 2 hours, including the ones hidden since 15 October, as the client asked (Q40). Take a database backup first if a copy should be kept.
+5. **Tell the team:** the shop stops listing products with nothing in stock (Q49): 42 of the 1,488 listed on 27 October. Three are pre-made products with stock 0 that can't be bought today either (Chenille patch, Retractable Banners, Feather Flags); setting their stock in the admin brings them back.
 
 Changes the shop and the admin panel need: [docs/frontend-changes.md](docs/frontend-changes.md), [docs/admin-panel-changes.md](docs/admin-panel-changes.md).
 
@@ -216,7 +217,7 @@ The client answered on 26 October and answered the follow-ups on 27 October; the
 | 46 | A closed account is kept 30 days, restored by signing in, then deleted; orders and payments keep the name and contact details, for accounting | Closing marks the account as closed by its owner (`deleted_by` = its own id) and signs it out; signing in within `CLOSED_ACCOUNT_DAYS` (30) restores it; after that the account cleanup erases it, or, when it has orders or payments, keeps only the email, profile name and phone, and the addresses orders shipped to, and clears the password. The admin order and payment lists show closed customers | ✅ | | |
 | 47 | Identical prices for guests and signed-in customers; SAGE cards show the lowest tier price | One pricing path; lowest price in the product list | ❌ | | |
 | 48 | Zero stock can't be ordered | Built in `aba0065` | ✅ | `aba0065` | |
-| 49 | No stock number shown to shoppers; out-of-stock products aren't shown; a cart item that runs out shows as out of stock | Leave out-of-stock products out of shopper lists; mark out-of-stock cart lines; refuse them without a number | ❌ | | |
+| 49 | No stock number shown to shoppers; out-of-stock products aren't shown; a cart item that runs out shows as out of stock | The shop's product lists leave out products without a variant in stock (`src/utils/stock.js`; stock a supplier doesn't report counts as in stock), and price and filter them on variants in stock. Cart and wishlist lines say `AVAILABLE`, `OUT_OF_STOCK` or `NOT_ENOUGH_STOCK` without a number, and no message gives a count. Product pages still send `stock`, which the shop uses to cap quantities | ✅ | | |
 | 51 | All supplier syncs on the 1st | One cron at 2 AM New York time on the 1st runs SAGE, SanMar, S&S and OttoCap one after another (were the 5th, 10th, 15th and 25th) | ✅ | `0bd4ccd` | |
 | 56 | The team manages the gallery in the admin | Gallery table, admin endpoints, public list | ❌ | | |
 | 58 | patrick@hashtagbillionaire.com everywhere | Contact-form messages and new sourcing requests are emailed to `CONTACT_INBOX` (sourcing requests notified no one before) | ✅ | `e691cce` | |
