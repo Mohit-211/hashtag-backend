@@ -32,7 +32,7 @@ const decodeHtmlEntities = require("../../utils/decodeHtmlEntities");
 const sortSizes = require("../../utils/sortSizes");
 const { COLOR_FILTERS } = require("../../utils/colorFilter");
 const { variantInStock, productInStock } = require("../../utils/stock");
-const { buildPricingTiers, buildSellingTiers } = require("../../utils/pricing/pricing.util");
+const { buildPricingTiers, buildSellingTiers, netPriceTiers } = require("../../utils/pricing/pricing.util");
 const {
   resolveTierProductIds,
   resolveAllTierProductIds,
@@ -1443,20 +1443,35 @@ const findProductIdsForSearch = async (search) => {
 };
 
 // The cheapest variant of each product, comparing the case price when there is one.
+// The supplier price a listing starts from. SAGE prices come from its quantity tiers (Q47), so
+// a SAGE card starts at the lowest tier and is shown as a "from" price; the rest use the
+// variant's case or unit price. Needs the variant's meta for SAGE.
+const listingBasePrice = (variant) => {
+  if (variant.supplier === "SAGE") {
+    const tiers = netPriceTiers(variant.meta);
+    if (tiers.length) {
+      return { effectivePrice: Math.min(...tiers.map((tier) => tier.net)), priceFrom: true };
+    }
+  }
+
+  const effectivePrice =
+    variant.case_price && Number(variant.case_price) > 0
+      ? Number(variant.case_price)
+      : Number(variant.price);
+  return { effectivePrice, priceFrom: false };
+};
+
 const cheapestVariantByProduct = (variants) => {
   const variantMap = {};
 
   for (const variant of variants) {
-    const effectivePrice =
-      variant.case_price && Number(variant.case_price) > 0
-        ? Number(variant.case_price)
-        : Number(variant.price);
+    const { effectivePrice, priceFrom } = listingBasePrice(variant);
 
     if (
       !variantMap[variant.product_id] ||
       effectivePrice < variantMap[variant.product_id].effectivePrice
     ) {
-      variantMap[variant.product_id] = { ...variant, effectivePrice };
+      variantMap[variant.product_id] = { ...variant, effectivePrice, priceFrom };
     }
   }
 
@@ -1496,6 +1511,49 @@ const withListingPrice = async (data, minVariant, markupMap) => {
     markup_amount: pricing.markup_amount,
     used_case_price:
       !!minVariant?.case_price && Number(minVariant.case_price) > 0,
+    // The lowest price, which needs a larger quantity: show it as "from" ("$1.45+").
+    price_from: !!minVariant?.priceFrom,
+  };
+};
+
+// Listing cards for plain product rows: each priced from its cheapest variant in stock.
+const withListingPrices = async (products) => {
+  const variants = await ProductVariant.findAll({
+    where: {
+      product_id: { [Op.in]: products.map((product) => product.id) },
+      is_active: true,
+      [Op.and]: [variantInStock()],
+    },
+    attributes: ["product_id", "price", "case_price", "supplier", "meta"],
+    raw: true,
+  });
+
+  const variantMap = cheapestVariantByProduct(variants);
+
+  return Promise.all(products.map((product) => withListingPrice(product, variantMap[product.id])));
+};
+
+// What a shopper pays for a variant (Q47): one calculation for guests, signed-in customers
+// and the variant page, so they can't drift apart. markupPercent is the supplier's markup;
+// without it calculatePricing looks it up.
+const shopperPricing = async (v, markupPercent = null) => {
+  const effectivePrice =
+    v.case_price && Number(v.case_price) > 0 ? Number(v.case_price) : Number(v.price || 0);
+
+  const pricing = await calculatePricing(effectivePrice, v.supplier, markupPercent);
+
+  return {
+    base_price: pricing.base_price,
+    markup_percent: pricing.markup_percent,
+    markup_amount: pricing.markup_amount,
+    price: pricing.final_price,
+    original_price: Number(v.price || 0),
+    case_price: Number(v.case_price || 0),
+    used_case_price: Number(v.case_price) > 0,
+    pricing_tiers: buildPricingTiers(v.meta, pricing.markup_percent, false),
+    pricing_tiers_customer: buildPricingTiers(v.meta, pricing.markup_percent, false),
+    // Selling price per quantity tier (what the cart charges).
+    price_tiers: buildSellingTiers(v.meta, pricing.markup_percent),
   };
 };
 
@@ -1740,18 +1798,17 @@ const getAllProducts = async (query) => {
       if (size?.length) variantWhere.size = { [Op.in]: size };
       if (color?.length) variantWhere[Op.or] = buildColorFilter(color);
 
+      const priceFiltered = min_price !== null || max_price !== null;
       const matchingVariants = await ProductVariant.findAll({
         where: variantWhere,
-        attributes: ["product_id", "price", "case_price", "supplier"],
+        // meta (SAGE's tiers) only when filtering by price: it's large, and this query isn't paged.
+        attributes: ["product_id", "price", "case_price", "supplier", ...(priceFiltered ? ["meta"] : [])],
         raw: true,
       });
       const productIdSet = new Set();
 
       for (const variant of matchingVariants) {
-        const effectivePrice =
-          variant.case_price && Number(variant.case_price) > 0
-            ? Number(variant.case_price)
-            : Number(variant.price);
+        const { effectivePrice } = listingBasePrice(variant);
 
         const pricing = await calculatePricing(
           effectivePrice,
@@ -1997,9 +2054,9 @@ const getAllProducts = async (query) => {
         "price",
         "case_price",
         "supplier",
+        "meta",
         "size",
         "color",
-        "stock",
       ],
       raw: true,
     });
@@ -2165,7 +2222,7 @@ const getAllProductsByGrandCategory = async (query) => {
         is_active: true,
         [Op.and]: [variantInStock()],
       },
-      attributes: ["product_id", "price", "case_price", "supplier"],
+      attributes: ["product_id", "price", "case_price", "supplier", "meta"],
       raw: true,
     });
 
@@ -2288,7 +2345,7 @@ const getProductsByBrand = async (query) => {
         [Op.and]: [variantInStock()],
       },
 
-      attributes: ["product_id", "price", "case_price", "supplier"],
+      attributes: ["product_id", "price", "case_price", "supplier", "meta"],
 
       raw: true,
     });
@@ -2365,59 +2422,21 @@ const getProductById = async (id, reqBody) => {
     data.name = decodeHtmlEntities(data.name);
 
     data.variants = await Promise.all(
-      variants.map(async (v) => {
-        const effectivePrice =
-          v.case_price && Number(v.case_price) > 0 ? v.case_price : v.price;
+      variants.map(async (v) => ({
+        ...v,
 
-        const pricing = await calculatePricing(
-          effectivePrice,
-          v.supplier,
-          markupPercent,
-        );
+        title: decodeHtmlEntities(v.title),
 
-        return {
-          ...v,
+        size: v.size_details?.name || null,
 
-          title: decodeHtmlEntities(v.title),
+        ...(await shopperPricing(v, markupPercent)),
 
-          size: v.size_details?.name || null,
+        is_in_cart: !!cartMap[v.id],
 
-          base_price: pricing.base_price,
+        cart_quantity: cartMap[v.id] || 0,
 
-          markup_percent: pricing.markup_percent,
-
-          markup_amount: pricing.markup_amount,
-
-          price: pricing.final_price,
-
-          original_price: Number(v.price || 0),
-
-          case_price: Number(v.case_price || 0),
-
-          used_case_price: !!v.case_price && Number(v.case_price) > 0,
-
-          is_in_cart: !!cartMap[v.id],
-
-          cart_quantity: cartMap[v.id] || 0,
-
-          is_in_wishlist: wishlistSet.has(v.id),
-
-          pricing_tiers: buildPricingTiers(
-            v.meta,
-            pricing.markup_percent,
-            false,
-          ),
-
-          pricing_tiers_customer: buildPricingTiers(
-            v.meta,
-            markupPercent,
-            false,
-          ),
-
-          // Selling price per quantity tier (what the cart charges).
-          price_tiers: buildSellingTiers(v.meta, markupPercent),
-        };
-      }),
+        is_in_wishlist: wishlistSet.has(v.id),
+      })),
     );
 
     data.variants = sortSizes(data.variants);
@@ -2511,35 +2530,9 @@ const getVariantById = async (id) => {
 
   data.title = decodeHtmlEntities(data.title);
 
-  const originalPrice = Number(data.price || 0);
-
-  const effectivePrice =
-    data.case_price && Number(data.case_price) > 0
-      ? Number(data.case_price)
-      : originalPrice;
-
-  const pricing = await calculatePricing(effectivePrice, data.supplier);
-
-  data.base_price = pricing.base_price;
-  data.markup_percent = pricing.markup_percent;
-  data.markup_amount = pricing.markup_amount;
-
-  data.original_price = originalPrice;
-  data.price = pricing.final_price;
-
-  data.case_price = Number(data.case_price || 0);
-  data.used_case_price = Number(data.case_price) > 0;
-
-  data.price_tiers = buildSellingTiers(data.meta, pricing.markup_percent);
-
-  data.pricing_tiers = buildPricingTiers(
-    data.meta,
-    pricing.markup_percent,
-    false,
-  );
-
   return {
     ...data,
+    ...(await shopperPricing(data)),
     size: data.size_details?.name || null,
   };
 };
@@ -2554,39 +2547,17 @@ const getGuestProductById = async (id) => {
 
     data.name = decodeHtmlEntities(data.name);
 
-    data.variants = variants.map((v) => {
-      const effectivePrice =
-        v.case_price && Number(v.case_price) > 0 ? v.case_price : v.price;
-
-      const markupAmount = Number(effectivePrice) * (markupPercent / 100);
-
-      const finalPrice = Number(effectivePrice) + markupAmount;
-
-      return {
+    data.variants = await Promise.all(
+      variants.map(async (v) => ({
         ...v,
+
+        title: decodeHtmlEntities(v.title),
 
         size: v.size_details?.name || null,
 
-        base_price: Number(effectivePrice).toFixed(2),
-
-        markup_percent: markupPercent,
-
-        markup_amount: Number(markupAmount.toFixed(2)),
-
-        price: Number(finalPrice.toFixed(2)),
-
-        original_price: Number(v.price || 0),
-
-        case_price: Number(v.case_price || 0),
-
-        used_case_price: !!v.case_price && Number(v.case_price) > 0,
-
-        pricing_tiers: buildPricingTiers(v.meta, markupPercent, false),
-
-        // Selling price per quantity tier (what the cart charges).
-        price_tiers: buildSellingTiers(v.meta, markupPercent),
-      };
-    });
+        ...(await shopperPricing(v, markupPercent)),
+      })),
+    );
 
     data.variants = sortSizes(data.variants);
 
@@ -5032,4 +5003,5 @@ module.exports = {
   getProductsForBrandMapping,
   assignBrandToProducts,
   getSearchVariants,
+  withListingPrices,
 };

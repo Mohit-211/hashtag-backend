@@ -6,7 +6,7 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
-| [2026-10-26: client decisions, first backend changes](#2026-10-26) | branch `feature/client-decisions`, not released | Read the notes; A31, A36, A37, A44, B4, Delete account and Turnstile in the to-do list |
+| [2026-10-26: client decisions, first backend changes](#2026-10-26) | branch `feature/client-decisions`, not released | Read the notes; A31, A36, A37, A44, B4, "$X+" cards, Delete account and Turnstile in the to-do list |
 | [2026-10-16: supplier pricing removed, status markers, SAGE stock](#2026-10-16) | `aba0065` | **Required**: switch SAGE pricing to `price_tiers` |
 | [2026-10-15: bug sweep](#2026-10-15) | `44141b0` | None required; read the notes |
 | [2026-10-14: security release](#2026-10-14) | `335d27b` | Done (hashtag-next `7b3f110`) |
@@ -39,6 +39,7 @@ These need the backend changes on branch `feature/client-decisions`, listed unde
 | Shop item | Q | Decision | What the shop does |
 |---|---|---|---|
 | A31 | 36 | Quantities of customized items can change in the cart, the customization can't; "−" stops at the minimum | Disable "−" when `can_decrease` is false and keep typed quantities at `min_quantity` or more; the API now refuses lower ones instead of removing the line. Removing stays on the Remove button. |
+| — | 47 | Guests and signed-in customers see the same prices; SAGE cards show the lowest price with "+" | Show a card's `price` as "$X+" when `price_from` is true. The use-case grid now gets prices too. |
 | A36 | 32 | US mainland only: the 48 contiguous states and Washington DC | Nothing required: the state list only has those 49. Show the API's message when an address is refused, and use `shippable` to keep older saved addresses outside them out of checkout. |
 | A44 | 49 | Out-of-stock products aren't shown; a cart item that runs out shows as out of stock | Show the cart line's `stock_message` when `stock_status` isn't `AVAILABLE`; checkout refuses those lines. Drop the "In stock only" filter, which no longer changes anything. |
 | — | 46 | A closed account is kept 30 days and restored by signing in | A "Delete account" option in profile settings that calls `DELETE user/deactivate` and says the account can be restored by signing in within 30 days. |
@@ -60,7 +61,6 @@ These need the backend changes on branch `feature/client-decisions`, listed unde
 | A33, B3 | 37 | Card, Google Pay, Cash App, PayPal and Apple Pay | Add Apple Pay; build the Google Pay and Cash App request with the order's real total (`amount: "1.00"` today, audit B1). |
 | A35 | 39 | Tracking for signed-in customers; the admin picks ShipStation or manual updates | Show the order's status and tracking from the API, whichever way it's updated. |
 | A45 | 56 | The team manages the gallery in the admin | Load gallery photos and captions from the API. |
-| — | 47 | Guests and signed-in customers see the same prices; SAGE cards show the lowest price with "+" | Show "$X+" on SAGE product cards, from a field the product list will return. |
 
 **Waiting on the client:** A8, DTG with several locations (Q8, reworded); CDR for production files (Q19); which font settings besides the font list (Q23). **Later, by the client's choice:** A24 pre-made products from suppliers (Q26), A42 price filter (Q54), A46 Back button (Q57), policy pages editable in the admin (Q61).
 
@@ -81,6 +81,8 @@ On branch `feature/client-decisions`. This section grows with each change until 
   - `POST address` and `PUT address` refuse a state outside them, and an address ShipStation matches to one (military APO/FPO addresses, for example), with `400` *"We only ship to the 48 contiguous US states and Washington DC."*
   - `GET address` adds `shippable` (true or false) to each saved address; an address saved before this release can be outside.
   - `POST order/shipping/rates` and `POST order` refuse an address that isn't `shippable` with `400` and the same message, plus *"Please choose another address."*
+- **One price for everyone** (Q47): `product/guest/:id`, `product/:id` and `product/variant/:id` now price variants with the same code. Guests get the same fields as signed-in customers: `base_price` is a number (it was a string), `title` is decoded and `pricing_tiers_customer` is there too.
+- **SAGE cards start at the lowest tier** (Q47): in `GET product`, `product/grand-category-products`, `product/product-by-brand` and `industry/use-case/products`, a SAGE product's `price` is its lowest tier price (the largest quantity's) and `price_from` is `true`; show it as "$2.59+". Other products have `price_from: false` and the price as before. `industry/use-case/products` had no prices before and now has them, the same fields as `GET product`.
 - **Cart minimums** (Q36): `PUT product/cart/decrement` at a line's minimum, and `PUT product/cart` with a typed quantity below it (0 included), answer `400` *"The minimum for this item is N."* instead of removing the line. `DELETE product/cart/:id` removes a line. Cart lines carry `min_quantity`: the variant's minimum, SAGE's first price tier or 12 for screen print, whichever is highest; `can_decrease` uses it too.
 - **Only products in stock** (Q49): the client doesn't want stock numbers shown, nor products that can't be bought.
   - `GET product`, `product/grand-category-products`, `product/product-by-brand` and `industry/use-case/products` leave out products with no variant in stock. Stock a supplier doesn't report (SAGE) counts as in stock. Prices and the size, colour and price filters use variants in stock only. `in_stock` is ignored, since it's now always on.

@@ -1,6 +1,7 @@
 const { calculatePricing } = require("../../config/pricing");
 const httpStatus = require("http-status");
 const ApiError = require("../ApiError");
+const { netPriceTiers } = require("./pricing.util");
 
 /*
 |--------------------------------------------------------------------------
@@ -555,25 +556,6 @@ const buildPricingSnapshot = async ({
   };
 };
 
-// A SAGE variant's quantity and price tiers, kept as pairs: filtering the two lists
-// separately shifted prices onto the wrong quantity whenever a tier in the middle was empty.
-const sageTiers = (variant) => {
-  let meta = variant.meta || {};
-
-  if (typeof meta === "string") {
-    try {
-      meta = JSON.parse(meta);
-    } catch (error) {
-      meta = {};
-    }
-  }
-
-  const rawNetTiers = meta.netTiers || [];
-  return (meta.qtyTiers || [])
-    .map((q, i) => ({ qty: Number(q), net: Number(rawNetTiers[i]) }))
-    .filter((tier) => tier.qty > 0 && !isNaN(tier.net) && tier.net > 0);
-};
-
 const SCREEN_PRINT_MINIMUM = 12;
 
 // The fewest pieces a cart line can have (client decision Q36: "−" and typed quantities stop
@@ -583,7 +565,7 @@ const lineMinimum = (variant, customization) => {
   let minimum = Number(variant.min_order_quantity) || 1;
 
   if (variant.supplier === "SAGE") {
-    const tiers = sageTiers(variant);
+    const tiers = netPriceTiers(variant.meta);
     if (tiers.length) minimum = Math.max(minimum, Math.min(...tiers.map((tier) => tier.qty)));
   }
 
@@ -600,7 +582,7 @@ const buildSagePricingSnapshot = async ({
   quantity = 1,
   customization = null,
 }) => {
-  const tiers = sageTiers(variant);
+  const tiers = netPriceTiers(variant.meta);
 
   const qtyTiers = tiers.map((tier) => tier.qty);
 

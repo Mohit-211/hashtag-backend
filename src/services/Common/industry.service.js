@@ -14,7 +14,7 @@ const {
   ProductAttachment,
 } = require("../../models");
 const sequelize = require("../../config/central.db");
-const { getSearchVariants } = require("./product.service");
+const { getSearchVariants, withListingPrices } = require("./product.service");
 const { getCurrentTiersForProducts, resolveAllTierProductIds, resolveTierProductIds } = require("./tier.service");
 const decodeHtmlEntities = require("../../utils/decodeHtmlEntities");
 const pick = require("../../utils/pick");
@@ -786,7 +786,7 @@ const getProductsForMultipleUseCases = async (useCaseIds, query) => {
   // Format
   // ==========================================
 
-  const data = rows.map((p) => {
+  const formatted = rows.map((p) => {
     const json = p.toJSON();
 
     const parentCategoriesMap =
@@ -818,6 +818,9 @@ const getProductsForMultipleUseCases = async (useCaseIds, query) => {
         : "category",
     };
   });
+
+  // Priced like the other product lists, so cards show the same price everywhere (Q47).
+  const data = await withListingPrices(formatted);
 
   return {
     data,
