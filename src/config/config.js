@@ -54,7 +54,6 @@ const envVarsSchema = Joi.object()
     ADM_DEPT_ID: Joi.string(),
     DEFAULT_AMOUNT: Joi.number().default(5),
     SUPER_ADMIN_NAME: Joi.string(),
-    SUPER_ADMIN_PASSWORD: Joi.string(),
     SUPER_ADMIN_EMAIL: Joi.string(),
   })
   .unknown();
@@ -95,6 +94,5 @@ module.exports = {
   ADM_DEPT_ID: envVars.ADM_DEPT_ID,
   DEFAULT_AMOUNT: envVars.DEFAULT_AMOUNT,
   SUPER_ADMIN_NAME: envVars.SUPER_ADMIN_NAME,
-  SUPER_ADMIN_PASSWORD: envVars.SUPER_ADMIN_PASSWORD,
   SUPER_ADMIN_EMAIL: envVars.SUPER_ADMIN_EMAIL,
 };
