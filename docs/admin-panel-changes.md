@@ -4,7 +4,7 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
-| [2026-10-26: client decisions, first backend changes](#2026-10-26) | branch `feature/client-decisions`, not released | Read the notes; Q42, Q44 and Q45 in the to-do list |
+| [2026-10-26: client decisions, first backend changes](#2026-10-26) | branch `feature/client-decisions`, not released | Read the notes; Q31, Q42, Q44 and Q45 in the to-do list |
 | [2026-10-16: status markers, SAGE stock, supplier pricing](#2026-10-16) | `aba0065` | **Recommended**: show variant status, add a status filter |
 | [2026-10-15: bug sweep](#2026-10-15) | `44141b0` | Optional: new endpoints and fields |
 | [2026-10-14: security release](#2026-10-14) | `335d27b` | Done |
@@ -34,6 +34,7 @@ These need the backend changes on branch `feature/client-decisions`, listed unde
 |---|---|---|
 | 42 | One password rule everywhere: 8+ characters with an uppercase letter, a number and a special character | Update the form check, which mirrors the old backend rule (2 digits, no spaces). |
 | 44 | Every admin has full access; Super Admins can add more Super Admins | Offer the Super Admin role when a Super Admin creates or edits an admin, and allow deleting another Super Admin (never yourself or the last one). |
+| 31 | Admins can set a product's weight; supplier weights stay where there's no admin weight | A weight field (lb) on product and variant edit, saved with `PUT product/admin/weight`, not with the product update, which would stop supplier updates for that product. |
 | 45 | Admins can set a password and share it; viewing a password isn't possible, since passwords are stored one-way, and the client agreed | A "Set password" action on customers and on admins. |
 
 ### After later backend work
@@ -43,7 +44,6 @@ These need the backend changes on branch `feature/client-decisions`, listed unde
 | 4, 10 | Decoration price tables editable in the admin; choices outside them are refused | Price-table screens. |
 | 16 | The team sets the minimum for promo products the supplier gives none for (100 today) | A field for it. |
 | 23 | The team manages the fonts for custom text (which other settings is being confirmed) | A fonts screen. |
-| 31 | Admins can set a product's weight | A weight field on product and variant edit. |
 | 34 | Cancellation within 2 hours; refunds by hand | A "refund done" action on cancelled orders. |
 | 39 | Per order: ShipStation tracking or manual updates | A tracking-mode switch and a status form on the order. |
 | 56 | The team manages the gallery | A gallery screen. |
@@ -69,6 +69,10 @@ On branch `feature/client-decisions`. This section grows with each change until 
   - `PUT admin/auth/setAdminPassword/:id`, Super Admin only: another admin's password. Their sessions end (`401`, then they sign in with the new password). For your own password use `change-password`; this one answers `400`.
   - `200` on success, `400` for the rule or a mismatch, `404` for an unknown or deleted account. The password isn't returned or emailed, so show the admin what they typed (or generated) before sending, for them to share.
 - **Closed customer accounts** (Q46): a customer who closes their account can restore it by signing in within 30 days; after that it's deleted, but its orders and payments stay. `GET order/admin` and the payments list now show the email and name on those orders and payments (until now they came back without a customer). Closed accounts stay out of the customer list, as before.
+- **Weights** (Q31): `PUT product/admin/weight` sets the shipping weight in pounds, for a whole product or for chosen variants:
+  - Body: `{ "product_id": 12, "weight_lb": 0.75 }` or `{ "variant_ids": [3, 4], "weight_lb": 0.75 }`; `"weight_lb": null` clears it, back to the supplier's weight or the default of 1 lb.
+  - Answers `{ "variants": 6, "weight_lb": 0.75 }`; `400` for a weight outside 0 to 150 lb or for both or neither target, `404` when no variant matches.
+  - Variants carry `admin_weight_lb` (the admin's) beside `unit_weight` (the supplier's); shipping uses the admin's first. Supplier syncs never change `admin_weight_lb`, and unlike `POST product/update` this doesn't stop supplier updates for the product.
 - **Products out of stock** (Q49): the shop's product lists now leave out products with nothing in stock. The panel's lists are unchanged, including the use-case product list (`industry/use-case/:id/products`), which still shows every product.
 - **Every order** (`BACKEND_QUESTIONS.md` E3): `GET order/admin?payment_status=ALL` lists orders of every payment status. Without the parameter it still lists paid orders only.
 

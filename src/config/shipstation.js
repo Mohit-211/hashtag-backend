@@ -35,6 +35,10 @@ const mapAddress = (address) => ({
 // The sender on every label and rate request, from the SHIP_FROM_* settings.
 const getShipFromAddress = () => ({ ...config.shipping.from });
 
+// Weight of one piece in lb: an admin's weight, else the supplier's, else the default (Q31).
+const shippingWeightLb = (variant) =>
+  Number(variant?.admin_weight_lb) || Number(variant?.unit_weight) || config.shipping.defaultWeightLb;
+
 // ====================== CREATE ORDER + SHIPMENT IN DASHBOARD ======================
 const createShipstationOrderV2 = async (
   order,
@@ -257,7 +261,7 @@ const createShipmentForOrder = async (order) => {
 
     const address = await Address.findByPk(order.address_id);
     const totalWeight = orderItems.reduce((sum, i) => {
-      return sum + i.quantity * Number(i.variant?.unit_weight || config.shipping.defaultWeightLb);
+      return sum + i.quantity * shippingWeightLb(i.variant);
     }, 0);
 
     // Create Order in Dashboard
@@ -310,7 +314,7 @@ const purchaseLabelForOrder = async (order) => {
 
     const totalWeight = orderItems.reduce(
       (sum, i) => {
-        return sum + i.quantity * Number(i.variant?.unit_weight || config.shipping.defaultWeightLb);
+        return sum + i.quantity * shippingWeightLb(i.variant);
       },
 
       0,
@@ -370,7 +374,7 @@ const cancelShipstationShipment = async (order) => {
 const getShippingRates = async ({ address, items }) => {
   try {
     const totalWeight = items.reduce((sum, i) => {
-      const weight = Number(i.variant?.unit_weight || config.shipping.defaultWeightLb);
+      const weight = shippingWeightLb(i.variant);
       return sum + i.quantity * weight;
     }, 0);
 

@@ -199,6 +199,11 @@ const getProductVariantByAdmin = catchAsync(async (req, res) => {
   return responseWrapper(res, variant, "", httpStatus.OK);
 });
 
+const setAdminWeight = catchAsync(async (req, res) => {
+  const result = await productService.setAdminWeight(req.body);
+  return responseWrapper(res, result, "Weight saved", httpStatus.OK);
+});
+
 const getProductVariantByIdAdmin = catchAsync(async (req, res) => {
   const variant = await productService.getProductVariantByIdAdmin(req.params.id);
   return responseWrapper(res, variant, "", httpStatus.OK);
@@ -255,6 +260,7 @@ module.exports = {
   deleteSSProductByStyle,
   getProductVariantByAdmin,
   getProductVariantByIdAdmin,
+  setAdminWeight,
   getProductByIdAdmin,
   getAdminStats,
   getAllProductsAdmin,

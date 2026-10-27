@@ -35,6 +35,7 @@ router.delete("/ss/delete/:styleId", requireAdmin, productController.deleteSSPro
 router.get("/admin/stats", requireAdmin, productController.getAdminStats);
 router.get("/get/variant", requireAdmin, productController.getProductVariantByAdmin);
 router.get("/admin/variant/:id", requireAdmin, productController.getProductVariantByIdAdmin);
+router.put("/admin/weight", requireAdmin, productController.setAdminWeight);
 router.get("/admin/get/all", requireAdmin, productController.getAllProductsAdmin);
 router.get("/pricing/markup", requireAdmin, pricingController.getAllPricingMarkup);
 router.put("/pricing/:id", requireAdmin, pricingController.updatePricingMarkup);

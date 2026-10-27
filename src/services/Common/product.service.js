@@ -4008,6 +4008,45 @@ const formatAdminVariant = (variant) => {
 
 // One variant, shaped exactly like a row of the admin variant list. Inactive variants
 // are included, so a link to one still opens.
+// Admins set the shipping weight of a whole product or of chosen variants, in lb, or clear it
+// with null to fall back to the supplier's weight or the default (Q31). It's stored in
+// admin_weight_lb, which supplier syncs never write, so unlike other admin edits it doesn't
+// lock the product against syncs.
+const MAX_WEIGHT_LB = 150;
+
+const setAdminWeight = async (body) => {
+  const { product_id, variant_ids, weight_lb } = body;
+
+  if (weight_lb === undefined) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "weight_lb is required; null clears it.");
+  }
+
+  const weight = weight_lb === null || weight_lb === "" ? null : Number(weight_lb);
+  if (weight !== null && !(Number.isFinite(weight) && weight > 0 && weight <= MAX_WEIGHT_LB)) {
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      `weight_lb must be a weight in pounds above 0 and up to ${MAX_WEIGHT_LB}, or null.`,
+    );
+  }
+
+  const ids = Array.isArray(variant_ids) ? variant_ids.map(Number).filter(Number.isInteger) : [];
+  if (Boolean(product_id) === Boolean(ids.length)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Send either product_id or variant_ids.");
+  }
+
+  const where = product_id ? { product_id: Number(product_id) } : { id: { [Op.in]: ids } };
+
+  const variants = await ProductVariant.count({ where });
+  if (!variants) {
+    throw new ApiError(httpStatus.NOT_FOUND, "No variants found");
+  }
+
+  const adminWeight = weight === null ? null : Number(weight.toFixed(3));
+  await ProductVariant.update({ admin_weight_lb: adminWeight }, { where });
+
+  return { variants, weight_lb: adminWeight };
+};
+
 const getProductVariantByIdAdmin = async (id) => {
   const variant = await ProductVariant.findOne({
     where: { id },
@@ -4997,6 +5036,7 @@ module.exports = {
   deleteSSProductByStyle,
   getProductVariantByAdmin,
   getProductVariantByIdAdmin,
+  setAdminWeight,
   getAdminStats,
   getProductByIdAdmin,
   getAllProductsAdmin,

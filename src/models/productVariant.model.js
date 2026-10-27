@@ -111,6 +111,13 @@ ProductVariant.init(
       allowNull: true,
     },
 
+    // Weight an admin set, in lb (migration 2026-10-27, Q31). Supplier syncs never write it;
+    // shipping uses it before unit_weight.
+    admin_weight_lb: {
+      type: DataTypes.DECIMAL(10, 3),
+      allowNull: true,
+    },
+
     case_qty: {
       type: DataTypes.INTEGER,
       allowNull: true,

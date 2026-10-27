@@ -50,17 +50,18 @@ Found after the audit: N1 to N3 (bottom of this file).
 
 ### Deploying `feature/client-decisions` (not released)
 
-1. **Any time:** run `migrations/2026-10-26_supplier_markups.sql`.
-2. **In `.env`** (each one is required; the app won't start without it):
+1. **Before pulling:** run `migrations/2026-10-27_admin_weight_before_deploy.sql`. The new code reads its column on every product query.
+2. **Any time:** run `migrations/2026-10-26_supplier_markups.sql`.
+3. **In `.env`** (each one is required; the app won't start without it):
    - `CONTACT_INBOX=patrick@hashtagbillionaire.com`
    - `SHIP_FROM_NAME=HashtagBillionaire` (the client's spelling, Q30).
    - `SHIP_FROM_PHONE`, `SHIP_FROM_ADDRESS_LINE1`, `SHIP_FROM_CITY`, `SHIP_FROM_STATE`, `SHIP_FROM_POSTAL_CODE`: the phone and address the client confirmed, the ones hard-coded until now (`git show 11b645d:src/config/shipstation.js`).
    - Optional: `DEFAULT_PACKAGE_WEIGHT_LB` (1 when unset); the email look, `EMAIL_BRAND_NAME`, `EMAIL_LOGO_URL`, `EMAIL_BRAND_COLOR` and `EMAIL_BRAND_TEXT_COLOR` (the website's own when unset; quote the colours, see `.env.example`).
    - Leave `TURNSTILE_SECRET_KEY` empty until the shop shows the Turnstile widget (Q60); set it after the shop's release.
    - Sender name (Q59): put it in front of the address already in `EMAIL_FROM`, as `EMAIL_FROM="HashtagBillionaire <the same address>"`.
-3. **Deploy:** `git pull`, then `npm install --omit=dev`, then `pm2 restart backend --update-env`.
-4. **Within 15 minutes:** the account cleanup erases every account left unverified for 2 hours, including the ones hidden since 15 October, as the client asked (Q40). Take a database backup first if a copy should be kept.
-5. **Tell the team:** the shop stops listing products with nothing in stock (Q49): 42 of the 1,488 listed on 27 October. Three are pre-made products with stock 0 that can't be bought today either (Chenille patch, Retractable Banners, Feather Flags); setting their stock in the admin brings them back.
+4. **Deploy:** `git pull`, then `npm install --omit=dev`, then `pm2 restart backend --update-env`.
+5. **Within 15 minutes:** the account cleanup erases every account left unverified for 2 hours, including the ones hidden since 15 October, as the client asked (Q40). Take a database backup first if a copy should be kept.
+6. **Tell the team:** the shop stops listing products with nothing in stock (Q49): 42 of the 1,488 listed on 27 October. Three are pre-made products with stock 0 that can't be bought today either (Chenille patch, Retractable Banners, Feather Flags); setting their stock in the admin brings them back.
 
 Changes the shop and the admin panel need: [docs/frontend-changes.md](docs/frontend-changes.md), [docs/admin-panel-changes.md](docs/admin-panel-changes.md).
 
@@ -107,7 +108,7 @@ Changes the shop and the admin panel need: [docs/frontend-changes.md](docs/front
 | H19 | Raw SQL in token saving | ✅ | `335d27b` | |
 | H20 | Request bodies written into models | ◐ | `335d27b`, `44141b0` | Addresses, brands, industries, use cases and sizes done; product create and update open |
 | H21 | Mail server usable for spam | ✅ | `335d27b`, `24de211` | |
-| H22 | Supplier syncs corrupt data | ◐ | `aba0065` | Done: SAGE stock, SAGE colours retired (not erased), restores and status markers for all suppliers, monthly SAGE change check. Open: SanMar/S&S/OttoCap SKUs the supplier drops aren't deactivated; brand slug collisions across suppliers; failed imports clean up by batch id; OttoCap category 1461 hard-coded; OttoCap weight and quantity columns; SanMar image rows hit a unique key (logged, non-fatal) |
+| H22 | Supplier syncs corrupt data | ◐ | `aba0065` | Done: SAGE stock, SAGE colours retired (not erased), restores and status markers for all suppliers, monthly SAGE change check. Open: SanMar/S&S/OttoCap SKUs the supplier drops aren't deactivated; brand slug collisions across suppliers; failed imports clean up by batch id; OttoCap category 1461 hard-coded; OttoCap weight and quantity columns (the catalog's weight is free text with no known unit: check real rows before importing it; admins can set OttoCap weights meanwhile, Q31); SanMar image rows hit a unique key (logged, non-fatal) |
 | H23 | Carrier sync couldn't work | ✅ | `44141b0` | |
 | H24 | Every address validated as US | ✅ | `44141b0` | |
 | H25 | Auth needed fragile headers | ✅ | `335d27b` | |
@@ -203,7 +204,7 @@ The client answered on 26 October and answered the follow-ups on 27 October; the
 | 27, 28 | The team buys labels in ShipStation; the customer pays the quoted rate | C8, H8, H16 | ❌ | | Payments |
 | 29 | A flat 8.25% on products, not on shipping | None: that's what the code does (H14) | ✅ | | |
 | 30 | Ship-from: "HashtagBillionaire", at the same address and phone | Sender moved from the code to `SHIP_FROM_*` in `.env` (H12) | ✅ | `ea702b5` | |
-| 31 | Default 1 lb; supplier weights; admins can set a weight | Done: default 1 lb (`DEFAULT_PACKAGE_WEIGHT_LB`, was 0.5). Open: weight on admin edits; OttoCap weight (H22) | ◐ | `ea702b5` | |
+| 31 | Default 1 lb; supplier weights; admins can set a weight | Default 1 lb (`DEFAULT_PACKAGE_WEIGHT_LB`, was 0.5). `PUT product/admin/weight` sets a product's or chosen variants' weight in `admin_weight_lb` (`migrations/2026-10-27_admin_weight_before_deploy.sql`), which syncs never write and which doesn't lock the product; shipping uses it before the supplier's weight. Open: OttoCap's weight (H22) | ◐ | `ea702b5` | |
 | 32 | US mainland only: the 48 contiguous states and DC; not Alaska, Hawaii, Puerto Rico, the territories or APO/FPO | `src/config/shippingRegions.js` lists the 49. The US state list offers only those; saving or moving an address elsewhere, shipping rates and order creation answer 400, including an address ShipStation matches to a military code; saved addresses carry `shippable` | ✅ | | |
 | 34 | Cancel within 2 hours; refunds by hand in 5–7 days | C10, M9; mark the order for a manual refund | ❌ | | Payments |
 | 35 | Keep the unpaid-order flow | H8 only | ❌ | | Payments |
