@@ -36,7 +36,7 @@ Found after the audit: N1 to N3 (bottom of this file).
 | `aba0065` | 16 Oct | Supplier pricing hidden from shoppers; SAGE stock; supplier status markers; ESLint | yes |
 | `8f53487` to `96d6432` | 26 Oct | Client decisions, first batch: markups, contact inbox, label sender and default weight, syncs on the 1st, one password rule, optional US phone, Super Admin management and set-password, unverified accounts erased, all-orders filter for the admin panel | no |
 | `8eb2d22` to `f2f996a` | 27 Oct | Client decisions, second batch: US mainland shipping, closed accounts kept 30 days, only products in stock, branded emails, Turnstile, cart minimums, one pricing path with SAGE "from" prices, admin weights, gallery | no |
-| (next commit) | 27 Oct | Settings moved from `.env` to the admin panel's Settings page (`app_settings`, secrets encrypted, changed with the settings key); `.env` keeps only what the server needs to start | no |
+| `27de06f` | 27 Oct | Settings moved from `.env` to the admin panel's Settings page (`app_settings`, secrets encrypted, changed with the settings key); `.env` keeps only what the server needs to start | no |
 
 ### Deploying `fix/bug-sweep`
 
