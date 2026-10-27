@@ -56,6 +56,7 @@ Found after the audit: N1 to N3 (bottom of this file).
    - `SHIP_FROM_NAME=HashtagBillionaire` (the client's spelling, Q30).
    - `SHIP_FROM_PHONE`, `SHIP_FROM_ADDRESS_LINE1`, `SHIP_FROM_CITY`, `SHIP_FROM_STATE`, `SHIP_FROM_POSTAL_CODE`: the phone and address the client confirmed, the ones hard-coded until now (`git show 11b645d:src/config/shipstation.js`).
    - Optional: `DEFAULT_PACKAGE_WEIGHT_LB` (1 when unset); the email look, `EMAIL_BRAND_NAME`, `EMAIL_LOGO_URL`, `EMAIL_BRAND_COLOR` and `EMAIL_BRAND_TEXT_COLOR` (the website's own when unset; quote the colours, see `.env.example`).
+   - Leave `TURNSTILE_SECRET_KEY` empty until the shop shows the Turnstile widget (Q60); set it after the shop's release.
    - Sender name (Q59): put it in front of the address already in `EMAIL_FROM`, as `EMAIL_FROM="HashtagBillionaire <the same address>"`.
 3. **Deploy:** `git pull`, then `npm install --omit=dev`, then `pm2 restart backend --update-env`.
 4. **Within 15 minutes:** the account cleanup erases every account left unverified for 2 hours, including the ones hidden since 15 October, as the client asked (Q40). Take a database backup first if a copy should be kept.
@@ -223,7 +224,7 @@ The client answered on 26 October and answered the follow-ups on 27 October; the
 | 56 | The team manages the gallery in the admin | Gallery table, admin endpoints, public list | ❌ | | |
 | 58 | patrick@hashtagbillionaire.com everywhere | Contact-form messages and new sourcing requests are emailed to `CONTACT_INBOX` (sourcing requests notified no one before) | ✅ | `e691cce` | |
 | 59, 62 | Account emails with the website's logo, colours and name, set in `.env`; the site and admin addresses are already there | Every email has the website's header logo, its yellow on buttons and the name HashtagBillionaire, with the site and `CONTACT_INBOX` in the footer. `EMAIL_BRAND_NAME`, `EMAIL_LOGO_URL`, `EMAIL_BRAND_COLOR` and `EMAIL_BRAND_TEXT_COLOR` change them | ✅ | | |
-| 60 | Cloudflare Turnstile on the contact and sourcing forms, not a CAPTCHA | Check the Turnstile token once a secret key is set | ❌ | | Client: a Turnstile widget in their Cloudflare account |
+| 60 | Cloudflare Turnstile on the contact and sourcing forms, not a CAPTCHA | `POST contactUs` and `POST sourcing-requests/create` check the token with Cloudflare (`src/middlewares/turnstile.js`) once `TURNSTILE_SECRET_KEY` is set; until then they work as before | ✅ | | Client: a Turnstile widget in their Cloudflare account; then the shop's widget, then the key |
 
 Parked by the client, with no backend work for now: Q26 (pre-made products from suppliers), Q50, Q54, Q57 and Q61 (policy pages, admin editing).
 

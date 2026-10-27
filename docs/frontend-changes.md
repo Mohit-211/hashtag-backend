@@ -6,7 +6,7 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
-| [2026-10-26: client decisions, first backend changes](#2026-10-26) | branch `feature/client-decisions`, not released | Read the notes; A36, A37, A44, B4 and Delete account in the to-do list |
+| [2026-10-26: client decisions, first backend changes](#2026-10-26) | branch `feature/client-decisions`, not released | Read the notes; A36, A37, A44, B4, Delete account and Turnstile in the to-do list |
 | [2026-10-16: supplier pricing removed, status markers, SAGE stock](#2026-10-16) | `aba0065` | **Required**: switch SAGE pricing to `price_tiers` |
 | [2026-10-15: bug sweep](#2026-10-15) | `44141b0` | None required; read the notes |
 | [2026-10-14: security release](#2026-10-14) | `335d27b` | Done (hashtag-next `7b3f110`) |
@@ -42,6 +42,7 @@ These need the backend changes on branch `feature/client-decisions`, listed unde
 | A36 | 32 | US mainland only: the 48 contiguous states and Washington DC | Nothing required: the state list only has those 49. Show the API's message when an address is refused, and use `shippable` to keep older saved addresses outside them out of checkout. |
 | A44 | 49 | Out-of-stock products aren't shown; a cart item that runs out shows as out of stock | Show the cart line's `stock_message` when `stock_status` isn't `AVAILABLE`; checkout refuses those lines. Drop the "In stock only" filter, which no longer changes anything. |
 | — | 46 | A closed account is kept 30 days and restored by signing in | A "Delete account" option in profile settings that calls `DELETE user/deactivate` and says the account can be restored by signing in within 30 days. |
+| — | 60 | Cloudflare Turnstile on the contact and sourcing forms | Add the Turnstile widget to both forms with the site key from the client's Cloudflare account, and send its token as `cf-turnstile-response` (the widget's own form field) or `turnstile_token`. On a `400`, reset the widget before letting the customer resubmit: a token works once. |
 | A37 | 43 | Phone optional at sign-up; US numbers only | Make the sign-up phone optional; keep the 10-digit check when one is entered. |
 | B4 | 42 | The shop's rule everywhere: 8+ characters with an uppercase letter, a number and a special character | Make sign-up enforce all four (today "Ab1!" passes, audit B8), and stop trimming the password on sign-up only (audit B8). |
 
@@ -60,7 +61,6 @@ These need the backend changes on branch `feature/client-decisions`, listed unde
 | A35 | 39 | Tracking for signed-in customers; the admin picks ShipStation or manual updates | Show the order's status and tracking from the API, whichever way it's updated. |
 | A45 | 56 | The team manages the gallery in the admin | Load gallery photos and captions from the API. |
 | — | 47 | Guests and signed-in customers see the same prices; SAGE cards show the lowest price with "+" | Show "$X+" on SAGE product cards, from a field the product list will return. |
-| — | 60 | Cloudflare Turnstile on the contact and sourcing forms | The Turnstile widget on both forms, sending its token. |
 
 **Waiting on the client:** A8, DTG with several locations (Q8, reworded); CDR for production files (Q19); which font settings besides the font list (Q23). **Later, by the client's choice:** A24 pre-made products from suppliers (Q26), A42 price filter (Q54), A46 Back button (Q57), policy pages editable in the admin (Q61).
 
@@ -87,6 +87,7 @@ On branch `feature/client-decisions`. This section grows with each change until 
   - Wishlist items: `stock_status` is `AVAILABLE` or `OUT_OF_STOCK`, without `stock`.
   - `PUT product/cart/increment` past the stock answers `400` *"There isn't enough in stock to add more."* (was "Only N left").
   - Product and variant pages still send `stock`, so the shop can stop a quantity at it; don't show the number.
+- **Turnstile on the public forms** (Q60): `POST contactUs` and `POST sourcing-requests/create` take a Cloudflare Turnstile token as `cf-turnstile-response` or `turnstile_token`. The check starts only when the server has the secret key, which is set after the shop's release, so the forms keep working meanwhile. Then a missing, used or refused token answers `400` *"We couldn't confirm this was sent by a person. Please try again."*, and a sourcing request's files are discarded.
 - **Emails look like the website** (Q59): every email shows the logo from the website's `/logo_header.png`, so keep that file at that path (or tell the backend if it moves).
 - **Closing an account** (Q46): `DELETE user/deactivate` keeps working as before and now means:
   - The customer is signed out on every device.

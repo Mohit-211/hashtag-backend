@@ -40,6 +40,9 @@ const envVarsSchema = Joi.object()
     TRUST_PROXY: Joi.string()
       .default("loopback")
       .description("Express 'trust proxy' setting; loopback = nginx on the same server"),
+    TURNSTILE_SECRET_KEY: Joi.string()
+      .allow("")
+      .description("Cloudflare Turnstile secret; when set, the contact and sourcing forms need a Turnstile token"),
     EXPOSE_SUPPLIER_COST: Joi.boolean()
       .default(false)
       .description("true only while the shop switches to price_tiers: keeps supplier cost fields in shopper responses"),
@@ -166,6 +169,7 @@ module.exports = {
   adminFrontendUrl: envVars.ADMIN_FRONTEND_URL.replace(/\/+$/, ""),
   trustProxy: envVars.TRUST_PROXY,
   exposeSupplierCost: envVars.EXPOSE_SUPPLIER_COST,
+  turnstileSecretKey: envVars.TURNSTILE_SECRET_KEY || null,
   storageDir: envVars.STORAGE_DIR,
   logDir: envVars.LOG_DIR,
   defaultLimit: envVars.DEFAULT_API_DATA_LIMIT,
