@@ -6,7 +6,7 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
-| [2026-10-26: client decisions, first backend changes](#2026-10-26) | branch `feature/client-decisions`, not released | Read the notes; A37 and B4 in the to-do list |
+| [2026-10-26: client decisions, first backend changes](#2026-10-26) | branch `feature/client-decisions`, not released | Read the notes; A36, A37 and B4 in the to-do list |
 | [2026-10-16: supplier pricing removed, status markers, SAGE stock](#2026-10-16) | `aba0065` | **Required**: switch SAGE pricing to `price_tiers` |
 | [2026-10-15: bug sweep](#2026-10-15) | `44141b0` | None required; read the notes |
 | [2026-10-14: security release](#2026-10-14) | `335d27b` | Done (hashtag-next `7b3f110`) |
@@ -39,6 +39,7 @@ These need the backend changes on branch `feature/client-decisions`, listed unde
 
 | Shop item | Q | Decision | What the shop does |
 |---|---|---|---|
+| A36 | 32 | US mainland only: the 48 contiguous states and Washington DC | Nothing required: the state list only has those 49. Show the API's message when an address is refused, and use `shippable` to keep older saved addresses outside them out of checkout. |
 | A37 | 43 | Phone optional at sign-up; US numbers only | Make the sign-up phone optional; keep the 10-digit check when one is entered. |
 | B4 | 42 | The shop's rule everywhere: 8+ characters with an uppercase letter, a number and a special character | Make sign-up enforce all four (today "Ab1!" passes, audit B8), and stop trimming the password on sign-up only (audit B8). |
 
@@ -55,7 +56,6 @@ These need the backend changes on branch `feature/client-decisions`, listed unde
 | A29 | 34 | Cancel within 2 hours | A Cancel button on orders under 2 hours old, once the API's cancel works. |
 | A33, B3 | 37 | Card, Google Pay, Cash App, PayPal and Apple Pay | Add Apple Pay; build the Google Pay and Cash App request with the order's real total (`amount: "1.00"` today, audit B1). |
 | A35 | 39 | Tracking for signed-in customers; the admin picks ShipStation or manual updates | Show the order's status and tracking from the API, whichever way it's updated. |
-| A36 | 32 | US mainland only: the 48 contiguous states and Washington DC | Nothing: the states list will only contain those. |
 | A44 | 49 | Out-of-stock products aren't shown; a cart item that runs out shows as out of stock | Show the out-of-stock mark the cart will return. |
 | A45 | 56 | The team manages the gallery in the admin | Load gallery photos and captions from the API. |
 | — | 46 | A closed account is kept 30 days and restored by signing in | A "Delete account" option in profile settings that says so. |
@@ -76,6 +76,11 @@ On branch `feature/client-decisions`. This section grows with each change until 
 - **Supplier updates** (Q51): prices and stock from all four suppliers now refresh on the 1st of each month, instead of the 5th, 10th, 15th and 25th. The SAGE stock change from [2026-10-16](#2026-10-16) lands on the first 1st after this release.
 - **Password rule** (Q42): sign-up, the reset page and the signed-in password change now check the shop's own rule: 8 to 128 characters, with an uppercase letter, a number and a special character (anything that isn't a letter or a digit, so a space counts). It replaces "8+ characters, 2 digits, no spaces". A password that fails gets `400` with *"Password must be 8 to 128 characters long and include an uppercase letter, a number and a special character."* Existing passwords keep working; the rule applies when a password is set.
 - **Unverified accounts** (Q40) are erased completely 2 hours after sign-up instead of hidden. For the shop nothing changes: the same email can register again, as before.
+- **Shipping to the US mainland only** (Q32): orders ship to the 48 contiguous states and Washington DC.
+  - `GET country/233` lists those 49 states only (66 today). The response shape is unchanged.
+  - `POST address` and `PUT address` refuse a state outside them, and an address ShipStation matches to one (military APO/FPO addresses, for example), with `400` *"We only ship to the 48 contiguous US states and Washington DC."*
+  - `GET address` adds `shippable` (true or false) to each saved address; an address saved before this release can be outside.
+  - `POST order/shipping/rates` and `POST order` refuse an address that isn't `shippable` with `400` and the same message, plus *"Please choose another address."*
 - **Sign-up phone** (Q43): `mobile` on `POST user/auth/register` is optional; leave it out or send it empty. When it's sent it must be a US number: 10 digits, with or without formatting or a leading +1, and it's stored as the 10 digits. Otherwise the answer is `400` *"Please enter a valid 10-digit US phone number, or leave it empty."* The missing-fields message no longer lists `mobile`.
 
 ---

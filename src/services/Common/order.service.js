@@ -23,6 +23,8 @@ const ApiError = require("../../utils/ApiError");
 const httpStatus = require("http-status");
 const { Op } = require("sequelize");
 const decodeHtmlEntities = require("../../utils/decodeHtmlEntities");
+const { NOT_SHIPPED_MESSAGE } = require("../../config/shippingRegions");
+const { canShipTo } = require("./address.service");
 const {
   parseJson,
   getCustomizationArtwork,
@@ -66,6 +68,10 @@ const createOrder = async (body) => {
 
     if (!address) {
       throw new ApiError(httpStatus.BAD_REQUEST, "Invalid address");
+    }
+
+    if (!(await canShipTo(address))) {
+      throw new ApiError(httpStatus.BAD_REQUEST, `${NOT_SHIPPED_MESSAGE} Please choose another address.`);
     }
 
     /*

@@ -2,6 +2,7 @@ const httpStatus = require('http-status');
 
 const { Country, State } = require('../../models');
 const ApiError = require('../../utils/ApiError');
+const { SHIPPING_COUNTRY, isShippingState } = require('../../config/shippingRegions');
 
 
 const getAllCountry = async (body, query, params) => {
@@ -32,12 +33,12 @@ const getCountryId = async (body, query, params) => {
         let result = {};
         result = await Country.findOne(
             {
-                attributes: ['id', 'name'],
+                attributes: ['id', 'name', 'iso2'],
                 include: [
                     {
                         model: State,
                         as: 'all_state',
-                        attributes: ['id', 'name', 'country_id',]
+                        attributes: ['id', 'name', 'country_id', 'iso2']
                     }
                 ],
                 where: { is_active: 1, id: params.id }
@@ -46,7 +47,14 @@ const getCountryId = async (body, query, params) => {
         if (!result) {
             throw new ApiError(httpStatus.NOT_FOUND, 'Country not found.');
         };
-        return result;
+
+        // Addresses are for shipping, so the shipping country lists only the states we ship to.
+        const { iso2, ...country } = result.toJSON();
+        const states = iso2 === SHIPPING_COUNTRY
+            ? country.all_state.filter((state) => isShippingState(state.iso2) || isShippingState(state.name))
+            : country.all_state;
+        country.all_state = states.map(({ id, name, country_id }) => ({ id, name, country_id }));
+        return country;
 
     } catch (error) {
         throw new ApiError(error.statusCode ? error.statusCode : httpStatus.INTERNAL_SERVER_ERROR, error.message);

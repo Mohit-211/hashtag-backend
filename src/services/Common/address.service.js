@@ -2,6 +2,11 @@
 
 const { getLatLng } = require("../../config/geo.helper");
 const { validateAddress } = require("../../config/shipstation");
+const {
+  SHIPPING_COUNTRY,
+  NOT_SHIPPED_MESSAGE,
+  shipsTo,
+} = require("../../config/shippingRegions");
 const { Address, Country, State, City } = require("../../models");
 const ApiError = require("../../utils/ApiError");
 const httpStatus = require("http-status");
@@ -35,6 +40,23 @@ const pickAddressInput = (body) =>
     ]),
   );
 
+// Orders ship only to the US mainland (Q32). Both the chosen country and state, and the
+// address ShipStation matched, must be there.
+const locationShips = (country, state) =>
+  shipsTo(country.iso2, state.iso2) || shipsTo(country.iso2, state.name);
+
+// Whether orders can ship to a saved address. Older rows may hold the state's name instead
+// of its code, or only its id.
+const canShipTo = async (address) => {
+  const country = address.country || SHIPPING_COUNTRY;
+  if (address.state) return shipsTo(country, address.state);
+
+  const state = address.state_id
+    ? await State.findByPk(address.state_id, { attributes: ["iso2", "name"] })
+    : null;
+  return Boolean(state) && (shipsTo(country, state.iso2) || shipsTo(country, state.name));
+};
+
 const addAddress = async (body) => {
   try {
     const { user, country_id, state_id, city_id } = body;
@@ -65,6 +87,10 @@ const addAddress = async (body) => {
       );
     }
 
+    if (!locationShips(country, state)) {
+      throw new ApiError(httpStatus.BAD_REQUEST, NOT_SHIPPED_MESSAGE);
+    }
+
     // ✅ 3. Convert to ShipStation format
     const addressForValidation = {
       name: body.name,
@@ -83,6 +109,10 @@ const addAddress = async (body) => {
 
     if (!cleaned) {
       throw new ApiError(httpStatus.BAD_REQUEST, "Address validation failed");
+    }
+
+    if (!shipsTo(cleaned.country_code, cleaned.state_province)) {
+      throw new ApiError(httpStatus.BAD_REQUEST, NOT_SHIPPED_MESSAGE);
     }
 
     // ✅ 5. Check duplicate
@@ -174,10 +204,18 @@ const getAddresses = async (body) => {
   try {
     const { user } = body;
 
-    return await Address.findAll({
+    const addresses = await Address.findAll({
       attributes: { exclude: ["raw_input"] },
       where: { user_id: user.id, is_active: true },
     });
+
+    // Addresses saved before the US-mainland rule stay listed; checkout refuses them.
+    return Promise.all(
+      addresses.map(async (address) => ({
+        ...address.toJSON(),
+        shippable: await canShipTo(address),
+      })),
+    );
   } catch (error) {
     throw new ApiError(
       error.statusCode || httpStatus.INTERNAL_SERVER_ERROR,
@@ -220,6 +258,10 @@ const updateAddress = async (body) => {
         throw new ApiError(httpStatus.BAD_REQUEST, "Invalid location IDs");
       }
 
+      if (!locationShips(country, state)) {
+        throw new ApiError(httpStatus.BAD_REQUEST, NOT_SHIPPED_MESSAGE);
+      }
+
       const addressForValidation = {
         name: data.name || address.name,
         phone: data.phone || address.phone,
@@ -232,6 +274,10 @@ const updateAddress = async (body) => {
       };
 
       cleaned = await validateAddress(addressForValidation);
+
+      if (!shipsTo(cleaned.country_code, cleaned.state_province)) {
+        throw new ApiError(httpStatus.BAD_REQUEST, NOT_SHIPPED_MESSAGE);
+      }
 
       coords = await getLatLng({
         address_line1: cleaned.address_line1,
@@ -328,4 +374,5 @@ module.exports = {
   getAddresses,
   updateAddress,
   deleteAddress,
+  canShipTo,
 };

@@ -201,7 +201,7 @@ The client answered on 26 October and answered the follow-ups on 27 October; the
 | 29 | A flat 8.25% on products, not on shipping | None: that's what the code does (H14) | ✅ | | |
 | 30 | Ship-from: "HashtagBillionaire", at the same address and phone | Sender moved from the code to `SHIP_FROM_*` in `.env` (H12) | ✅ | `ea702b5` | |
 | 31 | Default 1 lb; supplier weights; admins can set a weight | Done: default 1 lb (`DEFAULT_PACKAGE_WEIGHT_LB`, was 0.5). Open: weight on admin edits; OttoCap weight (H22) | ◐ | `ea702b5` | |
-| 32 | US mainland only: the 48 contiguous states and DC; not Alaska, Hawaii, Puerto Rico, the territories or APO/FPO | Offer only those states; refuse other addresses when saved, quoted and ordered | ❌ | | |
+| 32 | US mainland only: the 48 contiguous states and DC; not Alaska, Hawaii, Puerto Rico, the territories or APO/FPO | `src/config/shippingRegions.js` lists the 49. The US state list offers only those; saving or moving an address elsewhere, shipping rates and order creation answer 400, including an address ShipStation matches to a military code; saved addresses carry `shippable` | ✅ | | |
 | 34 | Cancel within 2 hours; refunds by hand in 5–7 days | C10, M9; mark the order for a manual refund | ❌ | | Payments |
 | 35 | Keep the unpaid-order flow | H8 only | ❌ | | Payments |
 | 36 | Quantities editable in the cart; "−" stops at the minimum | Refuse quantities below the minimum on every change | ❌ | | |

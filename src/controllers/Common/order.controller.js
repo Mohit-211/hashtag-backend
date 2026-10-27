@@ -1,11 +1,12 @@
 const httpStatus = require("http-status");
 const catchAsync = require("../../utils/catchAsync");
 const responseWrapper = require("../../config/responseWrapper");
-const { orderService } = require("../../services");
+const { orderService, addressService } = require("../../services");
 const {
   getShippingRates,
   purchaseLabelForOrder,
 } = require("../../config/shipstation");
+const { NOT_SHIPPED_MESSAGE } = require("../../config/shippingRegions");
 const {
   Address,
   Cart,
@@ -29,6 +30,10 @@ const getShippingRatesController = catchAsync(async (req, res) => {
 
   if (!address) {
     throw new ApiError(400, "Invalid address");
+  }
+
+  if (!(await addressService.canShipTo(address))) {
+    throw new ApiError(400, `${NOT_SHIPPED_MESSAGE} Please choose another address.`);
   }
 
   const cartItems = await Cart.findAll({
