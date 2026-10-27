@@ -32,6 +32,7 @@ const decodeHtmlEntities = require("../../utils/decodeHtmlEntities");
 const sortSizes = require("../../utils/sortSizes");
 const { COLOR_FILTERS } = require("../../utils/colorFilter");
 const { variantInStock, productInStock } = require("../../utils/stock");
+const settings = require("../../config/settings");
 const { buildPricingTiers, buildSellingTiers, netPriceTiers } = require("../../utils/pricing/pricing.util");
 const {
   resolveTierProductIds,
@@ -303,7 +304,7 @@ const createProduct = async (body, files) => {
         product_id: product.id,
         file_type: "image",
         file_name: file.filename,
-        file_uri: `${process.env.IMAGE_BASE_URL}/images/${file.filename}`,
+        file_uri: `${settings.getRequired("IMAGE_BASE_URL")}/images/${file.filename}`,
         file_size: file.size,
         is_primary: i === 0,
         supplier: "MANUAL",
@@ -487,7 +488,7 @@ const addProductVariants = async (body, files) => {
           variantImages.push({
             variant_id: variant.id,
             file_name: file.filename,
-            file_uri: `${process.env.IMAGE_BASE_URL}/images/${file.filename}`,
+            file_uri: `${settings.getRequired("IMAGE_BASE_URL")}/images/${file.filename}`,
             file_size: file.size,
             is_primary: j === 0,
             supplier: "MANUAL",
@@ -645,7 +646,7 @@ const updateManualProductFull = async (body, files) => {
         product_id,
         file_type: "image",
         file_name: file.filename,
-        file_uri: `${process.env.IMAGE_BASE_URL}/images/${file.filename}`,
+        file_uri: `${settings.getRequired("IMAGE_BASE_URL")}/images/${file.filename}`,
         file_size: file.size,
         is_primary: false,
         supplier: "MANUAL",
@@ -943,7 +944,7 @@ const updateManualProductFull = async (body, files) => {
           variantImageRows.push({
             variant_id: variant.id,
             file_name: file.filename,
-            file_uri: `${process.env.IMAGE_BASE_URL}/images/${file.filename}`,
+            file_uri: `${settings.getRequired("IMAGE_BASE_URL")}/images/${file.filename}`,
             file_size: file.size,
             is_primary: false,
             supplier: "MANUAL",
@@ -1015,7 +1016,7 @@ const toImageUrl = (image) => {
 
   if (/^https?:\/\//i.test(uri)) return uri;
 
-  const base = String(process.env.IMAGE_BASE_URL || "").replace(/\/+$/, "");
+  const base = String(settings.get("IMAGE_BASE_URL") || "");
   const path = uri.replace(/^\/+/, "");
 
   if (path) {
@@ -2828,7 +2829,7 @@ const updateProduct = async (body, files) => {
         product_id,
         file_type: "image",
         file_name: file.filename,
-        file_uri: `${process.env.IMAGE_BASE_URL}/images/${file.filename}`,
+        file_uri: `${settings.getRequired("IMAGE_BASE_URL")}/images/${file.filename}`,
         file_size: file.size,
         is_primary: false,
       }));
@@ -3055,7 +3056,7 @@ const updateProduct = async (body, files) => {
           variantImageRows.push({
             variant_id: variant.id,
             file_name: file.filename,
-            file_uri: `${process.env.IMAGE_BASE_URL}/images/${file.filename}`,
+            file_uri: `${settings.getRequired("IMAGE_BASE_URL")}/images/${file.filename}`,
             file_size: file.size,
             is_primary: false,
           });

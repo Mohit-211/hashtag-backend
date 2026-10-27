@@ -36,6 +36,7 @@ Found after the audit: N1 to N3 (bottom of this file).
 | `aba0065` | 16 Oct | Supplier pricing hidden from shoppers; SAGE stock; supplier status markers; ESLint | yes |
 | `8f53487` to `96d6432` | 26 Oct | Client decisions, first batch: markups, contact inbox, label sender and default weight, syncs on the 1st, one password rule, optional US phone, Super Admin management and set-password, unverified accounts erased, all-orders filter for the admin panel | no |
 | `8eb2d22` to `f2f996a` | 27 Oct | Client decisions, second batch: US mainland shipping, closed accounts kept 30 days, only products in stock, branded emails, Turnstile, cart minimums, one pricing path with SAGE "from" prices, admin weights, gallery | no |
+| (next commit) | 27 Oct | Settings moved from `.env` to the admin panel's Settings page (`app_settings`, secrets encrypted, changed with the settings key); `.env` keeps only what the server needs to start | no |
 
 ### Deploying `fix/bug-sweep`
 
@@ -51,19 +52,17 @@ Found after the audit: N1 to N3 (bottom of this file).
 
 ### Deploying `feature/client-decisions` (not released)
 
-1. **Before pulling:** run `migrations/2026-10-27_admin_weight_before_deploy.sql` (the new code reads its column on every product query) and `migrations/2026-10-27_gallery_before_deploy.sql`.
+1. **Before pulling:** run the three `2026-10-27_*_before_deploy.sql` migrations: `admin_weight` (the new code reads its column on every product query), `gallery` and `app_settings`.
 2. **Any time:** run `migrations/2026-10-26_supplier_markups.sql`.
-3. **In `.env`** (each one is required; the app won't start without it):
-   - `CONTACT_INBOX=patrick@hashtagbillionaire.com`
-   - `SHIP_FROM_NAME=HashtagBillionaire` (the client's spelling, Q30).
-   - `SHIP_FROM_PHONE`, `SHIP_FROM_ADDRESS_LINE1`, `SHIP_FROM_CITY`, `SHIP_FROM_STATE`, `SHIP_FROM_POSTAL_CODE`: the phone and address the client confirmed, the ones hard-coded until now (`git show 11b645d:src/config/shipstation.js`).
-   - Optional: `DEFAULT_PACKAGE_WEIGHT_LB` (1 when unset); the email look, `EMAIL_BRAND_NAME`, `EMAIL_LOGO_URL`, `EMAIL_BRAND_COLOR` and `EMAIL_BRAND_TEXT_COLOR` (the website's own when unset; quote the colours, see `.env.example`).
-   - Leave `TURNSTILE_SECRET_KEY` empty until the shop shows the Turnstile widget (Q60); set it after the shop's release.
-   - Sender name (Q59): put it in front of the address already in `EMAIL_FROM`, as `EMAIL_FROM="HashtagBillionaire <the same address>"`.
-4. **Deploy:** `git pull`, then `npm install --omit=dev`, then `pm2 restart backend --update-env`.
-5. **Within 15 minutes:** the account cleanup erases every account left unverified for 2 hours, including the ones hidden since 15 October, as the client asked (Q40). Take a database backup first if a copy should be kept.
-6. **Closed accounts** (Q46): only accounts closed after this release follow the 30-day rule. Accounts customers closed before it stay hidden as they are: they can't be restored by signing in and aren't deleted.
-7. **Tell the team:** the shop stops listing products with nothing in stock (Q49): 42 of the 1,488 listed on 27 October. Three are pre-made products with stock 0 that can't be bought today either (Chenille patch, Retractable Banners, Feather Flags); setting their stock in the admin brings them back.
+3. **In `.env`:**
+   - Add `SETTINGS_MASTER_KEY`, at least 32 random characters (`openssl rand -hex 32`). It's required: the app won't start without it. It's the key the admin panel's Settings page asks for, and it encrypts the secret settings.
+   - Add the values the client gave: `CONTACT_INBOX=patrick@hashtagbillionaire.com`; `SHIP_FROM_NAME=HashtagBillionaire` (Q30); and `SHIP_FROM_PHONE`, `SHIP_FROM_ADDRESS_LINE1`, `SHIP_FROM_CITY`, `SHIP_FROM_STATE`, `SHIP_FROM_POSTAL_CODE`, the phone and address hard-coded until now (`git show 11b645d:src/config/shipstation.js`). Step 5 moves them to the database with the rest.
+   - Optional: the sender name (Q59), in front of the address already in `EMAIL_FROM`, as `EMAIL_FROM="HashtagBillionaire <the same address>"`. Leave `TURNSTILE_SECRET_KEY` out until the shop shows the Turnstile widget (Q60).
+4. **Deploy:** `git pull`, then `npm install --omit=dev`, then `pm2 restart backend --update-env`. Everything still comes from `.env` at this point: the log lists the settings read from there, and any required ones missing.
+5. **Move the settings out of `.env`:** `npm run settings:import` copies every setting still in `.env` into the database, secrets encrypted, and lists the lines that can go. Remove them from `.env` and restart. Until the admin panel has its Settings page, change a moved setting by putting its line back in `.env` and running `npm run settings:import -- --overwrite`. Details: [docs/admin-settings.md](docs/admin-settings.md).
+6. **Within 15 minutes of step 4:** the account cleanup erases every account left unverified for 2 hours, including the ones hidden since 15 October, as the client asked (Q40). Take a database backup first if a copy should be kept.
+7. **Closed accounts** (Q46): only accounts closed after this release follow the 30-day rule. Accounts customers closed before it stay hidden as they are: they can't be restored by signing in and aren't deleted.
+8. **Tell the team:** the shop stops listing products with nothing in stock (Q49): 42 of the 1,488 listed on 27 October. Three are pre-made products with stock 0 that can't be bought today either (Chenille patch, Retractable Banners, Feather Flags); setting their stock in the admin brings them back.
 
 Changes the shop and the admin panel need: [docs/frontend-changes.md](docs/frontend-changes.md), [docs/admin-panel-changes.md](docs/admin-panel-changes.md).
 
@@ -205,7 +204,7 @@ The client answered on 26 October and answered the follow-ups on 27 October; the
 | 24, 25 | Size and colour must be chosen, with no admin flag; the customer picks the add-on quantity | None: every cart line already needs a variant, and the add-on quantity is already free | ✅ | | |
 | 27, 28 | The team buys labels in ShipStation; the customer pays the quoted rate | C8, H8, H16 | ❌ | | Payments |
 | 29 | A flat 8.25% on products, not on shipping | None: that's what the code does (H14) | ✅ | | |
-| 30 | Ship-from: "HashtagBillionaire", at the same address and phone | Sender moved from the code to `SHIP_FROM_*` in `.env` (H12) | ✅ | `ea702b5` | |
+| 30 | Ship-from: "HashtagBillionaire", at the same address and phone | Sender moved from the code to the `SHIP_FROM_*` settings (H12) | ✅ | `ea702b5` | |
 | 31 | Default 1 lb; supplier weights; admins can set a weight | Default 1 lb (`DEFAULT_PACKAGE_WEIGHT_LB`, was 0.5). `PUT product/admin/weight` sets a product's or chosen variants' weight in `admin_weight_lb` (`migrations/2026-10-27_admin_weight_before_deploy.sql`), which syncs never write and which doesn't lock the product; shipping uses it before the supplier's weight. Open: OttoCap's weight (H22) | ◐ | `ea702b5`, `3b702f3` | |
 | 32 | US mainland only: the 48 contiguous states and DC; not Alaska, Hawaii, Puerto Rico, the territories or APO/FPO | `src/config/shippingRegions.js` lists the 49. The US state list offers only those; saving or moving an address elsewhere, shipping rates and order creation answer 400, including an address ShipStation matches to a military code; saved addresses carry `shippable` | ✅ | `2a170a7` | |
 | 34 | Cancel within 2 hours; refunds by hand in 5–7 days | C10, M9; mark the order for a manual refund | ❌ | | Payments |
@@ -226,8 +225,8 @@ The client answered on 26 October and answered the follow-ups on 27 October; the
 | 51 | All supplier syncs on the 1st | One cron at 2 AM New York time on the 1st runs SAGE, SanMar, S&S and OttoCap one after another (were the 5th, 10th, 15th and 25th) | ✅ | `0bd4ccd` | |
 | 56 | The team manages the gallery in the admin | `gallery_images` (`migrations/2026-10-27_gallery_before_deploy.sql`); `GET gallery` for the shop; `GET gallery/admin`, `POST gallery`, `PUT gallery/:id`, `DELETE gallery/:id` for the admin, one image per photo, images only | ✅ | `f2f996a` | |
 | 58 | patrick@hashtagbillionaire.com everywhere | Contact-form messages and new sourcing requests are emailed to `CONTACT_INBOX` (sourcing requests notified no one before) | ✅ | `e691cce` | |
-| 59, 62 | Account emails with the website's logo, colours and name, set in `.env`; the site and admin addresses are already there | Every email has the website's header logo, its yellow on buttons and the name HashtagBillionaire, with the site and `CONTACT_INBOX` in the footer. `EMAIL_BRAND_NAME`, `EMAIL_LOGO_URL`, `EMAIL_BRAND_COLOR` and `EMAIL_BRAND_TEXT_COLOR` change them | ✅ | `4aac78b` | |
-| 60 | Cloudflare Turnstile on the contact and sourcing forms, not a CAPTCHA | `POST contactUs` and `POST sourcing-requests/create` check the token with Cloudflare (`src/middlewares/turnstile.js`) once `TURNSTILE_SECRET_KEY` is set; until then they work as before | ✅ | `32758c9` | Client: a Turnstile widget in their Cloudflare account; then the shop's widget, then the key |
+| 59, 62 | Account emails with the website's logo, colours and name; the site and admin addresses are already set on the server | Every email has the website's header logo, its yellow on buttons and the name HashtagBillionaire, with the site and `CONTACT_INBOX` in the footer. How emails look on the Settings page changes them | ✅ | `4aac78b` | |
+| 60 | Cloudflare Turnstile on the contact and sourcing forms, not a CAPTCHA | `POST contactUs` and `POST sourcing-requests/create` check the token with Cloudflare (`src/middlewares/turnstile.js`) once the Turnstile secret key is set on the Settings page; until then they work as before | ✅ | `32758c9` | Client: a Turnstile widget in their Cloudflare account; then the shop's widget, then the key |
 
 Parked by the client, with no backend work for now: Q26 (pre-made products from suppliers), Q50, Q54, Q57 and Q61 (policy pages, admin editing).
 

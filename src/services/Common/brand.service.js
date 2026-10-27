@@ -7,6 +7,7 @@ const ApiError = require("../../utils/ApiError");
 const httpStatus = require("http-status");
 const { Op } = require("sequelize");
 const pick = require("../../utils/pick");
+const settings = require("../../config/settings");
 
 // Fields an admin may set through the generic brand create and update endpoints.
 const BRAND_FIELDS = ["name", "slug", "description", "show_on_website", "is_active"];
@@ -174,7 +175,7 @@ const publishBrand = async (body, files) => {
     if (files?.images?.[0]) {
       const file = files.images[0];
 
-      updateData.logo_url = `${process.env.IMAGE_BASE_URL}/images/${file.filename}`;
+      updateData.logo_url = `${settings.getRequired("IMAGE_BASE_URL")}/images/${file.filename}`;
     }
 
     await brand.update(updateData);
@@ -257,7 +258,7 @@ const createManualBrand = async (body, files) => {
     if (files?.images?.[0]) {
       const file = files.images[0];
 
-      logoUrl = `${process.env.IMAGE_BASE_URL}/images/${file.filename}`;
+      logoUrl = `${settings.getRequired("IMAGE_BASE_URL")}/images/${file.filename}`;
     }
 
     const brand = await Brand.create({

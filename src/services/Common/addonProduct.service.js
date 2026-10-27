@@ -5,6 +5,7 @@ const { AddOnProduct, ProductAddOn, Product } = require("../../models");
 
 const ApiError = require("../../utils/ApiError");
 const httpStatus = require("http-status");
+const settings = require("../../config/settings");
 
 
 // MariaDB returns JSON columns as text. The admin endpoints always send `features` as
@@ -100,7 +101,7 @@ const createAddOnProduct = async (body, files) => {
       price: parsedPrice,
 
       image: imageFile
-        ? `${process.env.IMAGE_BASE_URL}/images/${imageFile.filename}`
+        ? `${settings.getRequired("IMAGE_BASE_URL")}/images/${imageFile.filename}`
         : null,
 
       is_active: true,
@@ -288,7 +289,7 @@ const updateAddOnProduct = async (id, body, files) => {
     const imageFile = files?.images?.[0];
 
     if (imageFile) {
-      updateData.image = `${process.env.IMAGE_BASE_URL}/images/${imageFile.filename}`;
+      updateData.image = `${settings.getRequired("IMAGE_BASE_URL")}/images/${imageFile.filename}`;
     } else if (body.remove_image === true || body.remove_image === "true") {
       // Sent when the admin removed the image without picking a new one.
       updateData.image = null;

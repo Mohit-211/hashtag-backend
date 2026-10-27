@@ -1,7 +1,7 @@
 const axios = require("axios");
 const httpStatus = require("http-status");
 
-const config = require("../config/config");
+const settings = require("../config/settings");
 const logger = require("../config/logger");
 const ApiError = require("../utils/ApiError");
 
@@ -12,11 +12,12 @@ const TOKEN_FIELDS = ["cf-turnstile-response", "turnstile_token"];
 
 const REFUSED = "We couldn't confirm this was sent by a person. Please try again.";
 
-// Public forms need a Cloudflare Turnstile token once TURNSTILE_SECRET_KEY is set (client
-// decision Q60). Without the key they work as before, so this can go live before the shop
-// shows the widget. Each token is checked with Cloudflare once; a refusal is a 400.
+// Public forms need a Cloudflare Turnstile token once TURNSTILE_SECRET_KEY is set on the
+// Settings page (client decision Q60). Without the key they work as before, so this can go
+// live before the shop shows the widget. Each token is checked with Cloudflare once; a
+// refusal is a 400.
 const verifyTurnstile = async (req, res, next) => {
-  const secret = config.turnstileSecretKey;
+  const secret = settings.get("TURNSTILE_SECRET_KEY");
   if (!secret) return next();
 
   const body = req.body || {};

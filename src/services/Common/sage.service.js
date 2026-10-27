@@ -27,13 +27,16 @@ const {
 } = require("./supplierStatus.service");
 const { getOrCreateColorCode } = require("./colorService");
 
+const settings = require("../../config/settings");
+
 const BASE_URL = "https://www.promoplace.com/ws/ws.dll/ConnectAPI";
 const SAGE_IMAGE_BASE_URL = "https://www.promoplace.com/ws/ws.dll/";
 
+// SAGE credentials from the Settings page (Suppliers).
 const getAuth = () => ({
-  acctId: parseInt(process.env.SAGE_ACCT_ID, 10),
-  loginId: process.env.SAGE_LOGIN_ID || "",
-  key: process.env.SAGE_API_KEY,
+  acctId: settings.getRequired("SAGE_ACCT_ID"),
+  loginId: settings.getRequired("SAGE_LOGIN_ID"),
+  key: settings.getRequired("SAGE_API_KEY"),
 });
 
 // ==================== SUPPLIER SOURCE-OF-TRUTH (READ-ONLY) ====================

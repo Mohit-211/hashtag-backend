@@ -3,14 +3,28 @@ const config = require('./src/config/config.js');
 process.env.TZ = config.DEFAULT_TIMEZONE;
 
 const moment = require('moment');
-const app = require('./app.js');
 const logger = require('./src/config/logger.js');
 const sequelize = require('./src/config/central.db.js');
+const settings = require('./src/config/settings.js');
 
-const server = app.listen(config.port, () => {
-  const currentTime = moment().format('YYYY-MM-DD HH:mm:ss');
-  logger.info(`Server running on port ${config.port} | Time: ${currentTime}`);
-});
+let server = null;
+
+// Settings (the admin panel's Settings page, or .env until they've moved there) are loaded
+// before the app, so no request or cron job runs without them.
+const start = async () => {
+  await settings.load();
+  settings.startRefresh();
+  settings.report();
+
+  const app = require('./app.js');
+  const { verifyTransport } = require('./src/services/Common/email.service.js');
+  if (config.env !== 'test') verifyTransport();
+
+  server = app.listen(config.port, () => {
+    const currentTime = moment().format('YYYY-MM-DD HH:mm:ss');
+    logger.info(`Server running on port ${config.port} | Time: ${currentTime}`);
+  });
+};
 
 // Stops accepting connections, lets requests in flight finish, then closes the database pool.
 let shuttingDown = false;
@@ -21,6 +35,11 @@ const shutdown = (reason, exitCode = 0) => {
 
   // Don't wait forever on a connection that never closes.
   setTimeout(() => process.exit(exitCode), 10000).unref();
+
+  if (!server) {
+    process.exit(exitCode);
+    return;
+  }
 
   server.close(async () => {
     try {
@@ -44,4 +63,9 @@ process.on('unhandledRejection', (reason) => {
 process.on('uncaughtException', (error) => {
   logger.error(`Uncaught exception: ${error?.stack || error}`);
   shutdown('Uncaught exception', 1);
+});
+
+start().catch((error) => {
+  logger.error(`Start failed: ${error?.stack || error}`);
+  process.exit(1);
 });

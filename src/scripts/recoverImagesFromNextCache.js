@@ -14,7 +14,8 @@
 //   --frontend-dir <dir>  the website's folder (default ../frontend, i.e. /var/www/frontend)
 //   --cache-dir <dir>     the image cache to read (default <frontend-dir>/.next/cache/images);
 //                         point it at a backup copy of that folder if you made one
-//   --image-url <url>     NEXT_PUBLIC_IMAGE_URL of the website (default IMAGE_BASE_URL)
+//   --image-url <url>     NEXT_PUBLIC_IMAGE_URL of the website (default: the API address on the
+//                         admin panel's Settings page)
 //
 // Recovered copies are resized and recompressed, so they're a stopgap until the originals are
 // uploaded again. A copy exists only if the website displayed that image; customer artwork and
@@ -238,25 +239,27 @@ if (require.main === module) {
   const dryRun = args.includes("--dry-run");
   const frontendDir = path.resolve(argValue(args, "--frontend-dir", path.join(__dirname, "../../../frontend")));
   const cacheDir = path.resolve(argValue(args, "--cache-dir", path.join(frontendDir, ".next/cache/images")));
-  const imageUrl = argValue(args, "--image-url", process.env.IMAGE_BASE_URL);
-
-  if (!imageUrl) {
-    console.error("Set IMAGE_BASE_URL in .env or pass --image-url https://your-api-domain/");
-    process.exit(1);
-  }
   if (!fs.existsSync(cacheDir)) {
     console.error(`No image cache at ${cacheDir}. Pass --frontend-dir or --cache-dir.`);
     process.exit(1);
   }
 
-  const hosts = new Set([new URL(imageUrl).host.toLowerCase()]);
-  if (process.env.IMAGE_BASE_URL) hosts.add(new URL(process.env.IMAGE_BASE_URL).host.toLowerCase());
-
   const sequelize = require("../config/central.db");
+  const settings = require("../config/settings");
   const { getCacheKey, from } = loadCacheKey(frontendDir);
   const sharp = loadSharp(frontendDir);
 
   (async () => {
+    await settings.load();
+    const apiUrl = settings.get("IMAGE_BASE_URL");
+    const imageUrl = argValue(args, "--image-url", apiUrl);
+    if (!imageUrl) {
+      throw new Error("Set the API address on the admin panel's Settings page, or pass --image-url https://your-api-domain/");
+    }
+
+    const hosts = new Set([new URL(imageUrl).host.toLowerCase()]);
+    if (apiUrl) hosts.add(new URL(apiUrl).host.toLowerCase());
+
     ensureStorageDirs();
     console.log(`Images folder: ${dirs.images}`);
     console.log(`Image cache:   ${cacheDir} (cache keys: ${from})`);

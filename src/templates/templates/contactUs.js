@@ -1,13 +1,13 @@
 // Contact-us emails. Each returns the HTML body; email.service sets subject and plain text.
 
-const { BRAND, greeting, renderEmail } = require("./layout");
+const { brandName, greeting, renderEmail } = require("./layout");
 
 // To the customer who filled in the form.
 const contactUsConfirmationTemplate = (name, reason) =>
   renderEmail({
     heading: "We've received your message",
     paragraphs: [
-      `${greeting(name)} thanks for contacting ${BRAND}.`,
+      `${greeting(name)} thanks for contacting ${brandName()}.`,
       `We've received your inquiry${reason ? ` about "${reason}"` : ""}. Our team will get back to you soon.`,
     ],
     note: "Please don't reply to this email; replies to this address may not be read.",

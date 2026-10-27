@@ -1,19 +1,21 @@
 const NodeCache = require("node-cache");
 const OpenAI = require("openai");
 const { ProductVariant, ColorMapping } = require("../../models");
+const settings = require("../../config/settings");
 
 const cache = new NodeCache({
   stdTTL: 3600,
 });
 
-// Created on first use: the OpenAI client throws when OPENAI_API_KEY is empty, which
-// must only disable AI color matching, not stop the app from starting.
-let openaiClient = null;
+// Created on first use, and again when the key changes on the Settings page. Without a key
+// this throws, which only disables AI color matching (callers catch it).
+let openai = { key: null, client: null };
 const getOpenAI = () => {
-  if (!openaiClient) {
-    openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const key = settings.getRequired("OPENAI_API_KEY");
+  if (openai.key !== key) {
+    openai = { key, client: new OpenAI({ apiKey: key }) };
   }
-  return openaiClient;
+  return openai.client;
 };
 
 const BASIC_COLORS = {

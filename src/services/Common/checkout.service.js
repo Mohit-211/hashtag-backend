@@ -1,5 +1,4 @@
 const crypto = require("crypto");
-const config = require("../../config/config");
 const ApiError = require("../../utils/ApiError");
 const httpStatus = require("http-status");
 const {
@@ -31,23 +30,38 @@ const {
 } = require("../../utils/orderFormat");
 
 const { OrdersController } = require("@paypal/paypal-server-sdk");
-const paypalClient = require("../../config/paypal");
+const { getPaypalClient } = require("../../config/paypal");
+const settings = require("../../config/settings");
 const { paymentStatusTypes, orderStatusTypes } = require("../../config/types");
 
-const client = new SquareClient({
-  token: config.SQUARE_ACCESS_TOKEN,
+// Built from the Settings page values (Payments), and again when they change.
+let square = { signature: null, client: null };
 
-  environment:
-    config.SQUARE_ENVIRONMENT === "production"
-      ? SquareEnvironment.Production
-      : SquareEnvironment.Sandbox,
-});
+const squareClient = () => {
+  const token = settings.getRequired("SQUARE_ACCESS_TOKEN");
+  const environment = settings.getRequired("SQUARE_ENVIRONMENT");
+
+  const signature = `${environment}\n${token}`;
+  if (square.signature !== signature) {
+    square = {
+      signature,
+      client: new SquareClient({
+        token,
+        environment:
+          environment === "production"
+            ? SquareEnvironment.Production
+            : SquareEnvironment.Sandbox,
+      }),
+    };
+  }
+  return square.client;
+};
 
 const getSquareConfig = async () => {
   return {
-    applicationId: config.SQUARE_APP_ID,
+    applicationId: settings.getRequired("SQUARE_APP_ID"),
 
-    locationId: config.SQUARE_LOCATION_ID,
+    locationId: settings.getRequired("SQUARE_LOCATION_ID"),
   };
 };
 
@@ -59,7 +73,7 @@ const getOrCreateSquareCustomer = async (user) => {
     }
 
     // CREATE
-    const response = await client.customers.create({
+    const response = await squareClient().customers.create({
       givenName: user.user_profile?.name || "Customer",
 
       emailAddress: user.email,
@@ -130,7 +144,7 @@ const createPayment = async (body) => {
 
     const squareCustomerId = await getOrCreateSquareCustomer(user);
 
-    const response = await client.payments.create({
+    const response = await squareClient().payments.create({
       sourceId,
       idempotencyKey: crypto.randomUUID(),
       amountMoney: {
@@ -1091,7 +1105,7 @@ const createPayPalOrder = async (body) => {
       throw new ApiError(httpStatus.BAD_REQUEST, "Invalid order amount.");
     }
 
-    const ordersController = new OrdersController(paypalClient);
+    const ordersController = new OrdersController(getPaypalClient());
 
     const request = {
       body: {
@@ -1183,7 +1197,7 @@ const capturePayPalOrder = async (body) => {
       throw new ApiError(httpStatus.BAD_REQUEST, "Order is already paid.");
     }
 
-    const ordersController = new OrdersController(paypalClient);
+    const ordersController = new OrdersController(getPaypalClient());
 
     const response = await ordersController.captureOrder({
       id: paypal_order_id,
@@ -1307,7 +1321,7 @@ const paypalWebhook = async (body) => {
        * the PayPal order details.
        */
 
-      const ordersController = new OrdersController(paypalClient);
+      const ordersController = new OrdersController(getPaypalClient());
 
       const paypalOrderResponse = await ordersController.getOrder({
         id: paypalOrderId,
@@ -1512,7 +1526,7 @@ const paypalWebhook = async (body) => {
         return;
       }
 
-      const ordersController = new OrdersController(paypalClient);
+      const ordersController = new OrdersController(getPaypalClient());
 
       const paypalOrderResponse = await ordersController.getOrder({
         id: paypalOrderId,

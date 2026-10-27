@@ -18,8 +18,10 @@ const httpStatus = require("http-status");
 const ApiError = require("../../utils/ApiError");
 const { restoreListedVariants, markProductRestored } = require("./supplierStatus.service");
 
-// Public address of this API: OttoCap images are served through its image proxy.
-const API_BASE_URL = (process.env.IMAGE_BASE_URL || "https://node.hashtagbillionaire.com").replace(/\/+$/, "");
+const settings = require("../../config/settings");
+// Public address of this API (Settings page, Website and links): OttoCap images are served
+// through its image proxy.
+const apiBaseUrl = () => settings.get("IMAGE_BASE_URL") || "https://node.hashtagbillionaire.com";
 const { downloadSupplierImage } = require("./supplierImage.service");
 const { getOrCreateColorCode } = require("./colorService");
 
@@ -217,7 +219,7 @@ const getOttoProducts = async () => {
     const data = products.map((product) => ({
       ...product,
 
-      image_main: `${API_BASE_URL}/api/v1/ottocap/otto-image?url=${encodeURIComponent(product.image_main)}`,
+      image_main: `${apiBaseUrl()}/api/v1/ottocap/otto-image?url=${encodeURIComponent(product.image_main)}`,
 
       is_imported: importedMap.has(product.sku_no),
     }));
@@ -326,7 +328,7 @@ const getOttoProductDetails = async (skuNo) => {
       return {
         ...variant,
 
-        image_main: `${API_BASE_URL}/api/v1/ottocap/otto-image?url=${encodeURIComponent(variant.image_main)}`,
+        image_main: `${apiBaseUrl()}/api/v1/ottocap/otto-image?url=${encodeURIComponent(variant.image_main)}`,
 
         is_imported: importedVariantMap.has(variant.sku_no),
 
@@ -346,7 +348,7 @@ const getOttoProductDetails = async (skuNo) => {
       product: {
         ...parent,
 
-        image_main: `${API_BASE_URL}/api/v1/ottocap/otto-image?url=${encodeURIComponent(parent.image_main)}`,
+        image_main: `${apiBaseUrl()}/api/v1/ottocap/otto-image?url=${encodeURIComponent(parent.image_main)}`,
 
         is_imported: !!importedProduct,
 

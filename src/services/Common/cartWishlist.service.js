@@ -36,6 +36,7 @@ const decodeHtmlEntities = require("../../utils/decodeHtmlEntities");
 // A stored value that doesn't parse comes back as null instead of failing the whole cart.
 const { parseJson } = require("../../utils/orderFormat");
 const { cancelShipstationShipment } = require("../../config/shipstation");
+const settings = require("../../config/settings");
 
 // Variant's primary image, else its first image, else the product's first attachment.
 const getVariantImage = (variant) => {
@@ -2270,7 +2271,7 @@ const getCart = async (body) => {
            */
 
           logo_image: item.logo_image
-            ? `${process.env.IMAGE_BASE_URL}${item.logo_image}`
+            ? `${settings.get("IMAGE_BASE_URL")}${item.logo_image}`
             : null,
 
           color: v.color,
@@ -2432,7 +2433,7 @@ const enrichManualCustomizationConfig = async (customizationConfig) => {
         typeof updatedItem.logo_image === "string" &&
         updatedItem.logo_image.startsWith("/")
       ) {
-        updatedItem.logo_image = `${process.env.IMAGE_BASE_URL}${updatedItem.logo_image}`;
+        updatedItem.logo_image = `${settings.get("IMAGE_BASE_URL")}${updatedItem.logo_image}`;
       }
 
       return updatedItem;
@@ -2466,7 +2467,7 @@ const toCartItemResponse = async (cart, isManual) => {
   }
 
   response.logo_image = response.logo_image
-    ? `${process.env.IMAGE_BASE_URL}${response.logo_image}`
+    ? `${settings.get("IMAGE_BASE_URL")}${response.logo_image}`
     : null;
 
   return response;

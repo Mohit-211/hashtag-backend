@@ -7,6 +7,7 @@ const {
   sendAdminSourcingRequestNotification,
   sendSourcingRequestStatusEmail,
 } = require("./email.service");
+const settings = require("../../config/settings");
 
 const createSourcingRequest = async (body, files) => {
   try {
@@ -61,7 +62,7 @@ const createSourcingRequest = async (body, files) => {
           sourcing_request_id: request.id,
           file_type: "image",
           file_name: file.filename,
-          file_uri: `${process.env.IMAGE_BASE_URL}/images/${file.filename}`,
+          file_uri: `${settings.getRequired("IMAGE_BASE_URL")}/images/${file.filename}`,
           file_size: file.size,
           is_primary: i === 0,
           is_active: true,

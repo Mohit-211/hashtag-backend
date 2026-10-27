@@ -1,8 +1,14 @@
 /** @format */
 
 const axios = require("axios");
+const settings = require("./settings");
 
+// The map position of an address, or null. Without a Google Maps key (Settings page) addresses
+// are saved without one.
 const getLatLng = async (address) => {
+	const key = settings.get("GOOGLE_MAPS_API_KEY");
+	if (!key) return null;
+
 	try {
 		// ✅ remove ZIP+4 extension
 		const postal = address.postal_code.split("-")[0];
@@ -14,7 +20,7 @@ const getLatLng = async (address) => {
 			{
 				params: {
 					address: query,
-					key: process.env.GOOGLE_MAPS_API_KEY,
+					key,
 				},
 			}
 		);

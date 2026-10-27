@@ -6,7 +6,7 @@ const {
   ProductVariant,
 } = require("../models");
 const { calculatePricing } = require("./pricing");
-const config = require("./config");
+const settings = require("./settings");
 const httpStatus = require("http-status");
 const ApiError = require("../utils/ApiError");
 
@@ -15,9 +15,14 @@ const shipstationApiClient = axios.create({
   baseURL: "https://api.shipstation.com",
   headers: {
     "Content-Type": "application/json",
-    "API-Key": process.env.SHIPSTATION_API_KEY,
   },
   timeout: 15000,
+});
+
+// The key comes from the Settings page on every request, so a new one works without a restart.
+shipstationApiClient.interceptors.request.use((request) => {
+  request.headers["API-Key"] = settings.getRequired("SHIPSTATION_API_KEY");
+  return request;
 });
 
 const mapAddress = (address) => ({
@@ -33,11 +38,20 @@ const mapAddress = (address) => ({
 });
 
 // The sender on every label and rate request, from the SHIP_FROM_* settings.
-const getShipFromAddress = () => ({ ...config.shipping.from });
+// The sender on labels and rate quotes (Settings page, Shipping).
+const getShipFromAddress = () => ({
+  name: settings.getRequired("SHIP_FROM_NAME"),
+  phone: settings.getRequired("SHIP_FROM_PHONE"),
+  address_line1: settings.getRequired("SHIP_FROM_ADDRESS_LINE1"),
+  city_locality: settings.getRequired("SHIP_FROM_CITY"),
+  state_province: settings.getRequired("SHIP_FROM_STATE"),
+  postal_code: settings.getRequired("SHIP_FROM_POSTAL_CODE"),
+  country_code: settings.get("SHIP_FROM_COUNTRY"),
+});
 
 // Weight of one piece in lb: an admin's weight, else the supplier's, else the default (Q31).
 const shippingWeightLb = (variant) =>
-  Number(variant?.admin_weight_lb) || Number(variant?.unit_weight) || config.shipping.defaultWeightLb;
+  Number(variant?.admin_weight_lb) || Number(variant?.unit_weight) || settings.get("DEFAULT_PACKAGE_WEIGHT_LB");
 
 // ====================== CREATE ORDER + SHIPMENT IN DASHBOARD ======================
 const createShipstationOrderV2 = async (

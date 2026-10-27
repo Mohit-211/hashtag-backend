@@ -3,6 +3,7 @@ const { Op } = require("sequelize");
 
 const { OttocapCatalog } = require("../../models");
 const logger = require("../../config/logger");
+const settings = require("../../config/settings");
 
 // Proxy for OttoCap catalog images. It only fetches from hosts that the OttoCap
 // catalog's image URLs point to (or OTTOCAP_IMAGE_HOSTS, comma separated, when set),
@@ -22,10 +23,7 @@ const hostOf = (value) => {
 };
 
 const getAllowedHosts = async () => {
-  const configured = String(process.env.OTTOCAP_IMAGE_HOSTS || "")
-    .split(",")
-    .map((host) => host.trim().toLowerCase())
-    .filter(Boolean);
+  const configured = settings.get("OTTOCAP_IMAGE_HOSTS") || [];
   if (configured.length) return new Set(configured);
 
   if (Date.now() - catalogHosts.loadedAt > HOSTS_TTL_MS) {

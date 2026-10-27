@@ -2,7 +2,7 @@
 // signed-in admin goes through hideSupplierPricing, which removes the fields below
 // wherever they appear (product and variant objects, `meta`, cart and order snapshots).
 // Shoppers get selling prices only: `price`, `total_price`, `price_tiers`, etc.
-const config = require("../config/config");
+const settings = require("../config/settings");
 
 const HIDDEN_KEYS = new Set([
   // cost and markup on products, variants, cart lines
@@ -71,7 +71,7 @@ const strip = (value) => {
 const hideSupplierPricing = (req, res, next) => {
   const json = res.json.bind(res);
   res.json = (body) => {
-    if (req.admin || config.exposeSupplierCost) return json(body);
+    if (req.admin || settings.get("EXPOSE_SUPPLIER_COST")) return json(body);
     return json(strip(body));
   };
   next();

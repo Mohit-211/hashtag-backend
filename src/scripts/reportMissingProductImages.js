@@ -182,15 +182,17 @@ const toCsv = (rows) => {
 };
 
 if (require.main === module) {
-  const imageUrl = process.env.IMAGE_BASE_URL;
-  if (!imageUrl) {
-    console.error("Set IMAGE_BASE_URL in .env");
-    process.exit(1);
-  }
-  const hosts = new Set([new URL(imageUrl).host.toLowerCase()]);
   const sequelize = require("../config/central.db");
+  const settings = require("../config/settings");
 
   (async () => {
+    await settings.load();
+    const imageUrl = settings.get("IMAGE_BASE_URL");
+    if (!imageUrl) {
+      throw new Error("Set the API address on the admin panel's Settings page (Website and links).");
+    }
+    const hosts = new Set([new URL(imageUrl).host.toLowerCase()]);
+
     ensureStorageDirs();
     const { detail, byProduct } = await buildReport(sequelize, { imageUrl, hosts });
 

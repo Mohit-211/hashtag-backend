@@ -3,18 +3,33 @@ const {
   Environment,
 } = require("@paypal/paypal-server-sdk");
 
-const config = require("./config");
+const settings = require("./settings");
 
-const paypalClient = new Client({
-  clientCredentialsAuthCredentials: {
-    oAuthClientId: config.PAYPAL_CLIENT_ID,
-    oAuthClientSecret: config.PAYPAL_CLIENT_SECRET,
-  },
+// Built from the Settings page values (Payments), and again when they change.
+let cached = { signature: null, client: null };
 
-  environment:
-    config.PAYPAL_ENVIRONMENT === "production"
-      ? Environment.Production
-      : Environment.Sandbox,
-});
+const getPaypalClient = () => {
+  const clientId = settings.getRequired("PAYPAL_CLIENT_ID");
+  const clientSecret = settings.getRequired("PAYPAL_CLIENT_SECRET");
+  const environment = settings.getRequired("PAYPAL_ENVIRONMENT");
 
-module.exports = paypalClient;
+  const signature = [environment, clientId, clientSecret].join("\n");
+  if (cached.signature !== signature) {
+    cached = {
+      signature,
+      client: new Client({
+        clientCredentialsAuthCredentials: {
+          oAuthClientId: clientId,
+          oAuthClientSecret: clientSecret,
+        },
+        environment:
+          environment === "production"
+            ? Environment.Production
+            : Environment.Sandbox,
+      }),
+    };
+  }
+  return cached.client;
+};
+
+module.exports = { getPaypalClient };

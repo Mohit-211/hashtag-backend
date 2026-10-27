@@ -21,3 +21,4 @@ There is no `npm run migrate`. It used `sequelize.sync({ alter: true })`, which 
 | `2026-10-26_supplier_markups.sql` | any time (data only) | not yet |
 | `2026-10-27_admin_weight_before_deploy.sql` | before deploying `feature/client-decisions` | not yet |
 | `2026-10-27_gallery_before_deploy.sql` | before deploying `feature/client-decisions` | not yet |
+| `2026-10-27_app_settings_before_deploy.sql` | before deploying `feature/client-decisions` | not yet |

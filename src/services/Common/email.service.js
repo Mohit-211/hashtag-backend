@@ -1,5 +1,5 @@
 const nodemailer = require('nodemailer');
-const config = require('../../config/config');
+const settings = require('../../config/settings');
 const httpStatus = require('http-status');
 const logger = require('../../config/logger');
 const ApiError = require('../../utils/ApiError');
@@ -12,23 +12,50 @@ const {
     sourcingRequestConfirmationTemplate,
     adminSourcingRequestNotificationTemplate,
     sourcingRequestStatusTemplate,
+    settingsTestEmail,
 } = require('../../templates');
 
-const transport = nodemailer.createTransport(config.email.smtp);
+// Built from the Settings page values (Email sending), and again when they change.
+let mail = { signature: null, transport: null };
 
-if (config.env !== 'test') {
-    transport
-        .verify()
-        .then(() => logger.info('Connected to email server successfully😊.'))
-        .catch(() => logger.warn('Unable to connect to email server. Make sure you have configured the SMTP options in .env 🥺'));
+const getTransport = () => {
+    const user = settings.get('SMTP_USERNAME');
+    const smtp = {
+        host: settings.getRequired('SMTP_HOST'),
+        port: settings.get('SMTP_PORT'),
+        secure: false,
+        requireTLS: true,
+        // A server that needs no sign-in gets no username.
+        ...(user && { auth: { user, pass: settings.get('SMTP_PASSWORD') } }),
+    };
+    const signature = JSON.stringify(smtp);
+    if (mail.signature !== signature) {
+        mail = { signature, transport: nodemailer.createTransport(smtp) };
+    }
+    return mail.transport;
 };
+
+// Logs whether the mail server accepts the current settings: at start, and when they change.
+const verifyTransport = async () => {
+    try {
+        await getTransport().verify();
+        logger.info('Connected to email server successfully😊.');
+    } catch (error) {
+        logger.warn(`Unable to connect to email server (${error.message}). Check Email sending on the Settings page 🥺`);
+    }
+};
+
+settings.onChange((keys) => {
+    if (keys.some((key) => key.startsWith('SMTP_'))) verifyTransport();
+});
 
 
 const sendEmail = async (to, subject, text, html) => {
     try {
-        const msg = { from: config.email.from, to, subject, text };
+        // Without a sender, the mail server's default is used, as before the Settings page.
+        const msg = { from: settings.get('EMAIL_FROM') || undefined, to, subject, text };
         if (html) msg.html = html;
-        return await transport.sendMail(msg);
+        return await getTransport().sendMail(msg);
 
     } catch (error) {
         throw new ApiError(error.statusCode ? error.statusCode : httpStatus.INTERNAL_SERVER_ERROR, error.message);
@@ -60,7 +87,7 @@ const sendContactUsConfirmation = async (to, name, reason) => {
 const sendAdminContactUsNotification = async (name, email, mobile, reason, message) => {
   const subject = "New Contact Us Inquiry";
   const html = adminContactUsNotificationTemplate(name, email, mobile, reason, message);
-  return await sendEmail(config.email.contactInbox, subject, `New contact us inquiry from ${name} (${email}): ${message}`, html);
+  return await sendEmail(settings.getRequired('CONTACT_INBOX'), subject, `New contact us inquiry from ${name} (${email}): ${message}`, html);
 };
 
 const sendSourcingRequestConfirmation = async (to, name, requestedName) => {
@@ -72,7 +99,7 @@ const sendSourcingRequestConfirmation = async (to, name, requestedName) => {
 const sendAdminSourcingRequestNotification = async (name, email, company, requestedName, details, imageCount) => {
   const subject = "New Sourcing Request";
   const html = adminSourcingRequestNotificationTemplate(name, email, company, requestedName, details, imageCount);
-  return await sendEmail(config.email.contactInbox, subject, `New sourcing request from ${name} (${email}) for ${requestedName}`, html);
+  return await sendEmail(settings.getRequired('CONTACT_INBOX'), subject, `New sourcing request from ${name} (${email}) for ${requestedName}`, html);
 };
 
 const sendSourcingRequestStatusEmail = async (to, name, requestedName, status, adminNotes) => {
@@ -82,7 +109,16 @@ const sendSourcingRequestStatusEmail = async (to, name, requestedName, status, a
 };
 
 
+// From the Settings page: proves the mail server settings work.
+const sendSettingsTestEmail = (to, name) => {
+    const mail = settingsTestEmail({ name });
+    return sendEmail(to, mail.subject, mail.text, mail.html);
+};
+
+
 module.exports = {
+    verifyTransport,
+    sendSettingsTestEmail,
     sendVerificationEmail,
     sendPasswordResetEmail,
     sendAccountSetupEmail,

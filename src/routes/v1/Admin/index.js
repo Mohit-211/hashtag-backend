@@ -1,5 +1,6 @@
 const adminAuthRoute = require("./adminAuth.route");
 const userRoute = require("./user.route");
+const settingsRoute = require("./settings.route");
 
 const adminRoutes = [
 	{
@@ -9,6 +10,10 @@ const adminRoutes = [
 	{
 		path: "/admin/user/",
 		route: userRoute,
+	},
+	{
+		path: "/admin/settings/",
+		route: settingsRoute,
 	},
 ];
 

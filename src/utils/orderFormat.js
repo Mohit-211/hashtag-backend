@@ -1,6 +1,8 @@
 // Formatting helpers shared by the order and payment listings
 // (order.service.js and checkout.service.js).
 
+const settings = require("../config/settings");
+
 // customization_config and pricing_snapshot can come back as JSON strings.
 // A value that doesn't parse is returned as null.
 const parseJson = (value) => {
@@ -36,7 +38,7 @@ const toFullImageUrl = (image) => {
     return image;
   }
 
-  return `${process.env.IMAGE_BASE_URL}${image}`;
+  return `${settings.get("IMAGE_BASE_URL")}${image}`;
 };
 
 // Product image for an order item: the variant's primary image, any variant image,

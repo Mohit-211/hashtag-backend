@@ -5,7 +5,7 @@ const catchAsync = require("../../utils/catchAsync");
 const { userService } = require("../../services");
 const responseWrapper = require("../../config/responseWrapper");
 const pick = require("../../utils/pick");
-const config = require("../../config/config");
+const settings = require("../../config/settings");
 
 
 const getAllUsers = catchAsync(async (req, res) => {
@@ -13,7 +13,7 @@ const getAllUsers = catchAsync(async (req, res) => {
 	const param = pick(req.params, ["roleId"]);
 
 	if (!query["limit"]) {
-		query["limit"] = config.defaultLimit;
+		query["limit"] = settings.get("DEFAULT_API_DATA_LIMIT");
 	}
 	if (!query["page"]) {
 		query["page"] = 1;

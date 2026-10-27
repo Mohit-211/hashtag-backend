@@ -5,12 +5,14 @@ const fs = require("fs");
 const path = require("path");
 
 const { dirs } = require("../../config/storage");
+const settings = require("../../config/settings");
 
 // Stored as <storage>/uploads/suppliers/<supplier>/<style>/..., served at /uploads/suppliers/...
 const SUPPLIER_IMAGE_DIR = dirs.suppliers;
 
-// Public address of this API, used in the image URLs saved to the database.
-const BASE_URL = (process.env.IMAGE_BASE_URL || "https://node.hashtagbillionaire.com").replace(/\/+$/, "");
+// Public address of this API (Settings page, Website and links), used in the image URLs saved
+// to the database.
+const apiBaseUrl = () => settings.get("IMAGE_BASE_URL") || "https://node.hashtagbillionaire.com";
 
 // 🔥 CLEAN FILE NAME
 const sanitizeFileName = (name = "") => {
@@ -56,7 +58,7 @@ const downloadSupplierImage = async ({
     const relativePath = `/uploads/suppliers/${supplier.toLowerCase()}/${styleId}/${fileName}`;
 
     // 🔥 FULL PUBLIC URL SAVED IN DB
-    const dbPath = `${BASE_URL}${relativePath}`;
+    const dbPath = `${apiBaseUrl()}${relativePath}`;
 
     // 🔥 SKIP IF EXISTS
     if (fs.existsSync(localPath)) {

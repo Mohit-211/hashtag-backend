@@ -1,12 +1,11 @@
 // Shared HTML layout for every email. All values are escaped here, so templates can pass
 // customer-entered text (names, messages, notes) straight in. The name, logo and colours come
-// from the email settings, which default to the website's own (client decision Q59).
+// from the Settings page (How emails look), which defaults to the website's own (Q59); they're
+// read on every email, so a change applies to the next one.
 
-const config = require("../../config/config");
+const settings = require("../../config/settings");
 
-const { brand, contactInbox } = config.email;
-const BRAND = brand.name;
-const SITE = config.frontendUrl;
+const brandName = () => settings.get("EMAIL_BRAND_NAME");
 
 const escapeHtml = (value) =>
   String(value ?? "")
@@ -31,6 +30,13 @@ const greeting = (name) => (name ? `Hi ${name},` : "Hi,");
  * @param {string} [email.note]                  small print at the bottom
  */
 const renderEmail = ({ heading, paragraphs = [], button, details = [], quote, note }) => {
+  const brand = brandName();
+  const logoUrl = settings.get("EMAIL_LOGO_URL");
+  const color = settings.get("EMAIL_BRAND_COLOR");
+  const textColor = settings.get("EMAIL_BRAND_TEXT_COLOR");
+  const site = settings.get("FRONTEND_URL");
+  const contactInbox = settings.get("CONTACT_INBOX");
+
   const paragraphHtml = paragraphs
     .map((text) => `<p style="margin:0 0 16px;font-size:15px;line-height:1.5;">${escapeHtml(text)}</p>`)
     .join("");
@@ -49,7 +55,7 @@ const renderEmail = ({ heading, paragraphs = [], button, details = [], quote, no
     : "";
 
   const buttonHtml = button
-    ? `<p style="margin:0 0 24px;"><a href="${escapeHtml(button.link)}" style="display:inline-block;padding:12px 24px;background:${escapeHtml(brand.color)};color:${escapeHtml(brand.textColor)};text-decoration:none;border-radius:4px;font-size:15px;font-weight:bold;">${escapeHtml(button.text)}</a></p>
+    ? `<p style="margin:0 0 24px;"><a href="${escapeHtml(button.link)}" style="display:inline-block;padding:12px 24px;background:${escapeHtml(color)};color:${escapeHtml(textColor)};text-decoration:none;border-radius:4px;font-size:15px;font-weight:bold;">${escapeHtml(button.text)}</a></p>
           <p style="margin:0 0 8px;font-size:13px;color:#555;">If the button doesn't work, copy this link into your browser:</p>
           <p style="margin:0 0 24px;font-size:13px;word-break:break-all;"><a href="${escapeHtml(button.link)}">${escapeHtml(button.link)}</a></p>`
     : "";
@@ -63,11 +69,11 @@ const renderEmail = ({ heading, paragraphs = [], button, details = [], quote, no
   <head><meta charset="utf-8"></head>
   <body style="margin:0;padding:24px;background:#f5f5f5;font-family:Arial,Helvetica,sans-serif;color:#222;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:8px;">
-      <tr>
+      ${logoUrl ? `<tr>
         <td style="padding:28px 32px 0;">
-          <a href="${escapeHtml(SITE)}"><img src="${escapeHtml(brand.logoUrl)}" alt="${escapeHtml(BRAND)}" width="160" style="display:block;border:0;width:160px;max-width:100%;height:auto;"></a>
+          <a href="${escapeHtml(site || "")}"><img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(brand)}" width="160" style="display:block;border:0;width:160px;max-width:100%;height:auto;"></a>
         </td>
-      </tr>
+      </tr>` : ""}
       <tr>
         <td style="padding:24px 32px 32px;">
           <h1 style="margin:0 0 16px;font-size:22px;">${escapeHtml(heading)}</h1>
@@ -75,13 +81,13 @@ const renderEmail = ({ heading, paragraphs = [], button, details = [], quote, no
         </td>
       </tr>
     </table>
-    <p style="text-align:center;font-size:12px;color:#888;line-height:1.6;">${escapeHtml(BRAND)} · <a href="${escapeHtml(SITE)}" style="color:#888;">${escapeHtml(new URL(SITE).host)}</a><br>Questions? Write to <a href="mailto:${escapeHtml(contactInbox)}" style="color:#888;">${escapeHtml(contactInbox)}</a></p>
+    <p style="text-align:center;font-size:12px;color:#888;line-height:1.6;">${escapeHtml(brand)}${site ? ` · <a href="${escapeHtml(site)}" style="color:#888;">${escapeHtml(new URL(site).host)}</a>` : ""}${contactInbox ? `<br>Questions? Write to <a href="mailto:${escapeHtml(contactInbox)}" style="color:#888;">${escapeHtml(contactInbox)}</a>` : ""}</p>
   </body>
 </html>`;
 };
 
 module.exports = {
-  BRAND,
+  brandName,
   escapeHtml,
   greeting,
   renderEmail,

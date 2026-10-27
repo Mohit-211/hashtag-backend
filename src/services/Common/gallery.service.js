@@ -5,6 +5,7 @@ const httpStatus = require("http-status");
 const { GalleryImage } = require("../../models");
 const ApiError = require("../../utils/ApiError");
 const { dirs } = require("../../config/storage");
+const settings = require("../../config/settings");
 
 // Gallery photos and captions (client decision Q56): the team adds, edits, orders and removes
 // them in the admin panel, and the shop lists the active ones.
@@ -14,7 +15,7 @@ const NOT_AN_IMAGE = "The gallery takes images only: JPG, PNG, WebP, AVIF or GIF
 
 const toResponse = (image, forAdmin = false) => ({
   id: image.id,
-  image_url: `${process.env.IMAGE_BASE_URL}/images/${image.file_name}`,
+  image_url: `${settings.get("IMAGE_BASE_URL")}/images/${image.file_name}`,
   caption: image.caption,
   sort_order: image.sort_order,
   ...(forAdmin && {

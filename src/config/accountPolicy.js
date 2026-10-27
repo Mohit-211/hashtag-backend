@@ -1,4 +1,4 @@
-const config = require("./config");
+const settings = require("./settings");
 
 // Account email-link rules. The link paths are pages the frontends must provide;
 // each page reads ?token= and posts it to the API.
@@ -15,8 +15,8 @@ module.exports = {
   LINK_RESEND_SECONDS: 60,
 
   links: {
-    verifyEmail: (token) => `${config.frontendUrl}/verify-email?token=${token}`,
-    resetPassword: (token) => `${config.frontendUrl}/reset-password?token=${token}`,
-    adminResetPassword: (token) => `${config.adminFrontendUrl}/reset-password?token=${token}`,
+    verifyEmail: (token) => `${settings.getRequired("FRONTEND_URL")}/verify-email?token=${token}`,
+    resetPassword: (token) => `${settings.getRequired("FRONTEND_URL")}/reset-password?token=${token}`,
+    adminResetPassword: (token) => `${settings.getRequired("ADMIN_FRONTEND_URL")}/reset-password?token=${token}`,
   },
 };
