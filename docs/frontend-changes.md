@@ -2,7 +2,7 @@
 
 What each backend release changes for the shop, and what the shop has to do. Newest first. Paths are relative to `/api/v1`.
 
-The client's answers of 26 October, and what they mean for the shop, are in [Client decisions](#client-decisions) below the releases list.
+The client's answers of 26 and 27 October, and what they mean for the shop, are in [Client decisions](#client-decisions) below the releases list.
 
 | Release | Backend commit | Shop action |
 |---|---|---|
@@ -14,21 +14,24 @@ The client's answers of 26 October, and what they mean for the shop, are in [Cli
 ---
 
 <a id="client-decisions"></a>
-## Client decisions (26 Oct 2026): the shop's to-do list
+## Client decisions (26–27 Oct 2026): the shop's to-do list
 
-The client answered the questions in `client-questions.md` on 26 October; Q numbers are that document's. The shop items are from its own list (`hashtag-next/docs/client-confirmation-questions.md`, A1–A46 and B1–B9) and its audit (`hashtag-next-audit.pdf`).
+The client answered the questions in `client-questions.md` on 26 October and the follow-ups on 27 October; Q numbers are that document's. The shop items are from its own list (`hashtag-next/docs/client-confirmation-questions.md`, A1–A46 and B1–B9) and its audit (`hashtag-next-audit.pdf`).
 
 ### Can start now
 
 | Shop item | Q | Decision | What the shop does |
 |---|---|---|---|
 | A11 | 11, 18 | SAGE's markup is 49.25%, applied by the backend; shoppers mustn't see cost | Switch SAGE pricing to `price_tiers` ([2026-10-16](#2026-10-16)) and drop `SAGE_PRICE_MARKUP`. |
-| A12 | 12 | The backend never sends a SAGE setup charge | The "Setup fee" line in `Sagequantitypricing.tsx` never shows. Remove it, unless the client decides to charge SAGE setup fees. |
-| A29, A40 | 34, 61 | Customers can cancel within 2 hours of ordering; refunds are made by hand within 5–7 business days | Add the 2-hour cancellation window to the Shipping & Returns and Terms pages. The 5–7 days are already there. |
+| A12 | 12 | No SAGE product has a setup charge | Remove the "Setup fee" line in `Sagequantitypricing.tsx`; the backend never sends one. |
+| A5, A6 | 5, 6 | Hoodie Full Front and Full Back embroidery, and Full Front on T-shirts and polos, are "contact us", as before | Hoodies: show "Contact us" for Full Front and Full Back embroidery instead of adding them at $0, as for the oversized back. T-shirts and polos: keep Full Front off. The backend will refuse the hoodie ones once choices outside the price list are refused (Q10). |
+| A22 | 24 | Size and colour must always be chosen; no "required" flag in the admin | On pre-made products, make the customer choose size and colour before adding to the cart: no "(optional)" on them and no preselected first variant. The API already needs a variant on every line, so it needs no change. |
+| A23 | 25 | The customer chooses the add-on quantity | Let the customer set it; today it copies the product quantity. The API already takes any quantity. |
+| A44 | 49 | Never show shoppers a stock number | Remove "Only N left in stock" (`ProductDetail.tsx`) and "(stock: N)" in the size list (`Productcustomizationpage.tsx`). The quantity can still stop at the stock without showing the number. |
 | A31 | 36 | Quantities of customized items can change in the cart, the customization can't; "−" stops at the minimum | Disable "−" at the line's minimum instead of removing the item. |
 | A34 | 38 | Customers see a confirmation page after ordering | After payment, show the confirmation page with the real order (number, items, totals) instead of going to the products page after 3 seconds. Drop the hard-coded `HB00000001` and the UPI and Cash on Delivery methods (audit C5), and the `page1` text on the PayPal success page (audit C4). |
 | A39 | 58 | patrick@hashtagbillionaire.com everywhere | Use it in the footer (today the misspelled `patrick@hashtagbillioniare.net`), on the Support page, and in Terms, Privacy and Shipping & Returns. |
-| A13, A28, A30, A38, A41, A43 | 13, 33, 35, 40, 53, 55 | Promo imprint included; account required; unpaid-order flow kept; verification by link; industry picker and Primary / Secondary / Budget kept | No change. |
+| A7, A9, A13, A14, A16, A20, A28, A30, A32, A38, A40, A41, A43 | 7, 9, 13, 14, 15, 17, 22, 33, 35, 40, 53, 55, 61 | Kept as they are, including the policy text (no 2-hour window added for now) and the generic grey mockups | No change. |
 
 ### With the next backend release
 
@@ -43,20 +46,23 @@ These need the backend changes on branch `feature/client-decisions`, listed unde
 
 | Shop item | Q | Decision | What the shop will do |
 |---|---|---|---|
-| A1–A5, B1 | 1–5 | Fees, tiers and minimums per artwork; no setup fees, but $20 for artwork that isn't vector; price tables editable in the admin; hoodie Full Front and Full Back embroidery allowed | Stop pricing decorations in the browser: read the tables and a quote from the API, remove both copies of the tables (`pricing.ts`, `Productcustomizationpage.tsx`), and stop sending price fields to the cart. |
+| A1–A4, A15, B1 | 1–4, 10, 16 | Fees, tiers and minimums per product, artwork and print method (the same artwork and method at two locations count together); one digitizing fee per artwork; no setup fees, but $20 once per artwork that isn't vector; price tables editable in the admin, choices outside them refused; the promo fallback minimum set in the admin | Stop pricing decorations in the browser: read the tables, the minimums and a quote from the API, remove both copies of the tables (`pricing.ts`, `Productcustomizationpage.tsx`) and the fallback of 100, and stop sending price fields to the cart. Offer only what the tables list. |
 | A10, A17, A18 | 19, 20 | Each location can have its own artwork, size and thread colours; production wants the original files | One artwork per location in the customizer; send the original file and its placement per location; keep left and right sleeve apart. |
-| A19, B7 | 21 | AI, PDF, EPS, JPG, SVG and PSD (PNG and the size limit are being confirmed) | Accept the list the API publishes. |
+| A19, B7 | 21 | AI, PDF, EPS, JPG, PNG, SVG and PSD (CDR being confirmed), up to 100 MB per file | Accept the list the API publishes. |
+| A21 | 23 | The team manages the fonts in the admin | Load the font list from the API. |
 | A25, B2 | 27, 28 | The team buys labels in ShipStation; the customer pays the quoted rate | Remove the label purchase at "Continue to payment" (`CheckoutLayout.tsx`), in the payments release. |
-| A27 | 29 | A flat 8.25% | Show only the API's tax; checkout estimates 8.25% itself today. |
+| A27 | 29 | A flat 8.25% on products, not on shipping | Show only the API's tax; checkout estimates 8.25% itself today. |
 | A29 | 34 | Cancel within 2 hours | A Cancel button on orders under 2 hours old, once the API's cancel works. |
 | A33, B3 | 37 | Card, Google Pay, Cash App, PayPal and Apple Pay | Add Apple Pay; build the Google Pay and Cash App request with the order's real total (`amount: "1.00"` today, audit B1). |
 | A35 | 39 | Tracking for signed-in customers; the admin picks ShipStation or manual updates | Show the order's status and tracking from the API, whichever way it's updated. |
-| A36 | 32 | US mainland only | Nothing: the states list will only contain those states. |
+| A36 | 32 | US mainland only: the 48 contiguous states and Washington DC | Nothing: the states list will only contain those. |
+| A44 | 49 | Out-of-stock products aren't shown; a cart item that runs out shows as out of stock | Show the out-of-stock mark the cart will return. |
 | A45 | 56 | The team manages the gallery in the admin | Load gallery photos and captions from the API. |
 | — | 46 | A closed account is kept 30 days and restored by signing in | A "Delete account" option in profile settings that says so. |
 | — | 47 | Guests and signed-in customers see the same prices; SAGE cards show the lowest price with "+" | Show "$X+" on SAGE product cards, from a field the product list will return. |
+| — | 60 | Cloudflare Turnstile on the contact and sourcing forms | The Turnstile widget on both forms, sending its token. |
 
-**Waiting on the client:** A44, "Only N left" (Q49). **Later, by the client's choice:** A42 price filter (Q54), A46 Back button (Q57). **Unanswered, no change for now:** A6, A7, A8, A9, A14, A15, A16, A20, A21, A22, A23, A24, A32.
+**Waiting on the client:** A8, DTG with several locations (Q8, reworded); CDR for production files (Q19); which font settings besides the font list (Q23). **Later, by the client's choice:** A24 pre-made products from suppliers (Q26), A42 price filter (Q54), A46 Back button (Q57), policy pages editable in the admin (Q61).
 
 ---
 
