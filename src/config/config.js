@@ -54,6 +54,17 @@ const envVarsSchema = Joi.object()
       .email()
       .required()
       .description("team inbox for contact-form messages and new sourcing requests"),
+    // How emails look (Q59): the website's name, logo and colours unless set.
+    EMAIL_BRAND_NAME: Joi.string().allow("").description("name in the emails' text and footer"),
+    EMAIL_LOGO_URL: Joi.string().uri().allow("").description("logo at the top of every email"),
+    EMAIL_BRAND_COLOR: Joi.string()
+      .pattern(/^#[0-9a-fA-F]{6}$/)
+      .allow("")
+      .description("button colour, as #rrggbb"),
+    EMAIL_BRAND_TEXT_COLOR: Joi.string()
+      .pattern(/^#[0-9a-fA-F]{6}$/)
+      .allow("")
+      .description("text colour on the buttons, as #rrggbb"),
     SHIP_FROM_NAME: Joi.string().required().description("sender name on shipping labels"),
     SHIP_FROM_PHONE: Joi.string().required().description("sender phone on shipping labels"),
     SHIP_FROM_ADDRESS_LINE1: Joi.string().required().description("sender street address"),
@@ -130,6 +141,12 @@ module.exports = {
     },
     from: envVars.EMAIL_FROM,
     contactInbox: envVars.CONTACT_INBOX,
+    brand: {
+      name: envVars.EMAIL_BRAND_NAME || "HashtagBillionaire",
+      logoUrl: envVars.EMAIL_LOGO_URL || `${envVars.FRONTEND_URL.replace(/\/+$/, "")}/logo_header.png`,
+      color: envVars.EMAIL_BRAND_COLOR || "#fae52e",
+      textColor: envVars.EMAIL_BRAND_TEXT_COLOR || "#1c1c19",
+    },
   },
   shipping: {
     // ShipStation v2 address fields.

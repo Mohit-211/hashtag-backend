@@ -87,6 +87,7 @@ On branch `feature/client-decisions`. This section grows with each change until 
   - Wishlist items: `stock_status` is `AVAILABLE` or `OUT_OF_STOCK`, without `stock`.
   - `PUT product/cart/increment` past the stock answers `400` *"There isn't enough in stock to add more."* (was "Only N left").
   - Product and variant pages still send `stock`, so the shop can stop a quantity at it; don't show the number.
+- **Emails look like the website** (Q59): every email shows the logo from the website's `/logo_header.png`, so keep that file at that path (or tell the backend if it moves).
 - **Closing an account** (Q46): `DELETE user/deactivate` keeps working as before and now means:
   - The customer is signed out on every device.
   - Signing in with the same email and password within 30 days restores the account, with its orders, addresses, cart and wishlist. Sign-in answers as usual.
