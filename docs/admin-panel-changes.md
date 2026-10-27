@@ -4,7 +4,7 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
-| [2026-10-26: client decisions, first backend changes](#2026-10-26) | branch `feature/client-decisions`, not released | Read the notes; Q31, Q42, Q44 and Q45 in the to-do list |
+| [2026-10-26: client decisions, first backend changes](#2026-10-26) | branch `feature/client-decisions`, not released | Read the notes; Q31, Q42, Q44, Q45 and Q56 in the to-do list |
 | [2026-10-16: status markers, SAGE stock, supplier pricing](#2026-10-16) | `aba0065` | **Recommended**: show variant status, add a status filter |
 | [2026-10-15: bug sweep](#2026-10-15) | `44141b0` | Optional: new endpoints and fields |
 | [2026-10-14: security release](#2026-10-14) | `335d27b` | Done |
@@ -35,6 +35,7 @@ These need the backend changes on branch `feature/client-decisions`, listed unde
 | 42 | One password rule everywhere: 8+ characters with an uppercase letter, a number and a special character | Update the form check, which mirrors the old backend rule (2 digits, no spaces). |
 | 44 | Every admin has full access; Super Admins can add more Super Admins | Offer the Super Admin role when a Super Admin creates or edits an admin, and allow deleting another Super Admin (never yourself or the last one). |
 | 31 | Admins can set a product's weight; supplier weights stay where there's no admin weight | A weight field (lb) on product and variant edit, saved with `PUT product/admin/weight`, not with the product update, which would stop supplier updates for that product. |
+| 56 | The team manages the gallery | A gallery screen: list, add, edit the caption, reorder, hide and delete photos. The shop's current photos have to be added here once. |
 | 45 | Admins can set a password and share it; viewing a password isn't possible, since passwords are stored one-way, and the client agreed | A "Set password" action on customers and on admins. |
 
 ### After later backend work
@@ -46,7 +47,6 @@ These need the backend changes on branch `feature/client-decisions`, listed unde
 | 23 | The team manages the fonts for custom text (which other settings is being confirmed) | A fonts screen. |
 | 34 | Cancellation within 2 hours; refunds by hand | A "refund done" action on cancelled orders. |
 | 39 | Per order: ShipStation tracking or manual updates | A tracking-mode switch and a status form on the order. |
-| 56 | The team manages the gallery | A gallery screen. |
 
 ### Answers to `BACKEND_QUESTIONS.md` E3
 
@@ -73,6 +73,12 @@ On branch `feature/client-decisions`. This section grows with each change until 
   - Body: `{ "product_id": 12, "weight_lb": 0.75 }` or `{ "variant_ids": [3, 4], "weight_lb": 0.75 }`; `"weight_lb": null` clears it, back to the supplier's weight or the default of 1 lb.
   - Answers `{ "variants": 6, "weight_lb": 0.75 }`; `400` for a weight outside 0 to 150 lb or for both or neither target, `404` when no variant matches.
   - Variants carry `admin_weight_lb` (the admin's) beside `unit_weight` (the supplier's); shipping uses the admin's first. Supplier syncs never change `admin_weight_lb`, and unlike `POST product/update` this doesn't stop supplier updates for the product.
+- **Gallery** (Q56): the team manages the shop's gallery photos.
+  - `GET gallery/admin` lists every photo: `{ id, image_url, caption, sort_order, is_active, created_at, updated_at }`, ordered by `sort_order`, newest first within the same order.
+  - `POST gallery` (multipart) adds one: an image in the field `images` (JPG, PNG, WebP, AVIF or GIF, up to 20 MB), plus optional `caption` (up to 255 characters), `sort_order` (a whole number, lowest first) and `is_active`. `201` with the photo.
+  - `PUT gallery/:id` changes any of those; a new `images` file replaces the photo.
+  - `DELETE gallery/:id` removes it.
+  - `400` for a file that isn't an image, more than one image, or a caption over 255 characters; `404` for an unknown id. The shop shows only active photos, through `GET gallery`.
 - **Products out of stock** (Q49): the shop's product lists now leave out products with nothing in stock. The panel's lists are unchanged, including the use-case product list (`industry/use-case/:id/products`), which still shows every product.
 - **Every order** (`BACKEND_QUESTIONS.md` E3): `GET order/admin?payment_status=ALL` lists orders of every payment status. Without the parameter it still lists paid orders only.
 

@@ -50,7 +50,7 @@ Found after the audit: N1 to N3 (bottom of this file).
 
 ### Deploying `feature/client-decisions` (not released)
 
-1. **Before pulling:** run `migrations/2026-10-27_admin_weight_before_deploy.sql`. The new code reads its column on every product query.
+1. **Before pulling:** run `migrations/2026-10-27_admin_weight_before_deploy.sql` (the new code reads its column on every product query) and `migrations/2026-10-27_gallery_before_deploy.sql`.
 2. **Any time:** run `migrations/2026-10-26_supplier_markups.sql`.
 3. **In `.env`** (each one is required; the app won't start without it):
    - `CONTACT_INBOX=patrick@hashtagbillionaire.com`
@@ -222,7 +222,7 @@ The client answered on 26 October and answered the follow-ups on 27 October; the
 | 48 | Zero stock can't be ordered | Built in `aba0065` | ✅ | `aba0065` | |
 | 49 | No stock number shown to shoppers; out-of-stock products aren't shown; a cart item that runs out shows as out of stock | The shop's product lists leave out products without a variant in stock (`src/utils/stock.js`; stock a supplier doesn't report counts as in stock), and price and filter them on variants in stock. Cart and wishlist lines say `AVAILABLE`, `OUT_OF_STOCK` or `NOT_ENOUGH_STOCK` without a number, and no message gives a count. Product pages still send `stock`, which the shop uses to cap quantities | ✅ | | |
 | 51 | All supplier syncs on the 1st | One cron at 2 AM New York time on the 1st runs SAGE, SanMar, S&S and OttoCap one after another (were the 5th, 10th, 15th and 25th) | ✅ | `0bd4ccd` | |
-| 56 | The team manages the gallery in the admin | Gallery table, admin endpoints, public list | ❌ | | |
+| 56 | The team manages the gallery in the admin | `gallery_images` (`migrations/2026-10-27_gallery_before_deploy.sql`); `GET gallery` for the shop; `GET gallery/admin`, `POST gallery`, `PUT gallery/:id`, `DELETE gallery/:id` for the admin, one image per photo, images only | ✅ | | |
 | 58 | patrick@hashtagbillionaire.com everywhere | Contact-form messages and new sourcing requests are emailed to `CONTACT_INBOX` (sourcing requests notified no one before) | ✅ | `e691cce` | |
 | 59, 62 | Account emails with the website's logo, colours and name, set in `.env`; the site and admin addresses are already there | Every email has the website's header logo, its yellow on buttons and the name HashtagBillionaire, with the site and `CONTACT_INBOX` in the footer. `EMAIL_BRAND_NAME`, `EMAIL_LOGO_URL`, `EMAIL_BRAND_COLOR` and `EMAIL_BRAND_TEXT_COLOR` change them | ✅ | | |
 | 60 | Cloudflare Turnstile on the contact and sourcing forms, not a CAPTCHA | `POST contactUs` and `POST sourcing-requests/create` check the token with Cloudflare (`src/middlewares/turnstile.js`) once `TURNSTILE_SECRET_KEY` is set; until then they work as before | ✅ | | Client: a Turnstile widget in their Cloudflare account; then the shop's widget, then the key |

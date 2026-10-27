@@ -27,6 +27,7 @@ const sourcingRequestService = require("./sourcingRequest.service");
 const tierService = require("./tier.service");
 const addonProductService = require('./addonProduct.service');
 const customizationService = require('./customization.service')
+const galleryService = require('./gallery.service');
 
 module.exports = {
     roleService,
@@ -57,5 +58,6 @@ module.exports = {
     sourcingRequestService,
     tierService,
     addonProductService,
-    customizationService
+    customizationService,
+    galleryService,
 };

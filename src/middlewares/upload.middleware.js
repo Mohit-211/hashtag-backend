@@ -30,6 +30,8 @@ const FILE_ROUTES = [
   { method: "PUT", path: /^\/industry\/use-case\/[^/]+\/?$/, auth: requireAdmin },
   { method: "POST", path: /^\/add-on\/addon-product\/?$/, auth: requireAdmin },
   { method: "PUT", path: /^\/add-on\/addon-product\/[^/]+\/?$/, auth: requireAdmin },
+  { method: "POST", path: /^\/gallery\/?$/, auth: requireAdmin },
+  { method: "PUT", path: /^\/gallery\/[^/]+\/?$/, auth: requireAdmin },
 ];
 
 // Everywhere else multipart forms are still parsed, but files are refused.

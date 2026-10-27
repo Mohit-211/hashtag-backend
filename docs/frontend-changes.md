@@ -6,7 +6,7 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
-| [2026-10-26: client decisions, first backend changes](#2026-10-26) | branch `feature/client-decisions`, not released | Read the notes; A31, A36, A37, A44, B4, "$X+" cards, Delete account and Turnstile in the to-do list |
+| [2026-10-26: client decisions, first backend changes](#2026-10-26) | branch `feature/client-decisions`, not released | Read the notes; A31, A36, A37, A44, A45, B4, "$X+" cards, Delete account and Turnstile in the to-do list |
 | [2026-10-16: supplier pricing removed, status markers, SAGE stock](#2026-10-16) | `aba0065` | **Required**: switch SAGE pricing to `price_tiers` |
 | [2026-10-15: bug sweep](#2026-10-15) | `44141b0` | None required; read the notes |
 | [2026-10-14: security release](#2026-10-14) | `335d27b` | Done (hashtag-next `7b3f110`) |
@@ -40,6 +40,7 @@ These need the backend changes on branch `feature/client-decisions`, listed unde
 |---|---|---|---|
 | A31 | 36 | Quantities of customized items can change in the cart, the customization can't; "−" stops at the minimum | Disable "−" when `can_decrease` is false and keep typed quantities at `min_quantity` or more; the API now refuses lower ones instead of removing the line. Removing stays on the Remove button. |
 | — | 47 | Guests and signed-in customers see the same prices; SAGE cards show the lowest price with "+" | Show a card's `price` as "$X+" when `price_from` is true. The use-case grid now gets prices too. |
+| A45 | 56 | The team manages the gallery in the admin | Load the gallery from `GET gallery` instead of the photos built into the site, once the team has added them in the admin. |
 | A36 | 32 | US mainland only: the 48 contiguous states and Washington DC | Nothing required: the state list only has those 49. Show the API's message when an address is refused, and use `shippable` to keep older saved addresses outside them out of checkout. |
 | A44 | 49 | Out-of-stock products aren't shown; a cart item that runs out shows as out of stock | Show the cart line's `stock_message` when `stock_status` isn't `AVAILABLE`; checkout refuses those lines. Drop the "In stock only" filter, which no longer changes anything. |
 | — | 46 | A closed account is kept 30 days and restored by signing in | A "Delete account" option in profile settings that calls `DELETE user/deactivate` and says the account can be restored by signing in within 30 days. |
@@ -60,7 +61,6 @@ These need the backend changes on branch `feature/client-decisions`, listed unde
 | A29 | 34 | Cancel within 2 hours | A Cancel button on orders under 2 hours old, once the API's cancel works. |
 | A33, B3 | 37 | Card, Google Pay, Cash App, PayPal and Apple Pay | Add Apple Pay; build the Google Pay and Cash App request with the order's real total (`amount: "1.00"` today, audit B1). |
 | A35 | 39 | Tracking for signed-in customers; the admin picks ShipStation or manual updates | Show the order's status and tracking from the API, whichever way it's updated. |
-| A45 | 56 | The team manages the gallery in the admin | Load gallery photos and captions from the API. |
 
 **Waiting on the client:** A8, DTG with several locations (Q8, reworded); CDR for production files (Q19); which font settings besides the font list (Q23). **Later, by the client's choice:** A24 pre-made products from suppliers (Q26), A42 price filter (Q54), A46 Back button (Q57), policy pages editable in the admin (Q61).
 
@@ -91,6 +91,7 @@ On branch `feature/client-decisions`. This section grows with each change until 
   - `PUT product/cart/increment` past the stock answers `400` *"There isn't enough in stock to add more."* (was "Only N left").
   - Product and variant pages still send `stock`, so the shop can stop a quantity at it; don't show the number.
 - **Turnstile on the public forms** (Q60): `POST contactUs` and `POST sourcing-requests/create` take a Cloudflare Turnstile token as `cf-turnstile-response` or `turnstile_token`. The check starts only when the server has the secret key, which is set after the shop's release, so the forms keep working meanwhile. Then a missing, used or refused token answers `400` *"We couldn't confirm this was sent by a person. Please try again."*, and a sourcing request's files are discarded.
+- **Gallery** (Q56): `GET gallery` lists the photos the team manages in the admin, in their order: `[{ id, image_url, caption, sort_order }]`. Hidden photos aren't listed.
 - **Emails look like the website** (Q59): every email shows the logo from the website's `/logo_header.png`, so keep that file at that path (or tell the backend if it moves).
 - **Closing an account** (Q46): `DELETE user/deactivate` keeps working as before and now means:
   - The customer is signed out on every device.

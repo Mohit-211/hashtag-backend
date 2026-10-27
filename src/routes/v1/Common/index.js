@@ -24,6 +24,7 @@ const sourcingRequestRoute = require("./sourcingRequest.route");
 const tierRoute = require("./tier.route");
 const addOnRoute = require("./addonProduct.route");
 const customizationRoute = require('./customization.route')
+const galleryRoute = require("./gallery.route");
 
 const commonRoutes = [
   {
@@ -122,6 +123,10 @@ const commonRoutes = [
   {
     path: "/customization-option",
     route: customizationRoute,
+  },
+  {
+    path: "/gallery",
+    route: galleryRoute,
   },
 ];
 

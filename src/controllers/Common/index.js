@@ -2,6 +2,7 @@
 const roleController = require('./role.controller');
 const departmentController = require('./department.controller');
 const faqController = require('./faq.controller');
+const galleryController = require('./gallery.controller');
 const contactUsController = require('./contactUs.controller');
 const countryController = require('./country.controller');
 const stateController = require('./state.controller');
@@ -33,6 +34,7 @@ module.exports = {
     roleController,
     departmentController,
     faqController,
+    galleryController,
     contactUsController,
     countryController,
     stateController,
