@@ -203,7 +203,7 @@ For orientation only: render the page from the API, since the list will grow.
 - **The settings key:** `SETTINGS_MASTER_KEY` in `.env` is required, at least 32 characters, e.g. from `openssl rand -hex 32`. Give it only to whoever may change settings. It also encrypts the secret settings in the database, so a database dump doesn't give them away.
 - **Moving values out of `.env`:**
   1. `npm run settings:import` copies every setting still in `.env` into the database, secrets encrypted. Settings already saved on the page are kept; `npm run settings:import -- --overwrite` replaces them.
-  2. Remove the lines it lists from `.env`, then restart.
+  2. It prints a `sed` command that removes the moved lines from `.env`, keeping the old file as `.env.bak`. Run it, then restart.
   3. Until a setting is moved, its `.env` line keeps working, and the server logs at start which ones are still there.
 - **Changing the settings key:**
   1. Put the new key in `SETTINGS_MASTER_KEY` and the old one in `SETTINGS_MASTER_KEY_OLD`.

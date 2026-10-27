@@ -48,11 +48,14 @@ const run = async () => {
   for (const [key, status] of rows) console.log(`${key.padEnd(width)}  ${status}`);
 
   const removable = rows.filter(([, status]) => !status.startsWith("not")).map(([key]) => key);
-  console.log(
-    removable.length
-      ? `\nThese can now be removed from .env: ${removable.join(", ")}. Restart the app afterwards.`
-      : "\nNothing in .env to import.",
-  );
+  if (!removable.length) {
+    console.log("\nNothing in .env to import.");
+    return 0;
+  }
+  console.log(`\nThese can now be removed from .env: ${removable.join(", ")}.`);
+  console.log("This removes them and keeps the old file as .env.bak:");
+  console.log(`  sed -i.bak -E '/^(${removable.join("|")})=/d' .env`);
+  console.log("Then restart the app.");
   return 0;
 };
 
