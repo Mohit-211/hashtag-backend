@@ -9,6 +9,7 @@ mysql --table -u USER -p DB_NAME < migrations/<file>.sql
 - Back up first (`mysqldump --single-transaction --routines --triggers ...`).
 - Anything removed is copied into an `_archive_<date>_*` table first, and each file has a matching `.rollback.sql`.
 - Each file's header says whether to run it before or after deploying the code.
+- Pushes to `main` deploy on their own, except one that adds a migration: that deploy stops until the migration has been run and the Deploy workflow is started again with "migrations done" ticked ([docs/deployment.md](../docs/deployment.md)).
 
 There is no `npm run migrate`. It used `sequelize.sync({ alter: true })`, which drops any column a model doesn't define, without keeping a copy.
 

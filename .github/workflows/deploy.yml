@@ -1,0 +1,62 @@
+# Every push to main goes live on the production server: lint first, then scripts/deploy.sh runs
+# on the server over SSH. That script restarts the app and puts the previous version back if it
+# doesn't come up. Setup, secrets and what to do when a deploy stops: docs/deployment.md.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  # Actions tab > Deploy > Run workflow: deploys main again, e.g. after running its migrations.
+  workflow_dispatch:
+    inputs:
+      migrations_done:
+        description: "I've run this release's 'before deploy' migrations"
+        type: boolean
+        default: false
+
+# One deploy at a time. A push made during a deploy waits for it instead of cancelling it.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24 # the server's version
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+
+  deploy:
+    needs: check
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    steps:
+      - name: Deploy on the server
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          MIGRATIONS_FLAG: ${{ inputs.migrations_done && '--migrations-done' || '' }}
+        run: |
+          if [ -z "$DEPLOY_HOST" ] || [ -z "$DEPLOY_SSH_KEY" ] || [ -z "$DEPLOY_KNOWN_HOSTS" ]; then
+            echo "::error::Add the DEPLOY_HOST, DEPLOY_SSH_KEY and DEPLOY_KNOWN_HOSTS secrets (docs/deployment.md)."
+            exit 1
+          fi
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          # The key can only run scripts/deploy.sh; the command here is that script's arguments.
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 \
+            "root@$DEPLOY_HOST" "$GITHUB_SHA $MIGRATIONS_FLAG"

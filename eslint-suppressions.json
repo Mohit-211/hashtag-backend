@@ -1,0 +1,12 @@
+{
+  "src/services/Common/checkout.service.js": {
+    "no-undef": {
+      "count": 3
+    }
+  },
+  "src/services/Common/order.service.js": {
+    "no-undef": {
+      "count": 1
+    }
+  }
+}
