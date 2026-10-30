@@ -203,13 +203,23 @@ const moveWishlistToCart = async (body) => {
 
     if (!variant) throw new ApiError(httpStatus.NOT_FOUND, "Variant not found");
 
-    // 🔥 USE MIN QUANTITY
-    await addToCart({
-      user,
-      product_id: wishlistItem.product_id,
-      variant_id: wishlistItem.variant_id,
-      quantity: variant.min_order_quantity, // ✅ FIX
-    });
+    // A wishlist item is a blank variant: add it undecorated at the fewest pieces the line allows,
+    // in the payload shape addToCart takes for its supplier.
+    const quantity = lineMinimum(variant, null);
+
+    if (variant.supplier === "MANUAL") {
+      await addToCart({
+        user,
+        type: "MANUAL",
+        product_id: wishlistItem.product_id,
+        variants: [{ variant_id: variant.id, quantity }],
+      });
+    } else {
+      await addToCart({
+        user,
+        customization: [{ sizes: [{ variant_id: variant.id, quantity }] }],
+      });
+    }
 
     await wishlistItem.destroy({ transaction: t });
 
