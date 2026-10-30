@@ -45,18 +45,25 @@ jobs:
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
           MIGRATIONS_FLAG: ${{ inputs.migrations_done && '--migrations-done' || '' }}
+          # The server's public host key (/etc/ssh/ssh_host_ed25519_key.pub): ssh talks to no other machine.
+          HOST_KEY: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPtQ+qV1K6AmW0WQMch8rzSmgjiGRYi61eApr78I7UqK
         run: |
-          if [ -z "$DEPLOY_HOST" ] || [ -z "$DEPLOY_SSH_KEY" ] || [ -z "$DEPLOY_KNOWN_HOSTS" ]; then
-            echo "::error::Add the DEPLOY_HOST, DEPLOY_SSH_KEY and DEPLOY_KNOWN_HOSTS secrets (docs/deployment.md)."
+          # Secrets pasted into GitHub often carry a stray space or line ending.
+          host=$(printf '%s' "$DEPLOY_HOST" | tr -d '[:space:]')
+          if [ -z "$host" ] || [ -z "$DEPLOY_SSH_KEY" ]; then
+            echo "::error::Add the DEPLOY_HOST and DEPLOY_SSH_KEY secrets (docs/deployment.md)."
             exit 1
           fi
           install -m 700 -d ~/.ssh
-          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          if ! ssh-keygen -y -P '' -f ~/.ssh/deploy_key > /dev/null; then
+            echo "::error::DEPLOY_SSH_KEY isn't a valid private key. Paste the whole key, its BEGIN and END lines included."
+            exit 1
+          fi
+          echo "$host $HOST_KEY" > ~/.ssh/known_hosts
           # The key can only run scripts/deploy.sh; the command here is that script's arguments.
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes \
             -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 \
-            "root@$DEPLOY_HOST" "$GITHUB_SHA $MIGRATIONS_FLAG"
+            "root@$host" "$GITHUB_SHA $MIGRATIONS_FLAG"

@@ -49,7 +49,7 @@ Done once, on 30 October 2026:
 - **GitHub:** the repository's Settings → Secrets and variables → Actions has:
   - `DEPLOY_HOST`: the server's IP address.
   - `DEPLOY_SSH_KEY`: the deploy key's private key.
-  - `DEPLOY_KNOWN_HOSTS`: the server's host key line, `<IP> ssh-ed25519 AAAA…` (the key in `/etc/ssh/ssh_host_ed25519_key.pub` on the server).
+- **Workflow:** `HOST_KEY` in [deploy.yml](../.github/workflows/deploy.yml) is the server's public host key (`/etc/ssh/ssh_host_ed25519_key.pub`), so the deploy refuses to talk to any other machine. If the server is rebuilt or moved, update it there.
 
 To replace the key, make a new one (`ssh-keygen -t ed25519 -N "" -C github-actions-deploy -f deploy_key`), swap the line in `authorized_keys`, and paste the new private key into `DEPLOY_SSH_KEY`.
 
