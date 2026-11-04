@@ -6,9 +6,9 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
-| [2026-11-04: ShipStation after payment](#2026-11-04-shipping) | not committed yet | **Required**: stop calling `create-shipment-label`, show the order's totals, handle rate errors |
-| [2026-11-04: graphics and the $35 fee](#2026-11-04) | not committed yet | **Required, same day as the backend**: send the real graphic, show the API's fee, add Saved graphics |
-| [2026-10-26: client decisions, first backend changes](#2026-10-26) | branch `feature/client-decisions`, not released | Read the notes; A31, A36, A37, A44, A45, B4, "$X+" cards, Delete account and Turnstile in the to-do list |
+| [2026-11-04: ShipStation after payment](#2026-11-04-shipping) | `4b5729f`, live | **Required**: stop calling `create-shipment-label`, show the order's totals, handle rate errors |
+| [2026-11-04: graphics and the $35 fee](#2026-11-04) | `4b5729f`, live | **Required now**: until it's out, customized clothing pays no $35. Send the real graphic, show the API's fee, add Saved graphics |
+| [2026-10-26: client decisions, first backend changes](#2026-10-26) | `8f53487` to `27de06f`, live | Read the notes; A31, A36, A37, A44, A45, B4, "$X+" cards, Delete account and Turnstile in the to-do list |
 | [2026-10-16: supplier pricing removed, status markers, SAGE stock](#2026-10-16) | `aba0065` | **Required**: switch SAGE pricing to `price_tiers` |
 | [2026-10-15: bug sweep](#2026-10-15) | `44141b0` | None required; read the notes |
 | [2026-10-14: security release](#2026-10-14) | `335d27b` | Done (hashtag-next `7b3f110`) |
@@ -34,9 +34,9 @@ The client answered the questions in `client-questions.md` on 26 October and the
 | A39 | 58 | patrick@hashtagbillionaire.com everywhere | Use it in the footer (today the misspelled `patrick@hashtagbillioniare.net`), on the Support page, and in Terms, Privacy and Shipping & Returns. |
 | A7, A9, A13, A14, A16, A20, A28, A30, A32, A38, A40, A41, A43 | 7, 9, 13, 14, 15, 17, 22, 33, 35, 40, 53, 55, 61 | Kept as they are, including the policy text (no 2-hour window added for now) and the generic grey mockups | No change. |
 
-### With the next backend release
+### Backend side is live
 
-These need the backend changes on branch `feature/client-decisions`, listed under [2026-10-26](#2026-10-26) once it is released.
+These go with the backend changes listed under [2026-10-26](#2026-10-26).
 
 | Shop item | Q | Decision | What the shop does |
 |---|---|---|---|
@@ -69,9 +69,9 @@ These need the backend changes on branch `feature/client-decisions`, listed unde
 ---
 
 <a id="2026-11-04-shipping"></a>
-## 2026-11-04: ShipStation after payment (not released)
+## 2026-11-04: ShipStation after payment (live)
 
-Not committed yet. Nothing reaches ShipStation until the customer has paid: the backend then creates the order there and buys its label by itself. The shop's checkout keeps working if the backend goes first, so this release doesn't need the same-day timing of [graphics](#2026-11-04), but the shop still has to change.
+Live since 4 November (`4b5729f`). Nothing reaches ShipStation until the customer has paid: the backend then creates the order there and buys its label by itself. Today's checkout keeps working, but the shop still has to change.
 
 ### The flow
 
@@ -86,7 +86,7 @@ Not committed yet. Nothing reaches ShipStation until the customer has paid: the 
 
 ### What changed in the API
 
-- **`POST order/shipping/rates`** gains `carrier_id` on each option. Prices now include the carrier's surcharges, so they can be a little higher than before.
+- **`POST order/shipping/rates`** gains `carrier_id` on each option. Prices now include the carrier's surcharges, which the old quotes left out, so UPS costs noticeably more than before: UPS Ground for a 2.5 lb box to New York is $32.63, not $20.55. Only the box the team ships in is priced, not USPS's own flat rate packaging.
   - `400` when ShipStation can't verify the address. Today's empty list on any problem is gone.
   - `502` when ShipStation can't be reached, `503` when no carrier is set up.
 - **`POST order`** takes `address_id` and `selected_service_code`. `shipping_amount` and `selected_carrier_code` are ignored: the backend asks ShipStation for the price again, because an amount from the browser could be anything. `409` when that option isn't offered any more. The same `400`, `502` and `503` as rates.
@@ -107,9 +107,9 @@ Not committed yet. Nothing reaches ShipStation until the customer has paid: the 
 ---
 
 <a id="2026-11-04"></a>
-## 2026-11-04: graphics and the $35 fee (not released)
+## 2026-11-04: graphics and the $35 fee (live)
 
-Not committed yet. **The shop has to release this the same day as the backend.** Until the shop sends `graphic_id`, customized clothing pays no $35 and production gets no original file. Orders still go through.
+Live since 4 November (`4b5729f`). **The shop's side is urgent.** Until the shop sends `graphic_id`, customized clothing pays no $35 and production gets no original file. Orders still go through.
 
 ### The rule
 
@@ -184,17 +184,17 @@ Decided on 4 November. It replaces the per-line $35 digitizing fee and the $20 f
 
 ### Release order
 
-1. **Backend:** run `migrations/2026-11-04_user_graphics_before_deploy.sql`, check the [upload limits](deployment.md#upload-limits), then deploy.
-2. **Shop, same day:** the list above.
+1. **Backend:** live since 4 November.
+2. **Shop:** the list above, as soon as it can.
 
-Lines already in a cart when the backend goes live have no graphic, so they lose their old $35 the next time the cart is read.
+Lines already in a cart when the backend went live have no graphic, so they lost their old $35 the next time the cart was read.
 
 ---
 
 <a id="2026-10-26"></a>
-## 2026-10-26: client decisions, first backend changes (not released)
+## 2026-10-26: client decisions, first backend changes (live)
 
-On branch `feature/client-decisions`. This section grows with each change until the branch is released.
+Commits `8f53487` to `27de06f`.
 
 - **SAGE markup is 49.25%** (Q11), the rate the shop applies itself today. Once the backend's migration has run, SAGE prices in the cart and in `price_tiers` match what the product page shows.
 - **Shipping quotes:** an item without a weight now counts as 1 lb instead of 0.5 lb (Q31), so some quotes go up, and a weight the team sets in the admin comes before the supplier's. Nothing changes in the request or the response.

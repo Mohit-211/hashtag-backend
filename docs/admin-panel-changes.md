@@ -4,9 +4,9 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
-| [2026-11-04: ShipStation after payment](#2026-11-04-shipping) | not committed yet | **Recommended**: the failure reason and a "Try again" button on the order's Shipping tab |
-| [2026-11-04: customers' real graphics on orders](#2026-11-04) | not committed yet | **Recommended**: a download link per graphic on the order screen |
-| [2026-10-26: client decisions, first backend changes](#2026-10-26) | branch `feature/client-decisions`, not released | Read the notes; the Settings page, Q31, Q42, Q44, Q45 and Q56 in the to-do list |
+| [2026-11-04: ShipStation after payment](#2026-11-04-shipping) | `4b5729f`, live | **Recommended**: the failure reason and a "Try again" button on the order's Shipping tab |
+| [2026-11-04: customers' real graphics on orders](#2026-11-04) | `4b5729f`, live | **Recommended**: a download link per graphic on the order screen |
+| [2026-10-26: client decisions, first backend changes](#2026-10-26) | `8f53487` to `27de06f`, live | Read the notes; the Settings page, Q31, Q42, Q44, Q45 and Q56 in the to-do list |
 | [2026-10-16: status markers, SAGE stock, supplier pricing](#2026-10-16) | `aba0065` | **Recommended**: show variant status, add a status filter |
 | [2026-10-15: bug sweep](#2026-10-15) | `44141b0` | Optional: new endpoints and fields |
 | [2026-10-14: security release](#2026-10-14) | `335d27b` | Done |
@@ -28,9 +28,9 @@ The client answered the questions in `client-questions.md` on 26 October and the
 | — | The 16 Oct release is live | Variant status badges, the `?status=` filter, product `restored_at` and the SAGE stock display ([2026-10-16](#2026-10-16)). |
 | 11 | Markups: SAGE 49.25%; SanMar, S&S and OttoCap 66.67% | Nothing to build: the Pricing page shows the rates once the backend has set them. |
 
-### With the next backend release
+### Backend side is live
 
-These need the backend changes on branch `feature/client-decisions`, listed under [2026-10-26](#2026-10-26) once it is released.
+These go with the backend changes listed under [2026-10-26](#2026-10-26).
 
 | Q | Decision | What the panel does |
 |---|---|---|
@@ -59,9 +59,9 @@ These need the backend changes on branch `feature/client-decisions`, listed unde
 ---
 
 <a id="2026-11-04-shipping"></a>
-## 2026-11-04: ShipStation after payment (not released)
+## 2026-11-04: ShipStation after payment (live)
 
-Not committed yet. Once an order is paid, the backend creates it in ShipStation and buys its label by itself. The order's Shipping tab already shows the status, the tracking number and the label link, so paid orders show up with no change to the panel. What's new is for when a label fails:
+Live since 4 November (`4b5729f`). Once an order is paid, the backend creates it in ShipStation and buys its label by itself. The order's Shipping tab already shows the status, the tracking number and the label link, so paid orders show up with no change to the panel. What's new is for when a label fails:
 
 - **`shipment_error`** on orders in `GET order/admin`: ShipStation's reason when `shipment_status` is `FAILED`, for example a carrier account with too little balance. Show it on the Shipping tab.
 - **`POST order/admin/:id/label`** tries again, for a paid order with no label. Show a "Try again" button when `shipment_status` is `FAILED`.
@@ -74,9 +74,9 @@ Not committed yet. Once an order is paid, the backend creates it in ShipStation 
 ---
 
 <a id="2026-11-04"></a>
-## 2026-11-04: customers' real graphics on orders (not released)
+## 2026-11-04: customers' real graphics on orders (live)
 
-Not committed yet. Customers now upload their real graphic in any format, and the $35 is charged per new graphic on clothing instead of per cart line. The rule is in [frontend-changes.md](frontend-changes.md#2026-11-04).
+Live since 4 November (`4b5729f`). Customers can now upload their real graphic in any format, and the $35 is charged per new graphic on clothing instead of per cart line. The rule is in [frontend-changes.md](frontend-changes.md#2026-11-04).
 
 - **Original files:** items in `GET order/admin` gain `graphics: [{ id, original_name, file_url }]`, the files production needs. Add a download link for each to the order screen (`OrdersPage.tsx`). `file_url` always downloads, in the format the customer uploaded, so don't put it in the image gallery: AI, EPS, PSD and CDR won't display. Items that were ordered before this release have an empty list.
 - **`customized_image`** stays the preview. A line can have `graphics` and no preview, so treat either as artwork in `missingArtworkCaution`.
@@ -87,9 +87,9 @@ Not committed yet. Customers now upload their real graphic in any format, and th
 ---
 
 <a id="2026-10-26"></a>
-## 2026-10-26: client decisions, first backend changes (not released)
+## 2026-10-26: client decisions, first backend changes (live)
 
-On branch `feature/client-decisions`. This section grows with each change until the branch is released.
+Commits `8f53487` to `27de06f`.
 
 - **Markups** (Q11): once `migrations/2026-10-26_supplier_markups.sql` has run, `GET product/pricing/markup` lists SAGE at 49.25% and SANMAR, SS and OTTOCAP at 66.67%. Any of the four rows that didn't exist is created, so each one can be edited from the Pricing page.
 - **Supplier syncs** (Q51): all four run on the 1st of each month at 2 AM New York time, one after another, instead of the 5th, 10th, 15th and 25th. The SAGE stock change from [2026-10-16](#2026-10-16) lands on the first 1st after this release.

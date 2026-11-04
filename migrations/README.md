@@ -6,7 +6,7 @@ Schema changes are plain SQL files in this folder, run by hand against the app d
 mysql --table -u USER -p DB_NAME < migrations/<file>.sql
 ```
 
-- Back up first (`mysqldump --single-transaction --routines --triggers ...`).
+- Back up first (`mysqldump --single-transaction --routines --triggers --max-allowed-packet=1G ...`). A row in `products` is bigger than the default packet, and without that option the dump stops there. Check that the file ends with `-- Dump completed`.
 - Anything removed is copied into an `_archive_<date>_*` table first, and each file has a matching `.rollback.sql`.
 - Each file's header says whether to run it before or after deploying the code.
 - Pushes to `main` deploy on their own, except one that adds a migration: that deploy stops until the migration has been run and the Deploy workflow is started again with "migrations done" ticked ([docs/deployment.md](../docs/deployment.md)).
@@ -19,9 +19,9 @@ There is no `npm run migrate`. It used `sequelize.sync({ alter: true })`, which 
 | `2026-10-14_auth_links_before_deploy.sql` | before deploying `335d27b` | run 15 Oct |
 | `2026-10-14_auth_links_after_deploy.sql` | after deploying `335d27b` | run 15 Oct |
 | `2026-10-16_supplier_status_markers_before_deploy.sql` | before deploying `aba0065` | run (its columns answer in production on 26 Oct) |
-| `2026-10-26_supplier_markups.sql` | any time (data only) | not yet |
-| `2026-10-27_admin_weight_before_deploy.sql` | before deploying `feature/client-decisions` | not yet |
-| `2026-10-27_gallery_before_deploy.sql` | before deploying `feature/client-decisions` | not yet |
-| `2026-10-27_app_settings_before_deploy.sql` | before deploying `feature/client-decisions` | not yet |
-| `2026-11-04_user_graphics_before_deploy.sql` | before deploying graphics and the $35 fee | not yet |
-| `2026-11-04_shipstation_after_payment_before_deploy.sql` | before deploying ShipStation after payment | not yet |
+| `2026-10-26_supplier_markups.sql` | any time (data only) | run (its rates answer on 4 Nov) |
+| `2026-10-27_admin_weight_before_deploy.sql` | before deploying `feature/client-decisions` | run (its column answers on 4 Nov) |
+| `2026-10-27_gallery_before_deploy.sql` | before deploying `feature/client-decisions` | run (its table answers on 4 Nov) |
+| `2026-10-27_app_settings_before_deploy.sql` | before deploying `feature/client-decisions` | run (its table answers on 4 Nov) |
+| `2026-11-04_user_graphics_before_deploy.sql` | before deploying graphics and the $35 fee | run 4 Nov |
+| `2026-11-04_shipstation_after_payment_before_deploy.sql` | before deploying ShipStation after payment | run 4 Nov |

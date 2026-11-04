@@ -22,7 +22,7 @@ A deploy never touches `.env`. When new code needs a new `.env` value, add it on
 |---|---|
 | Lint failed | Fix the error and push again. |
 | "files on the server differ from git" | Someone edited or uploaded a file on the server. Commit that change from your machine, or discard it on the server (`git checkout -- <file>`). Then **Actions → Deploy → Run workflow**. |
-| "adds or changes the database migrations" | Back up, then run the `before deploy` migrations by hand ([migrations/README.md](../migrations/README.md)). Then **Actions → Deploy → Run workflow** with **migrations done** ticked. Run any `after deploy` migrations once it's live. Until then, every later push stops the same way. |
+| "adds or changes the database migrations" | Back up, then run the `before deploy` migrations by hand ([migrations/README.md](../migrations/README.md)). Then **Actions → Deploy → Run workflow** with **migrations done** ticked, or on the server, as root, `bash scripts/deploy.sh <full commit id> --migrations-done`. Run any `after deploy` migrations once it's live. Until then, every later push stops the same way. |
 | "npm install failed" | The code is back on the previous commit and the app wasn't restarted. Fix `package.json` or the lockfile and push again. If it adds "don't restart it", run `npm install --omit=dev` in `/var/www/backend` first. |
 | "failed and was rolled back" | The new code didn't start; the site runs the previous commit. `pm2 logs backend` on the server shows why. Fix and push again. |
 | "doesn't answer after going back" | The site is down. Check `pm2 logs backend` on the server now. |
@@ -38,7 +38,7 @@ The backend uses ShipStation API V2 and nothing else: rates, orders, labels and 
 3. Save the key on the admin panel's Settings page, under Shipping, with the sender's details.
 4. On the server, run `npm run shipstation:setup` in `/var/www/backend`.
 
-Step 4 loads that account's carriers, registers the tracking webhook and prints sample rates. It creates no orders and buys no labels. Run it again after changing the key or the connected carriers: carrier ids belong to the account, and one unknown id makes every rate request fail, which stops checkout.
+Step 4 loads that account's carriers, registers the tracking webhook and prints sample rates. It creates no orders and buys no labels. Run it again after changing the key or the connected carriers: carrier ids belong to the account, so after a new key the old ones can stop rates, and with them checkout.
 
 **Testing:** a key from the web app has no sandbox, so every paid test order buys a real label. Use the cheapest service and void the label in ShipStation straight after.
 
@@ -46,10 +46,10 @@ Step 4 loads that account's carriers, registers the tracking webhook and prints 
 
 ## Upload limits
 
-Customers' graphics can be up to 100 MB each. They're stored in `graphics` in the storage folder, which the app creates at start, and served at `/graphics`. What sits in front of the app has to allow the same, or it refuses the upload before the app sees it:
+Customers' graphics can be up to 100 MB each. They're stored in `graphics` in the storage folder, which the app creates at start, and served at `/graphics`. What sits in front of the app allows that (checked 4 November):
 
-- **nginx:** `client_max_body_size` above 100 MB for the API, and `/graphics` passed to the app like `/images`.
-- **Cloudflare:** its limit on request size depends on the plan.
+- **Apache:** `node.hashtagbillionaire.com.conf` passes everything to the app with `ProxyPass /`, `/graphics` included, and sets no `LimitRequestBody`.
+- **Cloudflare:** a 95 MB request reaches the app and a 105 MB one is refused with `413`. The limit depends on the plan, so check again if the plan changes.
 
 ## Undoing a release
 

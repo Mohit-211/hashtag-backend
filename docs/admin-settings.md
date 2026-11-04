@@ -1,6 +1,6 @@
 # The Settings page: what the admin panel builds
 
-**For:** the admin panel (Hashtag-Billionaire-Admin). **Backend:** branch `feature/client-decisions`, not released yet. Questions go in the panel's `BACKEND_QUESTIONS.md`, as before.
+**For:** the admin panel (Hashtag-Billionaire-Admin). **Backend:** live. Questions go in the panel's `BACKEND_QUESTIONS.md`, as before.
 
 ## What changes
 
@@ -212,5 +212,5 @@ For orientation only: render the page from the API, since the list will grow.
 - **A lost key:** the saved secrets can't be decrypted any more. Set a new key and restart; the server logs which secrets it couldn't read. Then enter those secrets again on the page.
 - **What stays in `.env`:** `NODE_ENV`, `PORT`, `DEFAULT_TIMEZONE`, the `CENTRAL_MYSQL_*` database settings, `JWT_SECRET` and `JWT_ACCESS_EXPIRATION_DAYS`, the role ids, the `SUPER_ADMIN_*` details, `SETTINGS_MASTER_KEY`, and four server settings:
   - `STORAGE_DIR` and `LOG_DIR`: where files go on this server;
-  - `TRUST_PROXY`: how the server sits behind nginx and Cloudflare;
+  - `TRUST_PROXY`: how the server sits behind Apache and Cloudflare;
   - `ACCESSDOMAINS`: the CORS origins. A wrong value saved from the panel would stop the panel itself from reaching the API, so it couldn't be fixed from there.

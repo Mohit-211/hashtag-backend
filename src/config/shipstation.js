@@ -101,6 +101,10 @@ const ratePrice = (rate) =>
     ).toFixed(2),
   );
 
+// USPS answers with a rate per kind of packaging: its own flat rate boxes and envelopes, and
+// "package" for a box of ours, which is what the team ships in. UPS leaves the type empty.
+const isOwnBoxRate = (rate) => !rate.package_type || rate.package_type === "package";
+
 const isAddressError = (errors) =>
   (errors || []).some((item) => item.error_code === "invalid_address");
 
@@ -157,7 +161,7 @@ const getShippingRates = async ({ address, items }) => {
 
   for (const rate of rates) {
     const code = rate.service_code;
-    if (!ALLOWED_SERVICES[code]) continue;
+    if (!ALLOWED_SERVICES[code] || !isOwnBoxRate(rate)) continue;
 
     const price = ratePrice(rate);
 
@@ -237,7 +241,9 @@ const purchaseLabel = async ({ shipmentId, carrierId, serviceCode }) => {
 
   const { rates = [], errors = [] } = data.rate_response || {};
 
-  const rate = rates.find((option) => option.service_code === serviceCode && option.rate_id);
+  const rate = rates.find(
+    (option) => option.service_code === serviceCode && option.rate_id && isOwnBoxRate(option),
+  );
 
   if (!rate) {
     throw new Error(
