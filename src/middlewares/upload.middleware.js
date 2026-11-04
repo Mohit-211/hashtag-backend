@@ -2,7 +2,14 @@ const fs = require("fs");
 const multer = require("multer");
 const httpStatus = require("http-status");
 
-const { upload, limits } = require("../config/multer");
+const {
+  upload,
+  cartUpload,
+  graphicUpload,
+  limits,
+  graphicLimits,
+  GRAPHIC_FIELDS,
+} = require("../config/multer");
 const { requireAdmin } = require("./adminAuth.middleware");
 const { verifyAuthJWTToken } = require("./userAuth.middleware");
 const { emailLimiter, publicFormLimiter } = require("./rateLimiter");
@@ -15,7 +22,8 @@ const ApiError = require("../utils/ApiError");
 const FILE_ROUTES = [
   { method: "POST", path: /^\/user\/auth\/register\/?$/, limit: emailLimiter },
   { method: "POST", path: /^\/sourcing-requests\/create\/?$/, limit: publicFormLimiter },
-  { method: "POST", path: /^\/product\/cart\/?$/, auth: verifyAuthJWTToken },
+  { method: "POST", path: /^\/product\/cart\/?$/, auth: verifyAuthJWTToken, upload: cartUpload },
+  { method: "POST", path: /^\/graphics\/?$/, auth: verifyAuthJWTToken, upload: graphicUpload },
 
   { method: "POST", path: /^\/product\/create-product\/?$/, auth: requireAdmin },
   { method: "POST", path: /^\/product\/add-product-variants\/?$/, auth: requireAdmin },
@@ -72,7 +80,7 @@ const uploadMiddleware = (req, res, next) => {
   // req.body); requireAdmin reuses req.admin, so the admin isn't looked up twice.
   return route.auth(req, res, (error) => {
     if (error) return next(error);
-    return upload(req, res, next);
+    return (route.upload || upload)(req, res, next);
   });
 };
 
@@ -84,7 +92,8 @@ const uploadErrorMessage = (error) => {
     return new ApiError(httpStatus.BAD_REQUEST, "File uploads aren't accepted for this field or endpoint.");
   }
   if (error.code === "LIMIT_FILE_SIZE") {
-    return new ApiError(httpStatus.BAD_REQUEST, `Each file must be ${limits.fileSize / (1024 * 1024)} MB or smaller.`);
+    const { fileSize } = GRAPHIC_FIELDS.includes(error.field) ? graphicLimits : limits;
+    return new ApiError(httpStatus.BAD_REQUEST, `Each file must be ${fileSize / (1024 * 1024)} MB or smaller.`);
   }
   return new ApiError(httpStatus.BAD_REQUEST, `Upload rejected: ${error.message}`);
 };

@@ -1,16 +1,14 @@
 const axios = require("axios");
-const {
-  Address,
-  OrderItem,
-  Carrier,
-  ProductVariant,
-} = require("../models");
-const { calculatePricing } = require("./pricing");
+const { Carrier } = require("../models");
 const settings = require("./settings");
 const httpStatus = require("http-status");
 const ApiError = require("../utils/ApiError");
+const decodeHtmlEntities = require("../utils/decodeHtmlEntities");
 
-// ====================== SHIPSTATION V2 CLIENT ======================
+// ShipStation API V2, with the V2 key from the ShipStation web app (Settings > Account > API
+// Settings). What this calls a shipment is an order in the web app, and a label is its
+// shipment. V1 is deprecated, and the standalone ShipStation API (formerly ShipEngine) is a
+// separate account with no web app.
 const shipstationApiClient = axios.create({
   baseURL: "https://api.shipstation.com",
   headers: {
@@ -25,19 +23,35 @@ shipstationApiClient.interceptors.request.use((request) => {
   return request;
 });
 
+// The services customers can choose at checkout.
+const ALLOWED_SERVICES = {
+  ups_ground: "UPS Ground",
+  ups_2nd_day_air: "UPS 2nd Day Air",
+  ups_next_day_air: "UPS Next Day Air",
+  usps_priority_mail: "USPS Priority Mail",
+  fedex_ground: "FedEx Ground",
+};
+
+// What ShipStation said went wrong, as text for the logs and the admin.
+const shipstationMessage = (error) =>
+  error.response?.data?.errors?.map((item) => item.message).join(" ") ||
+  error.response?.data?.message ||
+  error.message;
+
 const mapAddress = (address) => ({
   name: address.name,
   phone: address.phone || "9999999999",
   address_line1: address.address_line1,
-  address_line2: address.address_line2 || "",
+  address_line2: address.address_line2 || null,
   city_locality: address.city,
   state_province: address.state,
   postal_code: address.postal_code,
   // New addresses arrive with country_code; saved addresses store it in country.
   country_code: address.country_code || address.country || "US",
+  // The address check works out whether it's residential, which some carriers charge more for.
+  address_residential_indicator: "unknown",
 });
 
-// The sender on every label and rate request, from the SHIP_FROM_* settings.
 // The sender on labels and rate quotes (Settings page, Shipping).
 const getShipFromAddress = () => ({
   name: settings.getRequired("SHIP_FROM_NAME"),
@@ -47,457 +61,238 @@ const getShipFromAddress = () => ({
   state_province: settings.getRequired("SHIP_FROM_STATE"),
   postal_code: settings.getRequired("SHIP_FROM_POSTAL_CODE"),
   country_code: settings.get("SHIP_FROM_COUNTRY"),
+  address_residential_indicator: "no",
 });
 
 // Weight of one piece in lb: an admin's weight, else the supplier's, else the default (Q31).
 const shippingWeightLb = (variant) =>
   Number(variant?.admin_weight_lb) || Number(variant?.unit_weight) || settings.get("DEFAULT_PACKAGE_WEIGHT_LB");
 
-// ====================== CREATE ORDER + SHIPMENT IN DASHBOARD ======================
-const createShipstationOrderV2 = async (
-  order,
-  cartItems,
-  address,
-  totalWeight,
-) => {
-  try {
-    const items = [];
+// The whole order in one box, the same for the quote and the label. items are cart lines or
+// order items, with their variant.
+const buildPackages = (items) => {
+  const totalWeight = items.reduce((sum, item) => sum + item.quantity * shippingWeightLb(item.variant), 0);
 
-    /*
-     |--------------------------------------------------------------------------
-     | ITEMS
-     |--------------------------------------------------------------------------
-     */
+  return [
+    {
+      weight: {
+        value: Number(parseFloat(totalWeight || 1).toFixed(2)),
+        unit: "pound",
+      },
 
-    for (const item of cartItems) {
-      const v = item.variant;
+      dimensions: {
+        length: 12,
+        width: 10,
+        height: 6,
+        unit: "inch",
+      },
+    },
+  ];
+};
 
-      /*
-       |--------------------------------------------------------------------------
-       | PARSE SNAPSHOT
-       |--------------------------------------------------------------------------
-       */
+// The carrier's whole charge: surcharges such as fuel are in other_amount, not shipping_amount.
+const ratePrice = (rate) =>
+  Number(
+    (
+      Number(rate.shipping_amount?.amount || 0) +
+      Number(rate.insurance_amount?.amount || 0) +
+      Number(rate.confirmation_amount?.amount || 0) +
+      Number(rate.other_amount?.amount || 0)
+    ).toFixed(2),
+  );
 
-      let pricingSnapshot = item.pricing_snapshot;
+const isAddressError = (errors) =>
+  (errors || []).some((item) => item.error_code === "invalid_address");
 
-      if (pricingSnapshot && typeof pricingSnapshot === "string") {
-        pricingSnapshot = JSON.parse(pricingSnapshot);
-      }
-
-      /*
-       |--------------------------------------------------------------------------
-       | UNIT PRICE
-       |--------------------------------------------------------------------------
-       */
-
-      let unitPrice = 0;
-
-      /*
-       |--------------------------------------------------------------------------
-       | CUSTOM PRODUCT
-       |--------------------------------------------------------------------------
-       */
-
-      if (pricingSnapshot) {
-        unitPrice = Number(pricingSnapshot.final_price_per_item || 0);
-      } else {
-        /*
-       |--------------------------------------------------------------------------
-       | NORMAL PRODUCT
-       |--------------------------------------------------------------------------
-       */
-        const effectivePrice =
-          v.case_price && Number(v.case_price) > 0 ? v.case_price : v.price;
-
-        const pricing = await calculatePricing(effectivePrice, v.supplier);
-
-        unitPrice = pricing.final_price;
-      }
-
-      /*
-       |--------------------------------------------------------------------------
-       | PUSH ITEM
-       |--------------------------------------------------------------------------
-       */
-
-      items.push({
-        name: v.sku || "Product",
-
-        sku: v.sku || "SKU",
-
-        quantity: Number(item.quantity),
-
-        unit_price: Number(unitPrice.toFixed(2)),
-      });
-    }
-
-    /*
-     |--------------------------------------------------------------------------
-     | PAYLOAD
-     |--------------------------------------------------------------------------
-     */
-
-    const payload = {
-      shipments: [
-        {
-          external_shipment_id: order.order_number,
-
-          shipment_number: order.order_number,
-
-          shipment_status: "pending",
-
-          /*
-           |--------------------------------------------------------------------------
-           | ADDRESS
-           |--------------------------------------------------------------------------
-           */
-
-          ship_to: mapAddress(address),
-
-          ship_from: getShipFromAddress(),
-
-          /*
-           |--------------------------------------------------------------------------
-           | PACKAGE
-           |--------------------------------------------------------------------------
-           */
-
-          packages: [
-            {
-              weight: {
-                value: Number(parseFloat(totalWeight || 1).toFixed(2)),
-
-                unit: "pound",
-              },
-            },
-          ],
-
-          /*
-           |--------------------------------------------------------------------------
-           | ITEMS
-           |--------------------------------------------------------------------------
-           */
-
-          items,
-        },
-      ],
-    };
-
-    /*
-     |--------------------------------------------------------------------------
-     | CREATE SHIPMENT
-     |--------------------------------------------------------------------------
-     */
-
-    const response = await shipstationApiClient.post("/v2/shipments", payload);
-
-    console.log("✅ Shipment Created In Dashboard");
-
-    return response.data;
-  } catch (error) {
-    console.error(
-      "🚨 V2 Order Creation Error:",
-
-      JSON.stringify(
-        error.response?.data || error.message,
-
-        null,
-
-        2,
-      ),
+// A bad address is for the customer to fix. Anything else is ours, so they get a plain message.
+const ratesError = (errors, details) => {
+  if (isAddressError(errors)) {
+    return new ApiError(
+      httpStatus.BAD_REQUEST,
+      "We couldn't verify this address. Please check it and try again.",
     );
-
-    return null;
   }
+
+  console.error("🚨 Get Shipping Rates Error:", details);
+
+  return new ApiError(
+    httpStatus.BAD_GATEWAY,
+    "We couldn't get shipping rates right now. Please try again.",
+  );
+};
+
+// ====================== GET SHIPPING RATES ======================
+const getShippingRates = async ({ address, items }) => {
+  const carriers = await Carrier.findAll({ where: { is_active: true } });
+  const carrierIds = [...new Set(carriers.map((carrier) => carrier.carrier_id))];
+
+  if (!carrierIds.length) throw new ApiError(httpStatus.SERVICE_UNAVAILABLE, "No active carriers found");
+
+  let response;
+
+  try {
+    response = await shipstationApiClient.post("/v2/rates", {
+      // Quick rates aren't stored. An ordinary rate request saves a shipment, and shipments show
+      // as orders in the web app, so every customer comparing prices would leave one there.
+      rate_options: { carrier_ids: carrierIds, rate_type: "quick" },
+
+      shipment: {
+        validate_address: "validate_and_clean",
+        ship_to: mapAddress(address),
+        ship_from: getShipFromAddress(),
+        packages: buildPackages(items),
+      },
+    });
+  } catch (error) {
+    throw ratesError(error.response?.data?.errors, shipstationMessage(error));
+  }
+
+  const { rates = [], errors = [] } = response.data?.rate_response || {};
+
+  if (!rates.length && errors.length) {
+    throw ratesError(errors, errors.map((item) => item.message).join(" "));
+  }
+
+  const serviceMap = {};
+
+  for (const rate of rates) {
+    const code = rate.service_code;
+    if (!ALLOWED_SERVICES[code]) continue;
+
+    const price = ratePrice(rate);
+
+    if (!serviceMap[code] || price < serviceMap[code].price) {
+      serviceMap[code] = {
+        label: ALLOWED_SERVICES[code],
+        service_code: code,
+        carrier_code: rate.carrier_code,
+        carrier_id: rate.carrier_id,
+        price,
+        delivery_days: rate.delivery_days,
+        delivery_text: rate.carrier_delivery_days,
+      };
+    }
+  }
+
+  return Object.values(serviceMap);
+};
+
+// ====================== CREATE ORDER IN THE DASHBOARD ======================
+// create_sales_order is what the guide to the Orders tab asks for; the migration guide says
+// shipments show there without it, so sending it is right either way.
+const createShipment = async ({ order, orderItems, address, carrierId }) => {
+  const money = (amount) => ({
+    currency: order.currency.toLowerCase(),
+    amount: Number(amount || 0),
+  });
+
+  const { data } = await shipstationApiClient.post("/v2/shipments", {
+    shipments: [
+      {
+        validate_address: "validate_and_clean",
+        // ShipStation also shows this as the order number.
+        external_shipment_id: order.order_number,
+        create_sales_order: true,
+
+        carrier_id: carrierId,
+        requested_shipment_service: order.service_code,
+
+        amount_paid: money(order.total_amount),
+        shipping_paid: money(order.shipping_amount),
+        tax_paid: money(order.tax_amount),
+
+        ship_to: mapAddress(address),
+        ship_from: getShipFromAddress(),
+        packages: buildPackages(orderItems),
+
+        items: orderItems.map((item) => ({
+          name: decodeHtmlEntities(item.product?.name) || item.name,
+          sku: item.sku,
+          quantity: Number(item.quantity),
+          unit_price: Number(item.price),
+        })),
+      },
+    ],
+  });
+
+  const [shipment] = data.shipments || [];
+
+  // The request can succeed with the shipment refused: the reason is on the shipment.
+  if (data.has_errors || !shipment?.shipment_id) {
+    throw new Error(shipment?.errors?.join(" ") || "ShipStation didn't create the shipment");
+  }
+
+  return shipment;
 };
 
 // ====================== CREATE LABEL ======================
-const createLabel = async (order, address, totalWeight) => {
-  try {
-    const carrier = await Carrier.findOne({
-      where: { carrier_code: order.carrier_code, is_active: true },
-    });
+// Buys the service the customer chose, through a rate on the order's own shipment. Quick rates
+// from checkout can't be bought. The create-shipment guide also shows a service_code on the
+// shipment, but the API's schema doesn't allow one, so this doesn't depend on it.
+const purchaseLabel = async ({ shipmentId, carrierId, serviceCode }) => {
+  const { data } = await shipstationApiClient.post("/v2/rates", {
+    shipment_id: shipmentId,
+    rate_options: { carrier_ids: [carrierId], service_codes: [serviceCode] },
+  });
 
-    if (!carrier) throw new ApiError(httpStatus.BAD_REQUEST, `Carrier not found: ${order.carrier_code}`);
+  const { rates = [], errors = [] } = data.rate_response || {};
 
-    let carrierId = carrier.carrier_id?.toString().trim();
-    if (carrierId && !carrierId.startsWith("se-")) {
-      carrierId = `se-${carrierId}`;
-    }
+  const rate = rates.find((option) => option.service_code === serviceCode && option.rate_id);
 
-    const payload = {
-      shipment: {
-        carrier_id: carrierId,
-        service_code: order.service_code,
-        external_shipment_id: order.order_number,
-        ship_to: mapAddress(address),
-        ship_from: getShipFromAddress(),
-        packages: [
-          {
-            weight: {
-              value: Number(parseFloat(totalWeight || 1).toFixed(2)),
-              unit: "pound",
-            },
-
-            dimensions: {
-              length: 12,
-              width: 10,
-              height: 6,
-              unit: "inch",
-            },
-          },
-        ],
-      },
-      validate_address: "validate_and_clean",
-      label_download_type: "url",
-      label_format: "pdf",
-    };
-
-    const response = await shipstationApiClient.post("/v2/labels", payload);
-    console.log("✅ Label Created Successfully");
-    return response.data;
-  } catch (error) {
-    console.error(
-      "🚨 Label Creation Error:",
-      JSON.stringify(error.response?.data || error.message, null, 2),
+  if (!rate) {
+    throw new Error(
+      errors.map((item) => item.message).join(" ") || `${serviceCode} isn't available for this shipment`,
     );
-    throw error;
   }
+
+  const { data: label } = await shipstationApiClient.post(`/v2/labels/rates/${rate.rate_id}`, {
+    label_format: "pdf",
+    label_layout: "4x6",
+    label_download_type: "url",
+  });
+
+  if (label.status === "error") {
+    throw new Error(`ShipStation couldn't create the label for ${shipmentId}`);
+  }
+
+  return label;
 };
 
-// ====================== FULL SHIPMENT FLOW ======================
-const createShipmentForOrder = async (order) => {
-  try {
-    const orderItems = await OrderItem.findAll({
-      where: { order_id: order.id },
-      include: [{ model: ProductVariant, as: "variant" }],
-    });
+// The label already bought for a shipment, if any.
+const findLabel = async (shipmentId) => {
+  const { data } = await shipstationApiClient.get("/v2/labels", {
+    params: { shipment_id: shipmentId },
+  });
 
-    const address = await Address.findByPk(order.address_id);
-    const totalWeight = orderItems.reduce((sum, i) => {
-      return sum + i.quantity * shippingWeightLb(i.variant);
-    }, 0);
-
-    // Create Order in Dashboard
-    await createShipstationOrderV2(order, orderItems, address, totalWeight);
-  } catch (error) {
-    console.error("🚨 Create Shipment Failed:", error.message);
-    throw error;
-  }
+  return (data.labels || []).find((label) => !label.voided && label.status !== "error") || null;
 };
 
-const purchaseLabelForOrder = async (order) => {
-  try {
-    /*
-     |--------------------------------------------------------------------------
-     | ORDER ITEMS
-     |--------------------------------------------------------------------------
-     */
-
-    const orderItems = await OrderItem.findAll({
-      where: {
-        order_id: order.id,
-      },
-
-      include: [
-        {
-          model: ProductVariant,
-
-          as: "variant",
-        },
-      ],
-    });
-
-    /*
-     |--------------------------------------------------------------------------
-     | ADDRESS
-     |--------------------------------------------------------------------------
-     */
-
-    const address = await Address.findByPk(order.address_id);
-
-    if (!address) {
-      throw new ApiError(httpStatus.NOT_FOUND, "Address not found");
-    }
-
-    /*
-     |--------------------------------------------------------------------------
-     | TOTAL WEIGHT
-     |--------------------------------------------------------------------------
-     */
-
-    const totalWeight = orderItems.reduce(
-      (sum, i) => {
-        return sum + i.quantity * shippingWeightLb(i.variant);
-      },
-
-      0,
-    );
-
-    /*
-     |--------------------------------------------------------------------------
-     | CREATE LABEL
-     |--------------------------------------------------------------------------
-     */
-
-    const shipment = await createLabel(
-      order,
-
-      address,
-
-      totalWeight,
-    );
-
-    console.log("✅ Label Purchased");
-
-    return shipment;
-  } catch (error) {
-    console.error("🚨 Purchase Label Failed:", error.message);
-
-    throw error;
-  }
-};
-
-// ====================== CANCEL SHIPSTATION LABEL ======================
+// ====================== CANCEL SHIPSTATION ORDER ======================
 const cancelShipstationShipment = async (order) => {
   try {
-    if (!order.label_id) {
-      console.log("⚠️ No ShipStation label found");
-      return;
-    }
-
-    // ================= VOID LABEL =================
-    try {
+    if (order.label_id) {
       console.log(`🚫 Voiding label: ${order.label_id}`);
 
       await shipstationApiClient.put(`/v2/labels/${order.label_id}/void`);
 
       console.log("✅ Label voided");
-    } catch (e) {
-      console.error("🚨 Label Void Failed:", e.response?.data || e.message);
-    }
-  } catch (error) {
-    console.error(
-      "🚨 Cancel ShipStation Shipment Error:",
-      error.response?.data || error.message,
-    );
-  }
-};
-
-// ====================== GET SHIPPING RATES ======================
-const getShippingRates = async ({ address, items }) => {
-  try {
-    const totalWeight = items.reduce((sum, i) => {
-      const weight = shippingWeightLb(i.variant);
-      return sum + i.quantity * weight;
-    }, 0);
-
-    const carriers = await Carrier.findAll({ where: { is_active: true } });
-    const carrierIds = carriers.map((c) => c.carrier_id);
-
-    if (!carrierIds.length) throw new ApiError(httpStatus.SERVICE_UNAVAILABLE, "No active carriers found");
-
-    const res = await shipstationApiClient.post("/v2/rates", {
-      rate_options: { carrier_ids: carrierIds },
-      shipment: {
-        ship_to: mapAddress(address),
-        ship_from: getShipFromAddress(),
-        packages: [
-          {
-            weight: {
-              value: Number(parseFloat(totalWeight || 1).toFixed(2)),
-              unit: "pound",
-            },
-
-            dimensions: {
-              length: 12,
-              width: 10,
-              height: 6,
-              unit: "inch",
-            },
-          },
-        ],
-      },
-    });
-
-    const allRates = res.data?.rate_response?.rates || [];
-    const ALLOWED = {
-      ups_ground: "UPS Ground",
-      ups_2nd_day_air: "UPS 2nd Day Air",
-      ups_next_day_air: "UPS Next Day Air",
-      usps_priority_mail: "USPS Priority Mail",
-      fedex_ground: "FedEx Ground",
-    };
-
-    const serviceMap = {};
-
-    for (let r of allRates) {
-      const code = r.service_code;
-      if (!ALLOWED[code]) continue;
-
-      const price = Number(r.shipping_amount?.amount || 0);
-
-      if (!serviceMap[code] || price < serviceMap[code].price) {
-        serviceMap[code] = {
-          label: ALLOWED[code],
-          service_code: code,
-          carrier_code: r.carrier_code,
-          price,
-          delivery_days: r.delivery_days,
-          delivery_text: r.carrier_delivery_days,
-        };
-      }
     }
 
-    return Object.values(serviceMap);
-  } catch (error) {
-    console.error(
-      "🚨 Get Shipping Rates Error:",
-      error.response?.data || error.message,
-    );
-    return [];
-  }
-};
-
-// ====================== ADDRESS VALIDATION ======================
-const validateAddress = async (addressInput) => {
-  try {
-    const payload = [mapAddress(addressInput)];
-
-    const response = await shipstationApiClient.post(
-      "/v1/addresses/validate",
-      payload,
-    ); // Note: Address validation is still under /v1 in some setups
-
-    const result = response.data[0];
-
-    if (
-      result.status === "verified" ||
-      result.status === "partially_verified"
-    ) {
-      console.log("✅ Address validated successfully");
-      return result.matched_address || result;
+    // A shipment with a label can only be cancelled once the label is void.
+    if (order.shipment_id) {
+      await shipstationApiClient.put(`/v2/shipments/${order.shipment_id}/cancel`);
     }
-
-    throw new ApiError(httpStatus.BAD_REQUEST,
-      result.messages?.[0]?.message || "Address validation failed",
-    );
   } catch (error) {
-    console.error(
-      "🚨 Address Validation Error:",
-      error.response?.data || error.message,
-    );
-    throw error;
+    console.error("🚨 Cancel ShipStation Shipment Error:", shipstationMessage(error));
   }
 };
 
 module.exports = {
   shipstationApiClient,
-  createShipstationOrderV2,
-  createShipmentForOrder,
-  purchaseLabelForOrder,
-  cancelShipstationShipment,
-
+  shipstationMessage,
   getShippingRates,
-  validateAddress,
+  createShipment,
+  purchaseLabel,
+  findLabel,
+  cancelShipstationShipment,
 };

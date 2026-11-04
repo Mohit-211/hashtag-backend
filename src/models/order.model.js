@@ -48,6 +48,12 @@ Order.init(
       type: DataTypes.STRING(50),
     },
 
+    // The ShipStation carrier of the rate the customer chose.
+    carrier_id: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+
     shipping_amount: {
       type: DataTypes.DECIMAL(10, 2),
     },
@@ -132,6 +138,12 @@ Order.init(
     },
 
     shipstation_order_id: DataTypes.STRING(100),
+
+    // Set while the label is being bought, so that only one attempt buys it.
+    label_claimed_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
 
     shipped_at: {
       type: DataTypes.DATE,

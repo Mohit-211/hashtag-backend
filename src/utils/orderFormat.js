@@ -41,6 +41,16 @@ const toFullImageUrl = (image) => {
   return `${settings.get("IMAGE_BASE_URL")}${image}`;
 };
 
+// The customer's original files on a cart or order line, for production.
+const getLineGraphics = (customization) =>
+  (Array.isArray(customization?.graphics) ? customization.graphics : []).map(
+    ({ file_path, ...graphic }) => ({ ...graphic, file_url: toFullImageUrl(file_path) }),
+  );
+
+// customization_config without the links to the customer's original files.
+const withoutGraphics = (customization) =>
+  customization && { ...customization, graphics: undefined };
+
 // Product image for an order item: the variant's primary image, any variant image,
 // then the product's primary attachment, then any product attachment.
 const getItemImage = (item) =>
@@ -137,6 +147,8 @@ module.exports = {
   parseJson,
   getCustomizationArtwork,
   toFullImageUrl,
+  getLineGraphics,
+  withoutGraphics,
   getItemImage,
   isManualItem,
   buildPricingBreakdown,

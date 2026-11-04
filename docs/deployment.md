@@ -27,6 +27,30 @@ A deploy never touches `.env`. When new code needs a new `.env` value, add it on
 | "failed and was rolled back" | The new code didn't start; the site runs the previous commit. `pm2 logs backend` on the server shows why. Fix and push again. |
 | "doesn't answer after going back" | The site is down. Check `pm2 logs backend` on the server now. |
 
+## ShipStation
+
+The backend uses ShipStation API V2 and nothing else: rates, orders, labels and tracking all go through it. The V1 key and secret on the same settings page aren't needed, because V1 is deprecated. The standalone API portal (`api-portal.shipstation.com`) is a separate product whose keys aren't for this: its accounts don't use the web app, which is where orders have to show.
+
+**Setting it up:**
+
+1. In ShipStation, connect the carriers and fund the balance of any that need it. Without funds, labels fail after payment.
+2. Go to **Settings, Account, API Settings**, choose **V2 API** and click **Generate API Key**. It's shown once, and an account has one V2 key. API access depends on the ShipStation plan: if the page doesn't offer it, the plan doesn't include it.
+3. Save the key on the admin panel's Settings page, under Shipping, with the sender's details.
+4. On the server, run `npm run shipstation:setup` in `/var/www/backend`.
+
+Step 4 loads that account's carriers, registers the tracking webhook and prints sample rates. It creates no orders and buys no labels. Run it again after changing the key or the connected carriers: carrier ids belong to the account, and one unknown id makes every rate request fail, which stops checkout.
+
+**Testing:** a key from the web app has no sandbox, so every paid test order buys a real label. Use the cheapest service and void the label in ShipStation straight after.
+
+**When a label fails:** the payment stands and the order stays paid. The reason is on the order in the admin panel, and the panel can try again.
+
+## Upload limits
+
+Customers' graphics can be up to 100 MB each. They're stored in `graphics` in the storage folder, which the app creates at start, and served at `/graphics`. What sits in front of the app has to allow the same, or it refuses the upload before the app sees it:
+
+- **nginx:** `client_max_body_size` above 100 MB for the API, and `/graphics` passed to the app like `/images`.
+- **Cloudflare:** its limit on request size depends on the plan.
+
 ## Undoing a release
 
 `git revert <commit>` and push. The server only moves forward along `main`: don't force-push it, the deploy refuses a commit that doesn't build on the one running.

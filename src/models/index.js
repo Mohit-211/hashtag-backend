@@ -19,6 +19,7 @@ const userLoginTiming = require("./user_login_timings.model");
 const ContactUs = require("./contactUs.model");
 const Faq = require("./faq.model");
 const GalleryImage = require("./galleryImage.model");
+const UserGraphic = require("./userGraphic.model");
 const AppSetting = require("./appSetting.model");
 
 const Payment = require("./payment.model");
@@ -117,6 +118,7 @@ module.exports = {
   Address,
   Order,
   OrderItem,
+  UserGraphic,
 
   Carrier,
   CarrierService,

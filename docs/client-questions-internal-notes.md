@@ -4,6 +4,8 @@ Companion to [client-questions.md](client-questions.md). Same question numbers.
 
 **Answered 26 and 27 October 2026:** the client answered 45 of the 62 questions on 26 October, and the follow-ups and most of the rest on 27 October; Q8, Q19 (CDR) and Q23 (font settings) are still open. What each answer means, and what is still open, is in [progress.md](../progress.md#client-decisions) (backend), [frontend-changes.md](frontend-changes.md#client-decisions) (shop) and [admin-panel-changes.md](admin-panel-changes.md#client-decisions) (admin panel). The notes below describe the code as it was before the answers.
 
+**Changed 4 November 2026:** the $35 is now per new graphic on clothing, for every print type, the $20 is dropped, and graphics can be any format (Q1 to Q3, Q19 to Q21). The rule is in [frontend-changes.md](frontend-changes.md#2026-11-04). Labels are now bought automatically after payment, not by the team (Q27): see [frontend-changes.md](frontend-changes.md#2026-11-04-shipping). The notes below are from before these changes.
+
 It merges two sources, checked against the code:
 - The website's list (`hashtag-next/docs/client-confirmation-questions.md`, items A1–A46 and B1–B9, written against frontend commit `5ea83e3`).
 - The backend's list. That was `docs/CLIENT_CONFIRMATIONS.md`, now folded into this one.

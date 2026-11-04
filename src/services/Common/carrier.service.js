@@ -1,15 +1,21 @@
 /** @format */
 
 // config/shipstation exports the client as shipstationApiClient; the old name was undefined.
-const { shipstationApiClient: shipstationClient } = require("../../config/shipstation");
+const {
+  shipstationApiClient: shipstationClient,
+  shipstationMessage,
+} = require("../../config/shipstation");
+const { Op } = require("sequelize");
 const { Carrier, CarrierService } = require("../../models");
 const ApiError = require("../../utils/ApiError");
 const httpStatus = require("http-status");
 
 
+// Carrier ids belong to the account behind the API key. Carriers the account doesn't have any
+// more are switched off, because one unknown id makes the whole rate request fail.
 const syncCarriers = async () => {
   try {
-    const res = await shipstationClient.get("/v1/carriers");
+    const res = await shipstationClient.get("/v2/carriers");
 
     const carriers = res.data.carriers; // ✅ FIX
 
@@ -17,14 +23,27 @@ const syncCarriers = async () => {
       throw new ApiError(httpStatus.BAD_GATEWAY, "Invalid carriers response");
     }
 
+    // carriers has no unique key either, so upsert() always inserted: see syncServices.
     for (const c of carriers) {
-      await Carrier.upsert({
-        carrier_id: c.carrier_id,
+      const values = {
         carrier_code: c.carrier_code,
         name: c.friendly_name,
-        is_active: true,
-      });
+        is_active: !c.disabled_by_billing_plan,
+      };
+
+      const existing = await Carrier.findOne({ where: { carrier_id: c.carrier_id } });
+
+      if (existing) {
+        await existing.update(values);
+      } else {
+        await Carrier.create({ carrier_id: c.carrier_id, ...values });
+      }
     }
+
+    await Carrier.update(
+      { is_active: false },
+      { where: { carrier_id: { [Op.notIn]: carriers.map((c) => c.carrier_id) } } },
+    );
 
     return carriers;
 
@@ -33,7 +52,7 @@ const syncCarriers = async () => {
 
     throw new ApiError(
       error.statusCode || httpStatus.INTERNAL_SERVER_ERROR,
-      error.response?.data?.message || error.message
+      shipstationMessage(error)
     );
   }
 };
@@ -44,7 +63,7 @@ const syncServices = async () => {
 
     for (const carrier of carriers) {
       const res = await shipstationClient.get(
-        `/v1/carriers/${carrier.carrier_id}/services`
+        `/v2/carriers/${carrier.carrier_id}/services`
       );
 
       const services = res.data.services; // ✅ FIX
@@ -78,7 +97,7 @@ const syncServices = async () => {
 
     throw new ApiError(
       error.statusCode || httpStatus.INTERNAL_SERVER_ERROR,
-      error.response?.data?.message || error.message
+      shipstationMessage(error)
     );
   }
 };

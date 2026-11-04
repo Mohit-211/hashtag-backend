@@ -15,12 +15,14 @@ const {
   Address,
   Order,
   Payment,
+  UserGraphic,
 } = require("../models");
 const logger = require("../config/logger");
 const { dirs } = require("../config/storage");
 const { userStatusTypes, accountTypes } = require("../config/types");
 const { UNVERIFIED_ACCOUNT_HOURS, CLOSED_ACCOUNT_DAYS } = require("../config/accountPolicy");
 const { purgeOldTokens } = require("../services/Common/accountToken.service");
+const { removeGraphicFiles } = require("../services/Common/graphic.service");
 
 const hasOrders = async (id) =>
   (await Order.count({ where: { user_id: id }, paranoid: false })) +
@@ -34,6 +36,9 @@ const findPhotos = (id) =>
     paranoid: false,
     raw: true,
   });
+
+const findGraphics = (where) =>
+  UserGraphic.findAll({ attributes: ["file_name"], where, raw: true });
 
 // Profile photos uploaded at sign-up, once their rows are gone.
 const removePhotos = (photos) => {
@@ -53,10 +58,12 @@ const eraseUser = async (id) => {
   }
 
   const photos = await findPhotos(id);
+  const graphics = await findGraphics({ user_id: id });
 
   try {
     await sequelize.transaction(async (transaction) => {
       const byUser = { where: { user_id: id }, force: true, transaction };
+      await UserGraphic.destroy(byUser);
       await UserAttachment.destroy(byUser);
       await Profile.destroy(byUser);
       await UserToken.destroy(byUser);
@@ -76,15 +83,18 @@ const eraseUser = async (id) => {
   }
 
   removePhotos(photos);
+  removeGraphicFiles(graphics);
   return true;
 };
 
 // A closed account with orders or payments keeps what accounting needs (the client's decision
 // of 27 Oct 2026): the email on the account, the name and phone on its profile, and the
-// addresses its orders were shipped to. Everything else is erased, and clearing the password
-// means it can never sign in or be restored.
+// addresses its orders were shipped to, plus the graphics its orders link to. Everything else
+// is erased, and clearing the password means it can never sign in or be restored.
 const stripClosedAccount = async (id) => {
   const photos = await findPhotos(id);
+  const neverOrdered = { user_id: id, first_order_id: null };
+  const graphics = await findGraphics(neverOrdered);
 
   try {
     await sequelize.transaction(async (transaction) => {
@@ -98,6 +108,7 @@ const stripClosedAccount = async (id) => {
       const shippedTo = [...new Set(orders.map((order) => order.address_id).filter(Boolean))];
 
       const byUser = { where: { user_id: id }, force: true, transaction };
+      await UserGraphic.destroy({ where: neverOrdered, force: true, transaction });
       await UserAttachment.destroy(byUser);
       await UserToken.destroy(byUser);
       await userLoginTiming.destroy(byUser);
@@ -120,6 +131,7 @@ const stripClosedAccount = async (id) => {
   }
 
   removePhotos(photos);
+  removeGraphicFiles(graphics);
   return true;
 };
 

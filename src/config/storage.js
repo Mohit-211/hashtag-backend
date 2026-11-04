@@ -13,8 +13,11 @@ const LOG_DIR = path.resolve(config.logDir || path.join(REPO_ROOT, "../logs"));
 const dirs = {
   root: STORAGE_DIR,
   uploads: path.join(STORAGE_DIR, "uploads"),
-  // Admin and customer uploads (product, brand, artwork, profile images). Served at /images.
+  // Admin and customer uploads (product, brand, preview, profile images). Served at /images.
   images: path.join(STORAGE_DIR, "uploads", "images"),
+  // Customers' graphics in any format. Kept out of uploads, which /uploads serves as they are;
+  // /graphics only serves them as downloads (see app.js).
+  graphics: path.join(STORAGE_DIR, "graphics"),
   // Images downloaded from suppliers. Served at /uploads/suppliers.
   suppliers: path.join(STORAGE_DIR, "uploads", "suppliers"),
   // Spreadsheets for the OttoCap import (otto_inventory.xlsx, otto_catalog.xlsx). Not served.

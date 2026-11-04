@@ -1,7 +1,6 @@
 /** @format */
 
 const { getLatLng } = require("../../config/geo.helper");
-const { validateAddress } = require("../../config/shipstation");
 const {
   SHIPPING_COUNTRY,
   NOT_SHIPPED_MESSAGE,
@@ -40,8 +39,20 @@ const pickAddressInput = (body) =>
     ]),
   );
 
-// Orders ship only to the US mainland (Q32). Both the chosen country and state, and the
-// address ShipStation matched, must be there.
+// ShipStation checks the address when the customer asks for rates: its separate address check
+// isn't on web app plans. Here it only gets the field names the rest of this file uses.
+const toShippingAddress = (address) => ({
+  name: address.name,
+  phone: address.phone,
+  address_line1: String(address.address_line1 || "").trim(),
+  address_line2: address.address_line2 ? String(address.address_line2).trim() : address.address_line2,
+  city_locality: address.city,
+  state_province: address.state,
+  postal_code: String(address.postal_code || "").trim(),
+  country_code: address.country_code,
+});
+
+// Orders ship only to the US mainland (Q32).
 const locationShips = (country, state) =>
   shipsTo(country.iso2, state.iso2) || shipsTo(country.iso2, state.name);
 
@@ -92,7 +103,7 @@ const addAddress = async (body) => {
     }
 
     // ✅ 3. Convert to ShipStation format
-    const addressForValidation = {
+    const cleaned = toShippingAddress({
       name: body.name,
       phone: body.phone,
       address_line1: body.address_line1,
@@ -102,20 +113,9 @@ const addAddress = async (body) => {
       state: state.iso2 || state.name, // two-letter code, e.g. AK
       postal_code: body.postal_code,
       country_code: country.iso2 || "US",
-    };
+    });
 
-    // ✅ 4. Validate address (ONLY ONCE)
-    const cleaned = await validateAddress(addressForValidation);
-
-    if (!cleaned) {
-      throw new ApiError(httpStatus.BAD_REQUEST, "Address validation failed");
-    }
-
-    if (!shipsTo(cleaned.country_code, cleaned.state_province)) {
-      throw new ApiError(httpStatus.BAD_REQUEST, NOT_SHIPPED_MESSAGE);
-    }
-
-    // ✅ 5. Check duplicate
+    // ✅ 4. Check duplicate
     const existing = await Address.findOne({
       attributes: ["id"],
       where: {
@@ -130,7 +130,7 @@ const addAddress = async (body) => {
 
     if (existing) return existing;
 
-    // ✅ 6. Get Lat/Lng (non-blocking safe)
+    // ✅ 5. Get Lat/Lng (non-blocking safe)
     const coords = await getLatLng({
       address_line1: cleaned.address_line1,
       city: cleaned.city_locality,
@@ -162,7 +162,7 @@ const addAddress = async (body) => {
       isDefault = true;
     }
 
-    // ✅ 7. Save
+    // ✅ 6. Save
     const address = await Address.create({
       user_id: user.id,
 
@@ -186,8 +186,6 @@ const addAddress = async (body) => {
       longitude: coords?.longitude || null,
 
       is_default: isDefault,
-
-      is_verified: true,
       raw_input: pickAddressInput(body),
     });
 
@@ -262,7 +260,7 @@ const updateAddress = async (body) => {
         throw new ApiError(httpStatus.BAD_REQUEST, NOT_SHIPPED_MESSAGE);
       }
 
-      const addressForValidation = {
+      cleaned = toShippingAddress({
         name: data.name || address.name,
         phone: data.phone || address.phone,
         address_line1: data.address_line1 || address.address_line1,
@@ -271,13 +269,7 @@ const updateAddress = async (body) => {
         state: state.iso2 || state.name,
         postal_code: data.postal_code || address.postal_code,
         country_code: country.iso2 || "US",
-      };
-
-      cleaned = await validateAddress(addressForValidation);
-
-      if (!shipsTo(cleaned.country_code, cleaned.state_province)) {
-        throw new ApiError(httpStatus.BAD_REQUEST, NOT_SHIPPED_MESSAGE);
-      }
+      });
 
       coords = await getLatLng({
         address_line1: cleaned.address_line1,
@@ -307,7 +299,6 @@ const updateAddress = async (body) => {
         state: cleaned.state_province,
         country: cleaned.country_code,
         postal_code: cleaned.postal_code,
-        is_verified: true,
       }),
 
       ...(coords && {

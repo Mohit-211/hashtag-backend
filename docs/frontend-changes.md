@@ -6,6 +6,8 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
+| [2026-11-04: ShipStation after payment](#2026-11-04-shipping) | not committed yet | **Required**: stop calling `create-shipment-label`, show the order's totals, handle rate errors |
+| [2026-11-04: graphics and the $35 fee](#2026-11-04) | not committed yet | **Required, same day as the backend**: send the real graphic, show the API's fee, add Saved graphics |
 | [2026-10-26: client decisions, first backend changes](#2026-10-26) | branch `feature/client-decisions`, not released | Read the notes; A31, A36, A37, A44, A45, B4, "$X+" cards, Delete account and Turnstile in the to-do list |
 | [2026-10-16: supplier pricing removed, status markers, SAGE stock](#2026-10-16) | `aba0065` | **Required**: switch SAGE pricing to `price_tiers` |
 | [2026-10-15: bug sweep](#2026-10-15) | `44141b0` | None required; read the notes |
@@ -52,17 +54,140 @@ These need the backend changes on branch `feature/client-decisions`, listed unde
 
 | Shop item | Q | Decision | What the shop will do |
 |---|---|---|---|
-| A1–A4, A15, B1 | 1–4, 10, 16 | Fees, tiers and minimums per product, artwork and print method (the same artwork and method at two locations count together); one digitizing fee per artwork; no setup fees, but $20 once per artwork that isn't vector; price tables editable in the admin, choices outside them refused; the promo fallback minimum set in the admin | Stop pricing decorations in the browser: read the tables, the minimums and a quote from the API, remove both copies of the tables (`pricing.ts`, `Productcustomizationpage.tsx`) and the fallback of 100, and stop sending price fields to the cart. Offer only what the tables list. |
-| A10, A17, A18 | 19, 20 | Each location can have its own artwork, size and thread colours; production wants the original files | One artwork per location in the customizer; send the original file and its placement per location; keep left and right sleeve apart. |
-| A19, B7 | 21 | AI, PDF, EPS, JPG, PNG, SVG and PSD (CDR being confirmed), up to 100 MB per file | Accept the list the API publishes. |
+| A1–A4, A15, B1 | 1–4, 10, 16 | Tiers and minimums per product, artwork and print method (the same artwork and method at two locations count together); price tables editable in the admin, choices outside them refused; the promo fallback minimum set in the admin | The $35 fee is in [2026-11-04](#2026-11-04). Stop pricing decorations in the browser: read the tables, the minimums and a quote from the API, remove both copies of the tables (`pricing.ts`, `Productcustomizationpage.tsx`) and the fallback of 100, and stop sending price fields to the cart. Offer only what the tables list. |
+| A10, A17, A18 | 19, 20 | Each location can have its own artwork, size and thread colours; production wants the original files | Original files and a graphic per location: [2026-11-04](#2026-11-04). Later: placement and size per location; keep left and right sleeve apart. |
+| A19, B7 | 21 | Changed on 4 Nov: any graphic format and dimensions, up to 100 MB per file | Remove the shop's file checks: [2026-11-04](#2026-11-04). |
 | A21 | 23 | The team manages the fonts in the admin | Load the font list from the API. |
-| A25, B2 | 27, 28 | The team buys labels in ShipStation; the customer pays the quoted rate | Remove the label purchase at "Continue to payment" (`CheckoutLayout.tsx`), in the payments release. |
+| A25, B2 | 27, 28 | Changed on 4 Nov: the label is bought automatically after payment; the customer pays the quoted rate | Remove the label purchase at "Continue to payment" (`CheckoutLayout.tsx`): [2026-11-04](#2026-11-04-shipping). |
 | A27 | 29 | A flat 8.25% on products, not on shipping | Show only the API's tax; checkout estimates 8.25% itself today. |
 | A29 | 34 | Cancel within 2 hours | A Cancel button on orders under 2 hours old, once the API's cancel works. |
 | A33, B3 | 37 | Card, Google Pay, Cash App, PayPal and Apple Pay | Add Apple Pay; build the Google Pay and Cash App request with the order's real total (`amount: "1.00"` today, audit B1). |
 | A35 | 39 | Tracking for signed-in customers; the admin picks ShipStation or manual updates | Show the order's status and tracking from the API, whichever way it's updated. |
 
-**Waiting on the client:** A8, DTG with several locations (Q8, reworded); CDR for production files (Q19); which font settings besides the font list (Q23). **Later, by the client's choice:** A24 pre-made products from suppliers (Q26), A42 price filter (Q54), A46 Back button (Q57), policy pages editable in the admin (Q61).
+**Waiting on the client:** A8, DTG with several locations (Q8, reworded); which font settings besides the font list (Q23). **Later, by the client's choice:** A24 pre-made products from suppliers (Q26), A42 price filter (Q54), A46 Back button (Q57), policy pages editable in the admin (Q61).
+
+---
+
+<a id="2026-11-04-shipping"></a>
+## 2026-11-04: ShipStation after payment (not released)
+
+Not committed yet. Nothing reaches ShipStation until the customer has paid: the backend then creates the order there and buys its label by itself. The shop's checkout keeps working if the backend goes first, so this release doesn't need the same-day timing of [graphics](#2026-11-04), but the shop still has to change.
+
+### The flow
+
+| Step | Call | What happens |
+|---|---|---|
+| Cart and its total | `GET product/cart/get` | No change |
+| Shipping options | `POST order/shipping/rates` with `{ address_id }` | Live rates, and the address is checked here |
+| Customer picks one, total is created | `POST order` with `{ address_id, selected_service_code }` | The backend prices the option itself and answers with the final figures |
+| Payment | Square or PayPal, as today | No change |
+| Label | None: the backend does it after payment | The order appears in ShipStation and the label is bought |
+| Tracking | `GET order/:id` | Updates arrive by themselves |
+
+### What changed in the API
+
+- **`POST order/shipping/rates`** gains `carrier_id` on each option. Prices now include the carrier's surcharges, so they can be a little higher than before.
+  - `400` when ShipStation can't verify the address. Today's empty list on any problem is gone.
+  - `502` when ShipStation can't be reached, `503` when no carrier is set up.
+- **`POST order`** takes `address_id` and `selected_service_code`. `shipping_amount` and `selected_carrier_code` are ignored: the backend asks ShipStation for the price again, because an amount from the browser could be anything. `409` when that option isn't offered any more. The same `400`, `502` and `503` as rates.
+- **`POST address`** and **`PUT address`** no longer check the address with ShipStation, which isn't possible with the new key. A bad address now shows up at the rates step, and new addresses have `is_verified: false`.
+- **`POST order/create-shipment-label`** buys nothing any more. It answers as before with the order's own figures, so today's shop doesn't break, and it goes away after the shop's release.
+- **`shipment_status`** on an order, in `GET order` and `GET order/:id`: `PENDING`, then `LABEL_CREATED`, `IN_TRANSIT`, `EXCEPTION` and `DELIVERED`. `tracking_number` and `tracking_url` fill in a few seconds after payment.
+
+### What the shop must do
+
+1. **Remove the label purchase** at "Continue to payment" (`CheckoutLayout.tsx`): stop calling `POST order/create-shipment-label`.
+2. **Show the totals from `POST order`:** `subtotal_amount`, `tax_amount`, `shipping_amount` and `total_amount`. They're what the customer pays, so don't work them out in the browser. Stop sending `shipping_amount`.
+3. **Handle the rate errors:** on `400`, send the customer back to fix the address, showing the API's message. On `502` or `503`, show the message and offer to try again. On `409` from `POST order`, reload the rates and ask them to choose again.
+4. **Don't expect the address to be rejected when it's saved.** Keep the form's own checks; the real check now comes with the rates.
+5. **Don't wait for the label after payment.** Show the confirmation page straight away. Tracking can be empty at first, so reload it on the order page.
+6. **Go by the status, not the tracking number.** Every paid order now gets a tracking number within seconds, before anything has left. Show "Shipped" only when `status` is `SHIPPED`. A `shipment_status` of `LABEL_CREATED` means the order is being prepared.
+7. **Show `FAILED` as "Preparing your shipment".** It means the label needs the team's attention, not that anything is wrong for the customer. They've paid and the order stands.
+
+---
+
+<a id="2026-11-04"></a>
+## 2026-11-04: graphics and the $35 fee (not released)
+
+Not committed yet. **The shop has to release this the same day as the backend.** Until the shop sends `graphic_id`, customized clothing pays no $35 and production gets no original file. Orders still go through.
+
+### The rule
+
+Decided on 4 November. It replaces the per-line $35 digitizing fee and the $20 for artwork that isn't vector, which was never charged.
+
+- **$35 once per new graphic on clothing**, for every print type: embroidery, DTF, DTG and screen print.
+- **Only when fewer than 12 pieces in the order carry that graphic.** All sizes, colours, products and print types count together.
+- **A graphic is new until an order with it has been paid**, whether or not that order paid the fee. A first order of 20 pays nothing, and a reorder of 5 pays nothing either.
+- Promo (SAGE) and pre-made products have no graphic fee, and neither does custom text with no graphic. The $35 handling charge on one supplier's tumblers (Q15) is a different charge and stays.
+
+| Order | Fee |
+|---|---|
+| 5 embroidered tees, new graphic | $35 |
+| 5 embroidered tees + 10 DTF hoodies, same new graphic | None: 15 pieces |
+| 3 tees, one new graphic on the chest and another on the back | $70 |
+| 3 tees, the same new graphic on the chest and the back | $35 |
+| 5 tees, a graphic from an earlier paid order | None |
+
+### What changed in the API
+
+- **`POST graphics`** saves a graphic. Multipart, signed in, one file in the field `graphic`. Any format, any dimensions, up to 100 MB, stored exactly as uploaded. Uploading saves it: there's no separate save step.
+
+  ```json
+  {
+    "id": 12,
+    "file_url": "https://node.hashtagbillionaire.com/graphics/graphic-1793800000000-3fa9c1d27be4.ai",
+    "original_name": "acme-logo.ai",
+    "mime_type": "application/postscript",
+    "file_size": 482113,
+    "is_new": true,
+    "created_at": "2026-11-04T10:12:00.000Z"
+  }
+  ```
+
+  `201` on success, also when it's a file the customer already has: the answer is then their saved graphic, with the same `id`. `400` with no file or a file over 100 MB, `401` signed out. `is_new` is the rule's "new".
+- **`GET graphics?page=1&limit=20`** lists the customer's saved graphics, newest first, the same fields as above: `{ data: [...], pagination: { total, page, limit, totalPages } }`. `limit` goes up to 100. Only their own. There's no delete yet.
+- **`POST product/cart`** takes `graphic_id`, on the customization or per location. `400` if it isn't one of the customer's graphics.
+
+  ```json
+  {
+    "customization": [
+      {
+        "print_method": "EMBROIDERY",
+        "locations": [
+          { "location": "LEFT_CHEST", "graphic_id": 12 },
+          { "location": "FULL_BACK", "graphic_id": 13 }
+        ],
+        "sizes": [{ "variant_id": 501, "quantity": 5 }]
+      }
+    ]
+  }
+  ```
+
+  With one graphic for the whole line, send `"graphic_id": 12` beside `print_method` instead. The first file in `images` stays the preview, as today: what the cart and order lists show as `logo_image` and `customized_image`. It can be any dimensions. It doesn't identify the graphic and production doesn't use it.
+- **Cart lines** gain `graphics: [{ id, original_name, file_url }]`. The fee is on the first line that has the graphic: `pricing_snapshot.customization_price.setup_fee`, already included in that line's `total_price` and in `summary`. A line with two new graphics shows 70; the other lines with those graphics show 0.
+- **Orders:** items in `GET order`, `GET order/:id` and `GET payment/history` gain the same `graphics`.
+- **Pre-made products:** `customization_images` now takes any format, up to 100 MB, and saves it to the customer's graphics. In place of `image_index`, a customization item can send `graphic_id`.
+
+**How a graphic is recognised**, per customer: the same file is always the same graphic, in any format. Pictures the server can read (PNG, JPG, WebP, GIF, TIFF, AVIF, SVG) are also compared by how they look, so a resized, re-saved or recoloured copy counts as the same design: it's saved as its own graphic, production gets that file, and it shares the fee status (`is_new`). On 50 test logos, 96–98% of ordinary copies were recognised, and 86–90% of very small or heavily compressed ones. Short logos a letter apart can be taken for each other (a round "HB" and "HD"). AI, EPS, PSD, CDR and PDF only match as the exact same file, so a customer reusing one should pick it from Saved graphics.
+
+### What the shop must do
+
+1. **Upload the customer's real file.** When they choose a file, send it to `POST graphics` as it is: no resizing, cropping or converting, and no 500 × 500 render in its place. Logos come in any dimensions, so keep their own proportions in the preview too.
+2. **Remove the shop's file checks:** the file-type list, any dimension check, and the 5 MB and 10 MB limits. Any file up to 100 MB is accepted. Remove any vector or $20 wording.
+3. **Send `graphic_id`** with the customization, or per location when the customer uses different graphics.
+4. **Handle files a browser can't draw.** AI, EPS, PSD and CDR won't load in an `<img>` or a canvas, and the backend doesn't convert them. Show the file name and an icon instead of the mockup, and fall back the same way when an image fails to load. Opening `file_url` directly downloads the file.
+5. **Add Saved graphics:** an account page listing `GET graphics`, and a "Choose from saved graphics" option in the customizer. Choosing one sends its `id` as `graphic_id`, with nothing uploaded again.
+6. **Stop working out the fee in the browser:** remove the $35 from `pricing.ts` and `Productcustomizationpage.tsx`, and stop sending `digitizing_fee`. Show `setup_fee` from the cart, labelled as a one-time graphic setup fee.
+7. **Warn before adding to the cart:** when `is_new` is true and fewer than 12 pieces carry the graphic, counting what's already in the cart, show that a one-time $35 applies. The cart's figure is the final one.
+8. **Reload the whole cart after any change** (add, quantity, remove, move to wishlist). The fee can move to another line or disappear when a different line changes.
+9. **Upload after sign-in.** `POST graphics` needs a signed-in customer, like `POST product/cart`. If guests can use the customizer, keep the file in the browser and upload it once they've signed in.
+
+### Release order
+
+1. **Backend:** run `migrations/2026-11-04_user_graphics_before_deploy.sql`, check the [upload limits](deployment.md#upload-limits), then deploy.
+2. **Shop, same day:** the list above.
+
+Lines already in a cart when the backend goes live have no graphic, so they lose their old $35 the next time the cart is read.
 
 ---
 

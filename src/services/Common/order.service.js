@@ -3,7 +3,7 @@
 const sequelize = require("../../config/central.db");
 const { calculatePricing } = require("../../config/pricing");
 const {
-  createShipmentForOrder,
+  getShippingRates,
   cancelShipstationShipment,
 } = require("../../config/shipstation");
 const {
@@ -25,9 +25,11 @@ const { Op } = require("sequelize");
 const decodeHtmlEntities = require("../../utils/decodeHtmlEntities");
 const { NOT_SHIPPED_MESSAGE } = require("../../config/shippingRegions");
 const { canShipTo } = require("./address.service");
+const { applyGraphicFees, releaseOrderGraphics } = require("./graphic.service");
 const {
   parseJson,
   getCustomizationArtwork,
+  getLineGraphics,
   toFullImageUrl,
   getItemImage,
   isManualItem,
@@ -46,9 +48,6 @@ const createOrder = async (body) => {
       address_id,
 
       selected_service_code,
-      selected_carrier_code,
-
-      shipping_amount,
     } = body;
 
     /*
@@ -79,6 +78,8 @@ const createOrder = async (body) => {
      | CART
      |--------------------------------------------------------------------------
      */
+
+    await applyGraphicFees(user.id, t);
 
     const cartItems = await Cart.findAll({
       where: {
@@ -170,7 +171,25 @@ const createOrder = async (body) => {
       subtotal += itemTotal;
     }
 
-    const quotedShippingAmount = Number(shipping_amount || 0);
+    /*
+     |--------------------------------------------------------------------------
+     | SHIPPING
+     |--------------------------------------------------------------------------
+     */
+
+    // Priced here from ShipStation: an amount sent by the browser could be anything.
+    const rates = await getShippingRates({ address, items: cartItems });
+
+    const rate = rates.find((option) => option.service_code === selected_service_code);
+
+    if (!rate) {
+      throw new ApiError(
+        httpStatus.CONFLICT,
+        "That shipping option isn't available any more. Please choose another.",
+      );
+    }
+
+    const quotedShippingAmount = rate.price;
 
     const TAX_RATE = 8.25;
 
@@ -188,9 +207,11 @@ const createOrder = async (body) => {
 
         currency: "USD",
 
-        service_code: selected_service_code,
+        service_code: rate.service_code,
 
-        carrier_code: selected_carrier_code,
+        carrier_code: rate.carrier_code,
+
+        carrier_id: rate.carrier_id,
 
         shipping_amount: quotedShippingAmount,
 
@@ -358,30 +379,6 @@ const createOrder = async (body) => {
     await t.commit();
 
     console.log(`🧾 Pending Order Created: ${order.order_number}`);
-    /*
-|--------------------------------------------------------------------------
-| CREATE SHIPMENT IN DASHBOARD ONLY
-|--------------------------------------------------------------------------
-*/
-
-    try {
-      await createShipmentForOrder(order);
-
-      await order.update({
-        shipment_status: "PENDING",
-      });
-
-      console.log(`✅ SHIPMENT CREATED: ${order.order_number}`);
-    } catch (shipmentError) {
-      console.error("🚨 Shipment Error:", shipmentError.message);
-
-      await order.update({
-        shipment_status: "PENDING",
-
-        shipment_error: shipmentError.message.substring(0, 500),
-      });
-    }
-
     /*
      |--------------------------------------------------------------------------
      | RETURN
@@ -564,6 +561,8 @@ const getOrders = async ({ user, page = 1, limit = 10 }) => {
           customized_image: toFullImageUrl(
             item.logo_image || getCustomizationArtwork(itemCustomization),
           ),
+
+          graphics: getLineGraphics(itemCustomization),
 
           price: Number(item.price || 0),
 
@@ -778,6 +777,8 @@ const getOrderById = async (body, order_id) => {
             i.logo_image || getCustomizationArtwork(customization),
           ),
 
+          graphics: getLineGraphics(customization),
+
           price: Number(i.price),
 
           quantity: Number(i.quantity),
@@ -903,6 +904,8 @@ const cancelOrder = async (body, order_id) => {
         transaction: t,
       },
     );
+
+    await releaseOrderGraphics(order, t);
 
     // ==================================================
     // UPDATE PAYMENT
@@ -1259,9 +1262,12 @@ const getAdminOrders = async ({
 
       subtotal_amount: Number(data.subtotal_amount || 0),
 
-      shipping_amount: Number(
-        data.actual_shipping_cost || data.shipping_amount || 0,
-      ),
+      // What the customer paid; what the label cost is actual_shipping_cost (Q28).
+      shipping_amount: Number(data.shipping_amount || 0),
+
+      actual_shipping_cost: Number(data.actual_shipping_cost || 0),
+
+      shipping_profit: Number(data.shipping_profit || 0),
 
       total_amount: Number(data.total_amount || 0),
 
@@ -1271,9 +1277,13 @@ const getAdminOrders = async ({
 
       shipment_status: data.shipment_status,
 
+      shipment_error: data.shipment_error,
+
       payment_method: data.payment_method,
 
       carrier: data.carrier,
+
+      service_code: data.service_code,
 
       tracking_number: data.tracking_number,
 
@@ -1345,6 +1355,8 @@ const getAdminOrders = async ({
           customized_image: toFullImageUrl(
             i.logo_image || getCustomizationArtwork(itemCustomization),
           ),
+
+          graphics: getLineGraphics(itemCustomization),
 
           price: Number(i.price || 0),
 

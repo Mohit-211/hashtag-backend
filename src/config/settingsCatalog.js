@@ -129,7 +129,8 @@ const SETTINGS = [
     type: "string",
     secret: true,
     required: true,
-    description: "Rates, labels and tracking.",
+    description:
+      "The V2 key from ShipStation: Settings, Account, API Settings, V2 API, Generate API Key. Rates, orders, labels and tracking. After changing it, run npm run shipstation:setup on the server.",
   },
 
   // Payments

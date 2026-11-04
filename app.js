@@ -83,8 +83,14 @@ app.use(
   }),
 );
 
-// parse json request body
-app.use(express.json());
+// parse json request body. ShipStation's webhook signature covers the body as it was sent.
+app.use(
+  express.json({
+    verify: (req, res, body) => {
+      if (req.originalUrl.startsWith("/api/v1/order/shipstation")) req.rawBody = body;
+    },
+  }),
+);
 
 // parse urlencoded request body
 app.use(express.urlencoded({ extended: true }));
@@ -123,6 +129,20 @@ app.use(
       if (filePath.endsWith(".webp")) {
         res.setHeader("Content-Type", "image/webp");
       }
+    },
+  }),
+);
+
+// Customers' graphics (/graphics/x.ai). Any format is accepted, so nothing here may run in a
+// browser: opening one downloads it, and <img> and fetch can still read it.
+app.use(
+  "/graphics",
+  express.static(dirs.graphics, {
+    setHeaders: (res) => {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+      res.setHeader("Content-Disposition", "attachment");
+      res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
     },
   }),
 );

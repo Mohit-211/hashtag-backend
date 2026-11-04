@@ -2,7 +2,7 @@
 
 Tracks every finding in [AUDIT_REPORT.md](AUDIT_REPORT.md) (audit of 8 October 2026, commit `268b548`) and what has been done about it. Update this file in the same commit as the fix.
 
-**Last updated:** 27 October 2026, on branch `feature/client-decisions`. `fix/bug-sweep` was merged into `main` on 16 October and is live in production.
+**Last updated:** 4 November 2026 (graphics and the $35 fee, and ShipStation after payment; neither committed yet). `fix/bug-sweep` was merged into `main` on 16 October and is live in production.
 
 **Status:** ✅ done · ◐ partly done · ❌ open.
 
@@ -50,6 +50,20 @@ Found after the audit: N1 to N3 (bottom of this file).
 3. **Deploy:** `git pull`, then `npm install --omit=dev`, then `pm2 restart backend --update-env`.
 4. **After the shop's release:** remove `EXPOSE_SUPPLIER_COST` and restart.
 
+### Deploying graphics and the $35 fee (not released)
+
+1. **Before pushing:** back up and run `migrations/2026-11-04_user_graphics_before_deploy.sql`. Cart and checkout read the new table.
+2. **On the server:** check the [upload limits](docs/deployment.md#upload-limits). The new `sharp` package installs with the deploy.
+3. **Same day:** the shop's release ([docs/frontend-changes.md](docs/frontend-changes.md#2026-11-04)). Until it's out, customized clothing pays no $35.
+4. **Payments phase:** cancelling always fails today (C10). A cancelled paid order makes its graphics new again once that's fixed.
+
+### Deploying ShipStation after payment (not released)
+
+1. **Before pushing:** back up and run `migrations/2026-11-04_shipstation_after_payment_before_deploy.sql`.
+2. **Straight after the deploy:** generate the V2 key, save it and run `npm run shipstation:setup` ([docs/deployment.md](docs/deployment.md#shipstation)). Until the setup has run, rates use the old key's carrier ids, and checkout fails if the key has changed.
+3. **Then:** place one real order with the cheapest service, check it in ShipStation and the admin, and void the label. A key from the web app has no sandbox.
+4. **The shop's release:** [docs/frontend-changes.md](docs/frontend-changes.md#2026-11-04-shipping). After it, remove `POST order/create-shipment-label`.
+
 ### Deploying `feature/client-decisions` (not released)
 
 1. **Before pulling:** run the three `2026-10-27_*_before_deploy.sql` migrations: `admin_weight` (the new code reads its column on every product query), `gallery` and `app_settings`.
@@ -79,7 +93,7 @@ Changes the shop and the admin panel need: [docs/frontend-changes.md](docs/front
 | C5 | Image proxy fetched any URL | ✅ | `335d27b` | |
 | C6 | Customer and business data exposed | ◐ | `335d27b`, `aba0065` | Supplier cost now hidden from shoppers. The payment admin list is still public (C1). Payments |
 | C7 | Unauthenticated destructive operations | ✅ | `335d27b`, `44141b0` | |
-| C8 | Customers could change others' data | ◐ | `335d27b` | Customers can buy shipping labels for their own unpaid orders. Payments |
+| C8 | Customers could change others' data | ◐ | `335d27b` | Label purchase by customers removed on 4 Nov, not committed |
 | C9 | Repo couldn't start | ✅ | `24de211`, `f7ecf00` | |
 | C10 | Order cancellation always fails | ❌ | | Payments |
 | C11 | PayPal payments not recordable | ◐ | | The production database already accepts PAYPAL; the code's types don't. Payments |
@@ -90,12 +104,12 @@ Changes the shop and the admin panel need: [docs/frontend-changes.md](docs/front
 |---|---|---|---|---|
 | H1 | Rate limiter never ran | ◐ | `335d27b` | Counts per Cloudflare server until `TRUST_PROXY` is set (N1). Server |
 | H2 | Production ran as development | ✅ | `335d27b` | |
-| H3 | Uploads everywhere, unlimited | ✅ | `335d27b`, `44141b0` | `.ai` artwork is checked by extension only |
+| H3 | Uploads everywhere, unlimited | ✅ | `335d27b`, `44141b0` | Graphics accept any format by decision (4 Nov); they're served only as downloads |
 | H4 | Token and password hash in addresses | ◐ | `335d27b` | Old rows still hold request bodies; purge needs SQL. DB |
 | H5 | Weak customer password reset | ✅ | `335d27b` | |
 | H6 | Login leaked account state | ✅ | `335d27b` | |
 | H7 | Payment flow integrity | ❌ | | Payments |
-| H8 | Orders, shipments, refunds out of step | ❌ | | Payments |
+| H8 | Orders, shipments, refunds out of step | ❌ | | Shipments fixed on 4 Nov, not committed. Refunds: Payments |
 | H9 | Admin product endpoints failed | ✅ | `44141b0` | |
 | H10 | Undefined names | ◐ | `335d27b`, `44141b0` | 4 left, all in payment code (`npm run lint`). Payments |
 | H11 | Error handler closed connections | ✅ | `335d27b` | |
@@ -103,7 +117,7 @@ Changes the shop and the admin panel need: [docs/frontend-changes.md](docs/front
 | H13 | SAGE handling charge missing at add-to-cart | ✅ | `44141b0` | |
 | H14 | Tax fixed at 8.25% | ✅ | | The client keeps a flat 8.25% on products, not shipping (Q29), which is what the code does |
 | H15 | Decoration priced per size | ❌ | | The client chose per product, artwork and print method (Q1) |
-| H16 | Label purchase rewrites the total | ❌ | | Payments |
+| H16 | Label purchase rewrites the total | ❌ | | Fixed on 4 Nov, not committed |
 | H17 | Shipping webhook substring matching | ❌ | | Payments |
 | H18 | Token lifetime misread | ✅ | `335d27b` | |
 | H19 | Raw SQL in token saving | ✅ | `335d27b` | |
@@ -154,7 +168,7 @@ Changes the shop and the admin panel need: [docs/frontend-changes.md](docs/front
 | M33 | Brand slugs change on every save | ❌ | | |
 | M34 | Image downloader paths | ◐ | `24de211`, `44141b0` | Changed supplier images aren't re-downloaded |
 | M35 | Account emails sent without checking delivery | ✅ | `335d27b` | |
-| M36 | ShipStation errors swallowed | ❌ | | Payments |
+| M36 | ShipStation errors swallowed | ❌ | | Fixed on 4 Nov, not committed |
 | M37 | Raw supplier data grows on every sync | ❌ | | |
 | M38 | Order numbers can collide | ❌ | | Payments |
 | M39 | One bad JSON row breaks a list | ✅ | `44141b0` | |
@@ -189,8 +203,8 @@ The client answered on 26 October and answered the follow-ups on 27 October; the
 
 | Q | Decision | Backend work | Status | Commit | Waiting on |
 |---|---|---|---|---|---|
-| 1, 2 | Fees, tiers and minimums per product, artwork and print method: the same artwork and method at two locations count together (50 chests + 30 backs = the 80-piece tier); one digitizing fee per artwork | Group cart lines by product, artwork and method; reprice the group when a line changes | ❌ | | |
-| 3 | No setup fee for screen print, DTF or DTG; $20 once per artwork that isn't vector, for every method | Detect raster artwork and add the fee once per artwork | ❌ | | |
+| 1, 2 | Tiers and minimums per product, artwork and print method: the same artwork and method at two locations count together (50 chests + 30 backs = the 80-piece tier). The fee is per graphic: see Q3 | Group cart lines by product, artwork and method; reprice the group when a line changes | ❌ | | |
+| 3 | Changed on 4 Nov: $35 once per new graphic on clothing, for every print type, when fewer than 12 pieces in the order carry it; a graphic stops being new after a paid order. No $20 | `user_graphics`, `POST graphics`, `GET graphics` and `graphic_id` on cart lines; recognised by file hash and by look (`utils/graphicPrint.js`); `applyGraphicFees` sets the fee across the cart ([details](docs/frontend-changes.md#2026-11-04)) | ◐ | not committed | Release, with the shop |
 | 4, 5, 10 | Price tables are correct and editable in the admin; choices outside them are refused; hoodie Full Front and Full Back embroidery stay "contact us" | Tables in the database, admin endpoints, public read endpoint; refuse what isn't in them (C4) | ❌ | | |
 | 6, 7, 9, 14, 15, 17, 22 | Keep as they are: Full Front off on T-shirts and polos, every method on every apparel product, one screen-print colour count for all locations, drinkware's $8 second location, the $35 handling charge, print products, grey mockups | None. Above 6 colours is refused with Q10 | ✅ | | |
 | 8 | "Not sure what you mean" | | ❌ | | Client: the reworded DTG question |
@@ -198,11 +212,11 @@ The client answered on 26 October and answered the follow-ups on 27 October; the
 | 12 | No setup charge for SAGE products | None: none is imported or charged; the shop removes its unused line | ✅ | | |
 | 16 | The team sets the fallback minimum for promo products in the admin (the shop uses 100 today) | A setting with admin endpoints; each product's minimum in the API, checked in the cart | ❌ | | |
 | 18 | Hide supplier cost from shoppers | Built in `aba0065`; remove `EXPOSE_SUPPLIER_COST` after the shop's release | ◐ | `aba0065` | Shop |
-| 19, 20 | Original artwork files ("cdi" means CDR); artwork, size and colours can differ per location | One decoration per location on cart and order items; download in the admin | ❌ | | Client: reconfirm CDR |
-| 21 | AI, PDF, EPS, JPG, SVG, PSD and PNG; 100 MB per file | Upload rules per field | ❌ | | |
+| 19, 20 | Original artwork files ("cdi" means CDR); artwork, size and colours can differ per location | Done on 4 Nov: original files and a graphic per location, on cart and order items. Left: size, placement and colours per location; download in the admin | ◐ | not committed | Release, with the shop; admin |
+| 21 | Changed on 4 Nov: any graphic format and dimensions; 100 MB per file | `POST graphics` and `customization_images` take any file, stored outside `uploads` and served only as downloads | ◐ | not committed | Release |
 | 23 | The team manages the fonts in the admin: "n number of fonts and other settings" | Font list with admin endpoints and a public list | ❌ | | Client: which other settings |
 | 24, 25 | Size and colour must be chosen, with no admin flag; the customer picks the add-on quantity | None: every cart line already needs a variant, and the add-on quantity is already free | ✅ | | |
-| 27, 28 | The team buys labels in ShipStation; the customer pays the quoted rate | C8, H8, H16 | ❌ | | Payments |
+| 27, 28 | Changed on 4 Nov: the label is bought automatically after payment, and the order shows in ShipStation then, not the team buying it when the order is ready. The customer pays the quoted rate | `shipment.service.js`: V2 only, order and label after payment, once per order; quick rates; the price set by the backend; signed tracking webhook; admin retry ([details](docs/frontend-changes.md#2026-11-04-shipping)) | ◐ | not committed | Release, with the shop |
 | 29 | A flat 8.25% on products, not on shipping | None: that's what the code does (H14) | ✅ | | |
 | 30 | Ship-from: "HashtagBillionaire", at the same address and phone | Sender moved from the code to the `SHIP_FROM_*` settings (H12) | ✅ | `ea702b5` | |
 | 31 | Default 1 lb; supplier weights; admins can set a weight | Default 1 lb (`DEFAULT_PACKAGE_WEIGHT_LB`, was 0.5). `PUT product/admin/weight` sets a product's or chosen variants' weight in `admin_weight_lb` (`migrations/2026-10-27_admin_weight_before_deploy.sql`), which syncs never write and which doesn't lock the product; shipping uses it before the supplier's weight. Open: OttoCap's weight (H22) | ◐ | `ea702b5`, `3b702f3` | |
@@ -232,8 +246,9 @@ Parked by the client, with no backend work for now: Q26 (pre-made products from 
 
 ## Next
 
-1. **Payments phase:** C3, C4 (shipping), C8, C10, C11, H7, H8, H16, H17, M9, M22, M23, M36, M38, the payment parts of C1/C6/H12, and the 4 lint errors.
-2. **Client decisions:** the decoration rework (Q1 to Q5, Q9, Q10, Q19 to Q21: price tables in the database, choices outside them refused, tiers and fees per product, artwork and method, artwork per location), which the shop has to change with; then fonts and the promo fallback minimum in the admin (Q23, Q16).
-3. **Database changes (archive-first SQL):** H4 purge, M1, M2, M4, M5, M8, M14.
-4. **Remaining code:** H20 (products), H22 (the rest), H26, M31, M33, M37, M16.
-5. **Tooling:** tests and CI in the repo, `npm audit fix`, declare `moment-timezone`, set `engines` to Node 18.
+1. **Graphics and the $35 fee, ShipStation after payment:** commit, then deploy [graphics](#deploying-graphics-and-the-35-fee-not-released) and [ShipStation](#deploying-shipstation-after-payment-not-released).
+2. **Payments phase:** C3, C4 (shipping), C10, C11, H7, H8 (refunds), H17, M9, M22, M23, M38, the payment parts of C1/C6/H12, and the 4 lint errors.
+3. **Client decisions:** the decoration rework (Q1, Q4, Q5, Q9, Q10, Q19, Q20: price tables in the database, choices outside them refused, tiers per product, artwork and method, size and placement per location), which the shop has to change with; then fonts and the promo fallback minimum in the admin (Q23, Q16).
+4. **Database changes (archive-first SQL):** H4 purge, M1, M2, M4, M5, M8, M14.
+5. **Remaining code:** H20 (products), H22 (the rest), H26, M31, M33, M37, M16.
+6. **Tooling:** tests and CI in the repo, `npm audit fix`, declare `moment-timezone`, set `engines` to Node 18.

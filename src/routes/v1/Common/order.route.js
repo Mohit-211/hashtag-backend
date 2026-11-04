@@ -3,9 +3,11 @@ const router = express.Router();
 
 const {orderController } = require('../../../controllers');
 const {userAuthMiddleware, adminAuthMiddleware} = require('../../../middlewares');
+const { verifyShipstationWebhook } = require('../../../middlewares/shipstationWebhook.middleware');
 
 
 router.get("/admin", adminAuthMiddleware.requireAdmin, orderController.getAdminOrders);
+router.post("/admin/:id/label", adminAuthMiddleware.requireAdmin, orderController.retryOrderShipment);
 
 router.post('/', [userAuthMiddleware.verifyAuthJWTToken], orderController.createOrder);
 router.get('/', [userAuthMiddleware.verifyAuthJWTToken],orderController.getOrders);
@@ -16,7 +18,7 @@ router.post("/create-shipment-label", [userAuthMiddleware.verifyAuthJWTToken], o
 
 
 // routes/webhook.routes.js
-router.post("/shipstation", orderController.shipstationWebhook);
+router.post("/shipstation", verifyShipstationWebhook, orderController.shipstationWebhook);
 
 
 module.exports = router;

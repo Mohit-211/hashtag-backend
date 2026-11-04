@@ -4,6 +4,8 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
+| [2026-11-04: ShipStation after payment](#2026-11-04-shipping) | not committed yet | **Recommended**: the failure reason and a "Try again" button on the order's Shipping tab |
+| [2026-11-04: customers' real graphics on orders](#2026-11-04) | not committed yet | **Recommended**: a download link per graphic on the order screen |
 | [2026-10-26: client decisions, first backend changes](#2026-10-26) | branch `feature/client-decisions`, not released | Read the notes; the Settings page, Q31, Q42, Q44, Q45 and Q56 in the to-do list |
 | [2026-10-16: status markers, SAGE stock, supplier pricing](#2026-10-16) | `aba0065` | **Recommended**: show variant status, add a status filter |
 | [2026-10-15: bug sweep](#2026-10-15) | `44141b0` | Optional: new endpoints and fields |
@@ -53,6 +55,34 @@ These need the backend changes on branch `feature/client-decisions`, listed unde
 
 1. **`payment_status=ALL`:** coming in the next release: `GET order/admin?payment_status=ALL` lists orders of every payment status. Without the parameter it still lists paid orders only.
 2. **The 2 unpaid orders the panel doesn't show:** when a customer's cart changes, the backend soft-deletes their latest unpaid order (`invalidatePendingOrder` in `cartWishlist.service.js`), and orders are paranoid, so those two are hidden from every list. Nothing is missing on the panel's side; the behaviour itself is on the payments list (audit H8).
+
+---
+
+<a id="2026-11-04-shipping"></a>
+## 2026-11-04: ShipStation after payment (not released)
+
+Not committed yet. Once an order is paid, the backend creates it in ShipStation and buys its label by itself. The order's Shipping tab already shows the status, the tracking number and the label link, so paid orders show up with no change to the panel. What's new is for when a label fails:
+
+- **`shipment_error`** on orders in `GET order/admin`: ShipStation's reason when `shipment_status` is `FAILED`, for example a carrier account with too little balance. Show it on the Shipping tab.
+- **`POST order/admin/:id/label`** tries again, for a paid order with no label. Show a "Try again" button when `shipment_status` is `FAILED`.
+  - Answers `{ id, order_number, shipment_status, carrier, tracking_number, tracking_url, label_url, actual_shipping_cost, shipping_profit }`.
+  - `502` with ShipStation's reason when it fails again, `409` when a label is being bought right now, `400` when the order is unpaid, cancelled or already has a label, `404` for an unknown order.
+- **`shipping_amount`** in `GET order/admin` is now always what the customer paid. It used to switch to the label's cost, so subtotal, tax and shipping didn't add up to the total. The label's cost is the new `actual_shipping_cost`, and `shipping_profit` is the difference, which can be negative. Show them on the Shipping tab if the team wants them.
+- **`service_code`** is new on the same orders.
+- **Settings page:** nothing to build. The ShipStation key's description now says which key to use. After a new key is saved, someone has to run the [setup](deployment.md#shipstation) on the server.
+
+---
+
+<a id="2026-11-04"></a>
+## 2026-11-04: customers' real graphics on orders (not released)
+
+Not committed yet. Customers now upload their real graphic in any format, and the $35 is charged per new graphic on clothing instead of per cart line. The rule is in [frontend-changes.md](frontend-changes.md#2026-11-04).
+
+- **Original files:** items in `GET order/admin` gain `graphics: [{ id, original_name, file_url }]`, the files production needs. Add a download link for each to the order screen (`OrdersPage.tsx`). `file_url` always downloads, in the format the customer uploaded, so don't put it in the image gallery: AI, EPS, PSD and CDR won't display. Items that were ordered before this release have an empty list.
+- **`customized_image`** stays the preview. A line can have `graphics` and no preview, so treat either as artwork in `missingArtworkCaution`.
+- **`setup_fee`** on an item is now the graphic fee. It sits on the first line with that graphic: 0, 35, or 70 for two new graphics, and 0 on the graphic's other lines.
+- **Pre-made products:** `customization_config.customization[].logo_image` can now be any format, under `/graphics/` instead of `/images/`.
+- **`GET payment/admin/all`** doesn't list `graphics`: it has no sign-in until the payments release (C1). Use `GET order/admin` for the files.
 
 ---
 

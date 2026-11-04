@@ -6,27 +6,24 @@ const ApiError = require("../utils/ApiError");
 
 const { dirs } = require("./storage");
 
+// Customers' graphics: any format, any dimensions, stored exactly as uploaded.
+const GRAPHIC_FIELDS = ["graphic", "customization_images"];
+
 // Set storage engine
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    if (
-      file.fieldname === "images" ||
-      file.fieldname === "variant_images" ||
-      file.fieldname === "customization_images"
-    ) {
+    if (GRAPHIC_FIELDS.includes(file.fieldname)) {
+      cb(null, dirs.graphics);
+    } else if (file.fieldname === "images" || file.fieldname === "variant_images") {
       cb(null, dirs.images);
     } else {
       cb(new ApiError(httpStatus.BAD_REQUEST, "Invalid upload field"));
     }
   },
   filename: function (req, file, cb) {
-    let ext;
-
-    if (file.fieldname === "customization_images") {
-      ext = path.extname(file.originalname).toLowerCase().replace(".", "");
-    } else {
-      ext = getFileExtension(file);
-    }
+    const ext = GRAPHIC_FIELDS.includes(file.fieldname)
+      ? getGraphicExtension(file)
+      : getFileExtension(file);
 
     // Random suffix: two uploads in the same millisecond used to overwrite each other.
     cb(null, `${file.fieldname}-${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${ext}`);
@@ -76,32 +73,11 @@ function checkFileType(file, cb) {
   }
 }
 
-function checkCustomizationArtworkType(file, cb) {
-  const fileExtension = path.extname(file.originalname).toLowerCase();
+// The name is the customer's, so only a plain extension is kept.
+function getGraphicExtension(file) {
+  const ext = path.extname(file.originalname).toLowerCase().replace(".", "");
 
-  const allowedExtensions = [".svg", ".ai"];
-
-  if (!allowedExtensions.includes(fileExtension)) {
-    return cb(
-      new ApiError(
-        httpStatus.BAD_REQUEST,
-        "Error: Customization artwork only allows SVG (.svg) and Adobe Illustrator (.ai) files.",
-      ),
-    );
-  }
-
-  /*
-   * SVG normally comes as image/svg+xml.
-   *
-   * Illustrator files can be reported with different MIME types
-   * depending on browser/OS/application, so extension is the
-   * authoritative check for .ai here.
-   */
-  if (fileExtension === ".svg" && file.mimetype !== "image/svg+xml") {
-    return cb(new ApiError(httpStatus.BAD_REQUEST, "Error: Invalid SVG artwork file."));
-  }
-
-  return cb(null, true);
+  return /^[a-z0-9]{1,10}$/.test(ext) ? ext : "bin";
 }
 
 function getFileExtension(file) {
@@ -133,21 +109,32 @@ const limits = {
   fieldSize: 2 * 1024 * 1024,
 };
 
-// Init upload
-const upload = multer({
-  storage: storage,
-  limits,
-  fileFilter: function (req, file, cb) {
-    if (file.fieldname === "customization_images") {
-      return checkCustomizationArtworkType(file, cb);
-    }
+// A graphic can be up to 100 MB (client decision Q21).
+const graphicLimits = { ...limits, fileSize: 100 * 1024 * 1024 };
 
-    return checkFileType(file, cb);
-  },
-}).fields([
+const fileFilter = function (req, file, cb) {
+  if (GRAPHIC_FIELDS.includes(file.fieldname)) {
+    return cb(null, true);
+  }
+
+  return checkFileType(file, cb);
+};
+
+const uploadFields = [
   { name: "images", maxCount: 10 },
   { name: "variant_images", maxCount: 20 },
   { name: "customization_images", maxCount: 10 },
+];
+
+// Init upload
+const upload = multer({ storage, limits, fileFilter }).fields(uploadFields);
+
+// POST /product/cart: customization_images are graphics.
+const cartUpload = multer({ storage, limits: graphicLimits, fileFilter }).fields(uploadFields);
+
+// POST /graphics
+const graphicUpload = multer({ storage, limits: graphicLimits, fileFilter }).fields([
+  { name: "graphic", maxCount: 1 },
 ]);
 
-module.exports = { upload, limits };
+module.exports = { upload, cartUpload, graphicUpload, limits, graphicLimits, GRAPHIC_FIELDS };

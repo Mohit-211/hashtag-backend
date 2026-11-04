@@ -21,6 +21,8 @@ const decodeHtmlEntities = require("../../utils/decodeHtmlEntities");
 const {
   parseJson,
   getCustomizationArtwork,
+  getLineGraphics,
+  withoutGraphics,
   toFullImageUrl,
   getItemImage,
   isManualItem,
@@ -31,6 +33,8 @@ const {
 
 const { OrdersController } = require("@paypal/paypal-server-sdk");
 const { getPaypalClient } = require("../../config/paypal");
+const { markGraphicsOrdered } = require("./graphic.service");
+const { shipPaidOrder } = require("./shipment.service");
 const settings = require("../../config/settings");
 const { paymentStatusTypes, orderStatusTypes } = require("../../config/types");
 
@@ -98,6 +102,14 @@ const getOrCreateSquareCustomer = async (user) => {
 
     throw new ApiError(400, squareMessage);
   }
+};
+
+// Not awaited: a webhook has to answer quickly, and a failed label stays on the order for the
+// admin. Payment is already done either way.
+const shipInBackground = (order) => {
+  shipPaidOrder(order.id).catch((error) => {
+    console.error(`🚨 Shipping ${order.order_number} failed:`, error.message);
+  });
 };
 
 const createPayment = async (body) => {
@@ -439,21 +451,6 @@ const squareWebhook = async (body) => {
       });
 
       // ================================================
-      // UPDATE ORDER ITEMS
-      // ================================================
-
-      await OrderItem.update(
-        {
-          shipment_status: "LABEL_CREATED",
-        },
-        {
-          where: {
-            order_id: order.id,
-          },
-        },
-      );
-
-      // ================================================
       // CLEAR CART
       // ================================================
 
@@ -462,6 +459,10 @@ const squareWebhook = async (body) => {
           user_id: order.user_id,
         },
       });
+
+      shipInBackground(order);
+
+      await markGraphicsOrdered(order);
 
       console.log(`✅ PAYMENT SUCCESS: ${order.order_number}`);
 
@@ -639,6 +640,8 @@ const getPaymentHistory = async (body, query) => {
             customized_image: toFullImageUrl(
               item.logo_image || getCustomizationArtwork(itemCustomization),
             ),
+
+            graphics: getLineGraphics(itemCustomization),
 
             price: Number(item.price || 0),
 
@@ -1034,7 +1037,9 @@ const getAllPayments = async (query) => {
 
                   total: Number(item.total_price || 0),
 
-                  customization_config: itemCustomization,
+                  // This list has no admin sign-in until the payments release (C1), so
+                  // customers' original files stay out of it.
+                  customization_config: withoutGraphics(itemCustomization),
 
                   pricing_snapshot: itemPricing,
 
@@ -1474,21 +1479,6 @@ const paypalWebhook = async (body) => {
       });
 
       // ==================================================
-      // UPDATE ORDER ITEMS
-      // ==================================================
-
-      await OrderItem.update(
-        {
-          shipment_status: "LABEL_CREATED",
-        },
-        {
-          where: {
-            order_id: order.id,
-          },
-        },
-      );
-
-      // ==================================================
       // CLEAR CART
       // ==================================================
 
@@ -1497,6 +1487,10 @@ const paypalWebhook = async (body) => {
           user_id: order.user_id,
         },
       });
+
+      shipInBackground(order);
+
+      await markGraphicsOrdered(order);
 
       console.log(`✅ PAYPAL PAYMENT SUCCESS: ${order.order_number}`);
 

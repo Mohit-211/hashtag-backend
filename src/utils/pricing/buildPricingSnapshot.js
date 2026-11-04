@@ -344,8 +344,6 @@ const buildPricingSnapshot = async ({
 
   let customization_total = 0;
 
-  let setup_fee = 0;
-
   let inquiry_only = false;
 
   const pricing_table = [];
@@ -393,16 +391,6 @@ const buildPricingSnapshot = async ({
 
           total: locationPrice * quantity,
         });
-      }
-
-      /*
-       |--------------------------------------------------------------------------
-       | DIGITIZING FEE
-       |--------------------------------------------------------------------------
-       */
-
-      if (quantity <= 11) {
-        setup_fee = 35;
       }
     }
 
@@ -501,7 +489,7 @@ const buildPricingSnapshot = async ({
 
   const final_price = Number((base_price + customization_total).toFixed(2));
 
-  const total_price = Number((final_price * quantity + setup_fee).toFixed(2));
+  const total_price = Number((final_price * quantity).toFixed(2));
 
   return {
     supplier: variant.supplier,
@@ -533,7 +521,8 @@ const buildPricingSnapshot = async ({
     customization_price: {
       total_customization_price: customization_total,
 
-      setup_fee,
+      // The graphic fee depends on the whole cart: applyGraphicFees sets it.
+      setup_fee: 0,
     },
 
     /*

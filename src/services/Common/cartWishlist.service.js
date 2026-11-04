@@ -3,7 +3,6 @@
 const sequelize = require("../../config/central.db");
 const { calculatePricing } = require("../../config/pricing");
 const { Op } = require("sequelize");
-const path = require("path");
 const {
   Wishlist,
   ProductVariant,
@@ -34,7 +33,14 @@ const {
 } = require("../../utils/pricing/buildPricingSnapshot");
 const decodeHtmlEntities = require("../../utils/decodeHtmlEntities");
 // A stored value that doesn't parse comes back as null instead of failing the whole cart.
-const { parseJson } = require("../../utils/orderFormat");
+const { parseJson, getLineGraphics } = require("../../utils/orderFormat");
+const { graphicIdsOf } = require("../../utils/pricing/graphicFees");
+const {
+  saveGraphic,
+  findUserGraphics,
+  toLineGraphic,
+  applyGraphicFees,
+} = require("./graphic.service");
 const { cancelShipstationShipment } = require("../../config/shipstation");
 const settings = require("../../config/settings");
 
@@ -1645,27 +1651,48 @@ const addToCart = async (body, files) => {
               );
             }
 
-            const extension = path
-              .extname(
-                artworkFile.originalname,
-              )
-              .toLowerCase();
+            const graphic = await saveGraphic(
+              user.id,
+              artworkFile,
+            );
+
+            updatedItem.graphic_id = graphic.id;
+
+            updatedItem.logo_image =
+              toLineGraphic(graphic).file_path;
+
+            delete updatedItem.image_index;
+          } else if (
+            customizationItem.graphic_id !==
+              undefined &&
+            customizationItem.graphic_id !==
+              null
+          ) {
+            /*
+             * A saved graphic instead of a new file.
+             */
 
             if (
-              ![".svg", ".ai"].includes(
-                extension,
-              )
+              !option.allow_image_upload
             ) {
               throw new ApiError(
                 httpStatus.BAD_REQUEST,
-                `Invalid artwork format for customization "${option.name}". Only SVG and Adobe Illustrator (.ai) files are allowed.`,
+                `Artwork upload is not allowed for customization "${option.name}"`,
               );
             }
 
-            updatedItem.logo_image =
-              `/images/${artworkFile.filename}`;
+            const [graphic] =
+              await findUserGraphics(
+                user.id,
+                [
+                  Number(
+                    customizationItem.graphic_id,
+                  ),
+                ],
+              );
 
-            delete updatedItem.image_index;
+            updatedItem.logo_image =
+              toLineGraphic(graphic).file_path;
           }
 
           validatedCustomization.push(
@@ -1843,6 +1870,14 @@ const addToCart = async (body, files) => {
         );
       }
 
+      // The customer's real files, from POST /graphics or their saved graphics.
+      const graphics = (
+        await findUserGraphics(
+          user.id,
+          graphicIdsOf(customizationItem),
+        )
+      ).map(toLineGraphic);
+
       for (const sizeItem of sizes) {
         const variant =
           await ProductVariant.findOne({
@@ -1895,6 +1930,7 @@ const addToCart = async (body, files) => {
         const customizationForRow = {
           ...customizationItem,
           size: sizeItem,
+          graphics,
         };
 
         delete customizationForRow.sizes;
@@ -1957,6 +1993,12 @@ const addToCart = async (body, files) => {
       }
     }
 
+    await applyGraphicFees(user.id);
+
+    await Promise.all(
+      createdCartItems.map((cart) => cart.reload()),
+    );
+
     return createdCartItems;
   } catch (error) {
     throw error;
@@ -1966,6 +2008,8 @@ const addToCart = async (body, files) => {
 const getCart = async (body) => {
   try {
     const { user } = body;
+
+    await applyGraphicFees(user.id);
 
     const data = await Cart.findAll({
       where: {
@@ -2284,6 +2328,10 @@ const getCart = async (body) => {
             ? `${settings.get("IMAGE_BASE_URL")}${item.logo_image}`
             : null,
 
+          graphics: getLineGraphics(
+            parseJson(customization_config),
+          ),
+
           color: v.color,
 
           color_code:
@@ -2480,6 +2528,8 @@ const toCartItemResponse = async (cart, isManual) => {
     ? `${settings.get("IMAGE_BASE_URL")}${response.logo_image}`
     : null;
 
+  response.graphics = getLineGraphics(response.customization_config);
+
   return response;
 };
 
@@ -2651,6 +2701,10 @@ const incrementCart = async (body) => {
       pricing_snapshot,
     });
 
+    await applyGraphicFees(user.id);
+
+    await cart.reload();
+
     return await toCartItemResponse(cart, false);
   } catch (error) {
     console.log(
@@ -2733,6 +2787,10 @@ const decrementCart = async (body) => {
 
       pricing_snapshot,
     });
+
+    await applyGraphicFees(user.id);
+
+    await cart.reload();
 
     return await toCartItemResponse(cart, false);
   } catch (error) {
@@ -2830,6 +2888,10 @@ const updateCartQuantity = async (body) => {
       pricing_snapshot,
     });
 
+    await applyGraphicFees(user.id);
+
+    await cart.reload();
+
     return cart;
   } catch (error) {
     console.log("❌ UPDATE CART QTY ERROR:", error);
@@ -2848,6 +2910,7 @@ const removeFromCart = async (user, cart_id) => {
     if (!cart) throw new ApiError(httpStatus.NOT_FOUND, "Cart not found");
     await invalidatePendingOrder(cart.user_id);
     await cart.destroy();
+    await applyGraphicFees(user.id);
     return true;
   } catch (error) {
     throw new ApiError(
@@ -2879,6 +2942,8 @@ const moveCartToWishlist = async (body) => {
 
     // ✅ REMOVE FROM CART
     await cartItem.destroy({ transaction: t });
+
+    await applyGraphicFees(user.id, t);
 
     await t.commit();
 
