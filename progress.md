@@ -54,11 +54,11 @@ Found after the audit: N1 to N4 (bottom of this file).
 
 ### Deploying `FIXED_QUANTITY` customization pricing (live)
 
-**Status (6 Nov):** steps 1 and 2 are done and `a8cb702` is live. Step 3 waits for the shop, and the panel needs its `22d03d2` deployed to offer the choice.
+**Status (6 Nov):** steps 1 and 2 are done and `a8cb702` is live. The panel's `22d03d2` is live too, and the type was tested from it. Step 3 waits for the shop.
 
 1. **Before pushing:** back up and run `migrations/2026-11-06_customization_fixed_quantity_before_deploy.sql`. Until it has run, saving the type fails.
 2. **The push:** the deploy stops at the migration check. Start the Deploy workflow with "migrations done" ticked ([docs/deployment.md](docs/deployment.md)).
-3. **The shop's release:** [docs/frontend-changes.md](docs/frontend-changes.md#2026-11-06). The team adds values of this type to products only after it.
+3. **The shop's release:** [docs/frontend-changes.md](docs/frontend-changes.md#2026-11-06). The team adds values of this type to real products only after it.
 
 ### Deploying graphics and the $35 fee (live)
 

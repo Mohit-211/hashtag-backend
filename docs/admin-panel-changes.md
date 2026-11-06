@@ -62,7 +62,7 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 <a id="2026-11-06"></a>
 ## 2026-11-06: `FIXED_QUANTITY` customization pricing (live)
 
-Live since 6 November (`a8cb702`). The backend now supports the panel's **Fixed quantity** choice (`BACKEND_QUESTIONS.md` F26), with its `fixed_price` charged once per cart line. The panel's `22d03d2` needs no change: the `400` has stopped, so the values save once it's deployed. `FIXED` (**One price**) is still charged per item.
+Live since 6 November (`a8cb702`). The backend now supports the panel's **Fixed quantity** choice (`BACKEND_QUESTIONS.md` F26), with its `fixed_price` charged once per cart line. The panel's `22d03d2` is live too, and the type was tested from it on 6 November. `FIXED` (**One price**) is still charged per item.
 
 - **`POST customization-option/:optionId/value`** takes `pricing_type: "FIXED_QUANTITY"` and requires a `fixed_price` of 0 or more, as for `FIXED`. A value of this type has no pricing rows. The `400` for an unknown type now lists all four.
 - **`PUT customization-option/customization-option-value/:id`** takes the type and saves `fixed_price`. Switching a `TIERED` or `QUANTITY_BASED` value to it switches off the old pricing rows.
@@ -72,7 +72,7 @@ Live since 6 November (`a8cb702`). The backend now supports the panel's **Fixed 
 - **Reads need no change:** `GET customization-option`, `GET customization-option/:id` and `GET customization-option/product/:productId/customizations` return the type with `fixed_price` and an empty `pricing`.
 - **Order lines** in `GET order/admin` have `pricing_type: "FIXED_QUANTITY"`, `unit_price: null`, `quantity` and `total`, with no `pricing_tier`. `OrdersPage.tsx` already reads `total` for this type.
 - **Once per cart line** answers F26's question. The cart makes one line per variant, so three colours at $100.00 add $300.00.
-- **Before adding it to a product:** wait for the shop's release ([frontend-changes.md](frontend-changes.md#2026-11-06)). Until then the shop's price preview can show the wrong amount, though the cart charges the right one.
+- **Before adding it to a real product:** wait for the shop's release ([frontend-changes.md](frontend-changes.md#2026-11-06)). Until then the shop's price preview can show the wrong amount, though the cart charges the right one. The product named `test` (id 105857) already has a value of this type for the shop to test with.
 
 ---
 
