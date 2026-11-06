@@ -72,7 +72,7 @@ Live since 6 November (`a8cb702`). The backend now supports the panel's **Fixed 
 - **Reads need no change:** `GET customization-option`, `GET customization-option/:id` and `GET customization-option/product/:productId/customizations` return the type with `fixed_price` and an empty `pricing`.
 - **Order lines** in `GET order/admin` have `pricing_type: "FIXED_QUANTITY"`, `unit_price: null`, `quantity` and `total`, with no `pricing_tier`. `OrdersPage.tsx` already reads `total` for this type.
 - **Once per cart line** answers F26's question. The cart makes one line per variant, so three colours at $100.00 add $300.00.
-- **Before adding it to a real product:** wait for the shop's release ([frontend-changes.md](frontend-changes.md#2026-11-06)). Until then the shop's price preview can show the wrong amount, though the cart charges the right one. The product named `test` (id 105857) already has a value of this type for the shop to test with.
+- **Before adding it to a real product:** wait for the shop's release ([frontend-changes.md](frontend-changes.md#2026-11-06)). Until then the shop shows the value as "N/A for N pcs" and won't add it to the cart. The product named `test` (id 105857) already has a value of this type for the shop to test with.
 
 ---
 

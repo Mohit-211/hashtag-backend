@@ -124,11 +124,13 @@ It isn't the variant `pricing_mode` called `quantity_fixed`, which has a price f
 5. **Show the line's `total_price`,** not `price × quantity`. If the shop shows a per-item price, it falls as the quantity rises.
 6. **After a quantity change, show the figures in the API's answer** instead of scaling the old ones.
 
+Checked against hashtag-next `main` at `a1121af`: only 1 and 2 need code, in `src/components/product/customization/pricing.ts` and `src/components/product/ManualCustomizationPage.tsx`. 3 to 6 already work. The exact edits are on [Website changes: Fixed quantity pricing](https://claude.ai/artifact/UhqaZBn24PFxZ8U3ikLyEQ).
+
 ### Release order
 
 1. **Backend:** done. Shoppers see no change until a product has a value of this type.
 2. **Shop:** the changes above.
-3. **Team:** add `FIXED_QUANTITY` values to real products only after the shop's release. Before it, the cart and checkout still charge the right amount, because the backend prices them, but the shop's preview can show the wrong one.
+3. **Team:** add `FIXED_QUANTITY` values to real products only after the shop's release. Before it, the shop shows such a value as "N/A for N pcs" and won't add it to the cart.
 
 To test before the release, use the product named `test` (id 105857). It costs $10.00 and has two values under Engraving: `Test`, a `FIXED_QUANTITY` value at $100.00, and `Logo Engraving`, a `FIXED` value at $5.50. At quantity 3 the line total is $130.00 with `Test` and $46.50 with `Logo Engraving`.
 
