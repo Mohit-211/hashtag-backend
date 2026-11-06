@@ -6,7 +6,7 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
-| [2026-11-06: `FIXED_QUANTITY` customization pricing](#2026-11-06) | Not live yet | **Required before a product gets this type**: show `fixed_price` as a total and never multiply it by quantity |
+| [2026-11-06: `FIXED_QUANTITY` customization pricing](#2026-11-06) | `a8cb702`, live | **Required before a product gets this type**: show `fixed_price` as a total and never multiply it by quantity |
 | [2026-11-04: ShipStation after payment](#2026-11-04-shipping) | `4b5729f`, live | **Required**: stop calling `create-shipment-label`, show the order's totals, handle rate errors |
 | [2026-11-04: graphics and the $35 fee](#2026-11-04) | `4b5729f`, live | **Required now**: until it's out, customized clothing pays no $35. Send the real graphic, show the API's fee, add Saved graphics |
 | [2026-10-26: client decisions, first backend changes](#2026-10-26) | `8f53487` to `27de06f`, live | Read the notes; A31, A36, A37, A44, A45, B4, "$X+" cards, Delete account and Turnstile in the to-do list |
@@ -70,9 +70,9 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 ---
 
 <a id="2026-11-06"></a>
-## 2026-11-06: `FIXED_QUANTITY` customization pricing (not live yet)
+## 2026-11-06: `FIXED_QUANTITY` customization pricing (live)
 
-A new customization pricing type, **Fixed quantity** in the admin panel. Its `fixed_price` is one total for the cart line, whatever the quantity. `FIXED` (**One price** in the panel) doesn't change: its `fixed_price` is still per item. The two look the same in the API until you read `pricing_type`, so the shop has to check it everywhere it shows or adds up a customization's price.
+Live since 6 November (`a8cb702`). A new customization pricing type, **Fixed quantity** in the admin panel. Its `fixed_price` is one total for the cart line, whatever the quantity. `FIXED` (**One price** in the panel) doesn't change: its `fixed_price` is still per item. The two look the same in the API until you read `pricing_type`, so the shop has to check it everywhere it shows or adds up a customization's price.
 
 ### The rule
 
@@ -126,7 +126,7 @@ It isn't the variant `pricing_mode` called `quantity_fixed`, which has a price f
 
 ### Release order
 
-1. **Backend:** the migration, then the deploy. Shoppers see no change until a product has a value of this type.
+1. **Backend:** done. Shoppers see no change until a product has a value of this type.
 2. **Shop:** the changes above.
 3. **Team:** add `FIXED_QUANTITY` values to products only after the shop's release. Before it, the cart and checkout still charge the right amount, because the backend prices them, but the shop's preview can show the wrong one.
 

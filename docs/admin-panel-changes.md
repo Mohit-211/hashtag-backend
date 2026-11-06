@@ -4,7 +4,7 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
-| [2026-11-06: `FIXED_QUANTITY` customization pricing](#2026-11-06) | Not live yet | None: `22d03d2` already sends it. Add it to products only after the shop's release |
+| [2026-11-06: `FIXED_QUANTITY` customization pricing](#2026-11-06) | `a8cb702`, live | None: `22d03d2` already sends it. Add it to products only after the shop's release |
 | [2026-11-04: ShipStation after payment](#2026-11-04-shipping) | `4b5729f`, live | **Recommended**: the failure reason and a "Try again" button on the order's Shipping tab |
 | [2026-11-04: customers' real graphics on orders](#2026-11-04) | `4b5729f`, live | **Recommended**: a download link per graphic on the order screen |
 | [2026-10-26: client decisions, first backend changes](#2026-10-26) | `8f53487` to `27de06f`, live | Read the notes; the Settings page, Q31, Q42, Q44, Q45 and Q56 in the to-do list |
@@ -60,9 +60,9 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 ---
 
 <a id="2026-11-06"></a>
-## 2026-11-06: `FIXED_QUANTITY` customization pricing (not live yet)
+## 2026-11-06: `FIXED_QUANTITY` customization pricing (live)
 
-The backend now supports the panel's **Fixed quantity** choice (`BACKEND_QUESTIONS.md` F26), with its `fixed_price` charged once per cart line. The panel's `22d03d2` needs no change: once this release is live, the `400` stops and the values save. `FIXED` (**One price**) is still charged per item.
+Live since 6 November (`a8cb702`). The backend now supports the panel's **Fixed quantity** choice (`BACKEND_QUESTIONS.md` F26), with its `fixed_price` charged once per cart line. The panel's `22d03d2` needs no change: the `400` has stopped, so the values save once it's deployed. `FIXED` (**One price**) is still charged per item.
 
 - **`POST customization-option/:optionId/value`** takes `pricing_type: "FIXED_QUANTITY"` and requires a `fixed_price` of 0 or more, as for `FIXED`. A value of this type has no pricing rows. The `400` for an unknown type now lists all four.
 - **`PUT customization-option/customization-option-value/:id`** takes the type and saves `fixed_price`. Switching a `TIERED` or `QUANTITY_BASED` value to it switches off the old pricing rows.

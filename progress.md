@@ -2,7 +2,7 @@
 
 Tracks every finding in [AUDIT_REPORT.md](AUDIT_REPORT.md) (audit of 8 October 2026, commit `268b548`) and what has been done about it. Update this file in the same commit as the fix.
 
-**Last updated:** 6 November 2026 (`FIXED_QUANTITY` customization pricing built, not deployed; graphics and the $35 fee, and ShipStation after payment, live in `4b5729f`). `fix/bug-sweep` was merged into `main` on 16 October and is live in production.
+**Last updated:** 6 November 2026 (`FIXED_QUANTITY` customization pricing live in `a8cb702`; graphics and the $35 fee, and ShipStation after payment, live in `4b5729f`). `fix/bug-sweep` was merged into `main` on 16 October and is live in production.
 
 **Status:** ✅ done · ◐ partly done · ❌ open.
 
@@ -38,6 +38,7 @@ Found after the audit: N1 to N4 (bottom of this file).
 | `8eb2d22` to `f2f996a` | 27 Oct | Client decisions, second batch: US mainland shipping, closed accounts kept 30 days, only products in stock, branded emails, Turnstile, cart minimums, one pricing path with SAGE "from" prices, admin weights, gallery | yes |
 | `27de06f` | 27 Oct | Settings moved from `.env` to the admin panel's Settings page (`app_settings`, secrets encrypted, changed with the settings key); `.env` keeps only what the server needs to start | yes |
 | `4b5729f` | 4 Nov | Graphics and the $35 fee; ShipStation V2, with the order and label after payment | yes |
+| `1470a8d`, `a8cb702` | 6 Nov | `FIXED_QUANTITY` customization pricing; a missing amount refused on `FIXED` too | yes |
 
 ### Deploying `fix/bug-sweep`
 
@@ -51,9 +52,9 @@ Found after the audit: N1 to N4 (bottom of this file).
 3. **Deploy:** `git pull`, then `npm install --omit=dev`, then `pm2 restart backend --update-env`.
 4. **After the shop's release:** remove `EXPOSE_SUPPLIER_COST` and restart.
 
-### Deploying `FIXED_QUANTITY` customization pricing
+### Deploying `FIXED_QUANTITY` customization pricing (live)
 
-**Status (6 Nov):** built, not deployed.
+**Status (6 Nov):** steps 1 and 2 are done and `a8cb702` is live. Step 3 waits for the shop, and the panel needs its `22d03d2` deployed to offer the choice.
 
 1. **Before pushing:** back up and run `migrations/2026-11-06_customization_fixed_quantity_before_deploy.sql`. Until it has run, saving the type fails.
 2. **The push:** the deploy stops at the migration check. Start the Deploy workflow with "migrations done" ticked ([docs/deployment.md](docs/deployment.md)).
@@ -210,9 +211,9 @@ Changes the shop and the admin panel need: [docs/frontend-changes.md](docs/front
 | N2 | The repository is public and contains the audit | ❌ | Make the GitHub repository private. Still public on 26 October, as are hashtag-next and the admin panel |
 | N3 | Public uploads saved before the rate limit | ✅ | `44141b0` |
 | N4 | Database backups stopped partway: a row in `products` is bigger than `mysqldump`'s default packet, so the 15 Oct backup ends there | ✅ | Use `--max-allowed-packet=1G` and check the end of the file ([migrations/README.md](migrations/README.md)). The 4 Nov backup is complete |
-| N5 | Changing the quantity of a pre-made cart line answered `400` when its customization value was added to the product in a later save: repricing only looked at the product's oldest mapping | ✅ | With `FIXED_QUANTITY` pricing, not deployed yet |
-| N6 | A refused customization pricing change still switched off the value's pricing rows, so the cart could no longer price it | ✅ | With `FIXED_QUANTITY` pricing, not deployed yet |
-| N7 | Switching a value to `FIXED` with no `fixed_price` saved 0, so the cart charged nothing | ✅ | With `FIXED_QUANTITY` pricing, not deployed yet |
+| N5 | Changing the quantity of a pre-made cart line answered `400` when its customization value was added to the product in a later save: repricing only looked at the product's oldest mapping | ✅ | `1470a8d` |
+| N6 | A refused customization pricing change still switched off the value's pricing rows, so the cart could no longer price it | ✅ | `1470a8d` |
+| N7 | Switching a value to `FIXED` with no `fixed_price` saved 0, so the cart charged nothing | ✅ | `a8cb702`. On 6 Nov no live `FIXED` value had a missing amount; the 32 at $0.00 are free choices such as sizes and colours |
 
 ## Client decisions
 

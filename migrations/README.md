@@ -25,4 +25,4 @@ There is no `npm run migrate`. It used `sequelize.sync({ alter: true })`, which 
 | `2026-10-27_app_settings_before_deploy.sql` | before deploying `feature/client-decisions` | run (its table answers on 4 Nov) |
 | `2026-11-04_user_graphics_before_deploy.sql` | before deploying graphics and the $35 fee | run 4 Nov |
 | `2026-11-04_shipstation_after_payment_before_deploy.sql` | before deploying ShipStation after payment | run 4 Nov |
-| `2026-11-06_customization_fixed_quantity_before_deploy.sql` | before deploying `FIXED_QUANTITY` pricing | not run |
+| `2026-11-06_customization_fixed_quantity_before_deploy.sql` | before deploying `FIXED_QUANTITY` pricing | run 6 Nov |
