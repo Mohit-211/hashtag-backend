@@ -212,7 +212,7 @@ Changes the shop and the admin panel need: [docs/frontend-changes.md](docs/front
 | N4 | Database backups stopped partway: a row in `products` is bigger than `mysqldump`'s default packet, so the 15 Oct backup ends there | ✅ | Use `--max-allowed-packet=1G` and check the end of the file ([migrations/README.md](migrations/README.md)). The 4 Nov backup is complete |
 | N5 | Changing the quantity of a pre-made cart line answered `400` when its customization value was added to the product in a later save: repricing only looked at the product's oldest mapping | ✅ | With `FIXED_QUANTITY` pricing, not deployed yet |
 | N6 | A refused customization pricing change still switched off the value's pricing rows, so the cart could no longer price it | ✅ | With `FIXED_QUANTITY` pricing, not deployed yet |
-| N7 | Switching a value to `FIXED` with no `fixed_price` saves 0, so the cart charges nothing | ❌ | Left as it is: `FIXED` wasn't to change in the `FIXED_QUANTITY` work, which refuses this for its own type |
+| N7 | Switching a value to `FIXED` with no `fixed_price` saved 0, so the cart charged nothing | ✅ | With `FIXED_QUANTITY` pricing, not deployed yet |
 
 ## Client decisions
 

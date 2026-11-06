@@ -520,13 +520,10 @@ const updateCustomizationOptionValue = async (id, body) => {
 
       // Number() turns these into 0, which the cart would charge. A TIERED value being
       // switched has no saved amount to fall back on.
-      if (
-        finalPricingType === "FIXED_QUANTITY" &&
-        (amount === null || amount === "")
-      ) {
+      if (amount === null || amount === "") {
         throw new ApiError(
           httpStatus.BAD_REQUEST,
-          "fixed_price is required for FIXED_QUANTITY pricing",
+          `fixed_price is required for ${finalPricingType} pricing`,
         );
       }
 

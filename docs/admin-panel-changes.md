@@ -66,7 +66,7 @@ The backend now supports the panel's **Fixed quantity** choice (`BACKEND_QUESTIO
 
 - **`POST customization-option/:optionId/value`** takes `pricing_type: "FIXED_QUANTITY"` and requires a `fixed_price` of 0 or more, as for `FIXED`. A value of this type has no pricing rows. The `400` for an unknown type now lists all four.
 - **`PUT customization-option/customization-option-value/:id`** takes the type and saves `fixed_price`. Switching a `TIERED` or `QUANTITY_BASED` value to it switches off the old pricing rows.
-  - `400` when the amount is missing, null or empty and there's no saved amount to keep, as when switching a `TIERED` value. Sent to `FIXED`, that same request still saves 0.
+  - `400` when the amount is missing, null or empty and there's no saved amount to keep, as when switching a `TIERED` value. This goes for `FIXED` too, which used to save 0 there, so the cart charged nothing. An amount of 0 sent on purpose still saves.
   - A refused change now leaves the value and its pricing rows as they were, for every type. Before, a refused amount switched the rows off anyway.
 - **`POST customization-option/value/:valueId/pricing`** and **`PUT customization-option/value/pricing/:pricingId`** answer `400` for this type, as for `FIXED`.
 - **Reads need no change:** `GET customization-option`, `GET customization-option/:id` and `GET customization-option/product/:productId/customizations` return the type with `fixed_price` and an empty `pricing`.
