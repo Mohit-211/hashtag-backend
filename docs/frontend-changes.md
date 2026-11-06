@@ -6,6 +6,7 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
+| [2026-11-06: `FIXED_QUANTITY` customization pricing](#2026-11-06) | Not live yet | **Required before a product gets this type**: show `fixed_price` as a total and never multiply it by quantity |
 | [2026-11-04: ShipStation after payment](#2026-11-04-shipping) | `4b5729f`, live | **Required**: stop calling `create-shipment-label`, show the order's totals, handle rate errors |
 | [2026-11-04: graphics and the $35 fee](#2026-11-04) | `4b5729f`, live | **Required now**: until it's out, customized clothing pays no $35. Send the real graphic, show the API's fee, add Saved graphics |
 | [2026-10-26: client decisions, first backend changes](#2026-10-26) | `8f53487` to `27de06f`, live | Read the notes; A31, A36, A37, A44, A45, B4, "$X+" cards, Delete account and Turnstile in the to-do list |
@@ -65,6 +66,69 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 | A35 | 39 | Tracking for signed-in customers; the admin picks ShipStation or manual updates | Show the order's status and tracking from the API, whichever way it's updated. |
 
 **Waiting on the client:** A8, DTG with several locations (Q8, reworded); which font settings besides the font list (Q23). **Later, by the client's choice:** A24 pre-made products from suppliers (Q26), A42 price filter (Q54), A46 Back button (Q57), policy pages editable in the admin (Q61).
+
+---
+
+<a id="2026-11-06"></a>
+## 2026-11-06: `FIXED_QUANTITY` customization pricing (not live yet)
+
+A new customization pricing type, **Fixed quantity** in the admin panel. Its `fixed_price` is one total for the cart line, whatever the quantity. `FIXED` (**One price** in the panel) doesn't change: its `fixed_price` is still per item. The two look the same in the API until you read `pricing_type`, so the shop has to check it everywhere it shows or adds up a customization's price.
+
+### The rule
+
+| `pricing_type` | `fixed_price` | Quantity 1 | Quantity 100 | Quantity 1,000 |
+|---|---|---|---|---|
+| `FIXED_QUANTITY` | `"100.00"`, the total | $100.00 | $100.00 | $100.00 |
+| `FIXED` | `"10.00"`, per item | $10.00 | $1,000.00 | $10,000.00 |
+
+It's charged once per cart line. Each variant is its own cart line, so a customer who orders three colours with a $100.00 value pays $300.00.
+
+It isn't the variant `pricing_mode` called `quantity_fixed`, which has a price for each exact quantity of a product.
+
+### What changed in the API
+
+- **`GET customization-option/product/:productId/customizations`** can return a value of this type. It has no pricing rows, and `fixed_price` is a string, as for `FIXED`:
+
+  ```json
+  {
+    "id": 4,
+    "name": "Rush",
+    "pricing_type": "FIXED_QUANTITY",
+    "fixed_price": "100.00",
+    "pricing": []
+  }
+  ```
+
+- **`POST product/cart`:** nothing changes in the request. The customer's choice is sent as for any other value.
+- **Cart lines and orders:** in `pricing_snapshot.customization.items[]`, a line of this type has `unit_price: null` and no `pricing_tier`, and `total` is the amount. This is a $5.00 product at quantity 3, in `GET product/cart/get`, `GET order` and `GET order/:id`, and in the answers of `PUT product/cart`, `PUT product/cart/increment` and `PUT product/cart/decrement`:
+
+  ```json
+  {
+    "pricing_type": "FIXED_QUANTITY",
+    "unit_price": null,
+    "quantity": 3,
+    "total": 100
+  }
+  ```
+
+  The line's `total_price` is 115. Its `price` (`final_price_per_item`) is that total divided by the quantity and rounded, here 38.33, so it changes with the quantity and `price × quantity` can be a cent out.
+- **Quantity changes:** the amount stays the same when the quantity changes. The product total and any `FIXED` or `TIERED` customization on the line move as they always have.
+- **Fixed for every type:** changing the quantity of a line used to answer `400`, "Customization value … is not available for this product", when the value had been added to the product in a later save. It now works.
+
+### What the shop must do
+
+1. **Check `pricing_type` wherever the shop works out a customization's price,** the price preview included. For `FIXED_QUANTITY`, add `Number(fixed_price)` to the line once. Never multiply it by quantity, and keep it the same when the customer changes the quantity. `FIXED` stays `fixed_price × quantity`.
+2. **Show it as a total:** "$100.00 total", never "each" or "per item".
+3. **Add it once per line:** when a customer orders several variants, add it for each variant that has it.
+4. **On cart, checkout and order screens, show the item's `total`.** `unit_price` is null, so don't work the amount out from it.
+5. **Show the line's `total_price`,** not `price × quantity`. If the shop shows a per-item price, it falls as the quantity rises.
+6. **After a quantity change, show the figures in the API's answer** instead of scaling the old ones.
+
+### Release order
+
+1. **Backend:** the migration, then the deploy. Shoppers see no change until a product has a value of this type.
+2. **Shop:** the changes above.
+3. **Team:** add `FIXED_QUANTITY` values to products only after the shop's release. Before it, the cart and checkout still charge the right amount, because the backend prices them, but the shop's preview can show the wrong one.
 
 ---
 

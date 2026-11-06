@@ -599,6 +599,17 @@ const buildManualPricingSnapshot = async ({
    * NOT:
    *
    * 4.25 × 25
+   *
+   * FIXED_QUANTITY:
+   *     fixed_price is the TOTAL price for the cart line,
+   *     whatever the product quantity.
+   *
+   * Example:
+   *
+   * fixed_price = 100
+   *
+   * customization total = 100 at quantity 1
+   * customization total = 100 at quantity 1,000
    */
 
   const customizationItems = [];
@@ -631,10 +642,15 @@ const buildManualPricingSnapshot = async ({
        * For an EXISTING cart:
        *   allowInactiveCustomization = true allows
        *   previously selected mappings to continue working.
+       *   Each save of a product's customizations adds a new
+       *   mapping and deactivates the old one, so the value
+       *   can be on any of them.
        */
 
-      const productCustomization =
-        await ProductCustomization.findOne({
+      const productCustomizations =
+        await ProductCustomization.findAll({
+          attributes: ["id"],
+
           where: {
             product_id: product.id,
             customization_option_id: optionId,
@@ -647,7 +663,7 @@ const buildManualPricingSnapshot = async ({
           },
         });
 
-      if (!productCustomization) {
+      if (!productCustomizations.length) {
         throw new ApiError(
           httpStatus.BAD_REQUEST,
           `Customization option ${optionId} is not available for this product`,
@@ -663,7 +679,9 @@ const buildManualPricingSnapshot = async ({
         await ProductCustomizationValue.findOne({
           where: {
             product_customization_id:
-              productCustomization.id,
+              productCustomizations.map(
+                (mapping) => mapping.id,
+              ),
 
             customization_option_value_id:
               valueId,
@@ -745,9 +763,16 @@ const buildManualPricingSnapshot = async ({
        * FIXED
        *
        * fixed_price is PER UNIT.
+       *
+       * FIXED_QUANTITY
+       *
+       * fixed_price is the TOTAL for the cart line.
        */
 
-      if (value.pricing_type === "FIXED") {
+      if (
+        value.pricing_type === "FIXED" ||
+        value.pricing_type === "FIXED_QUANTITY"
+      ) {
         unitPrice = Number(
           value.fixed_price || 0,
         );
@@ -897,12 +922,19 @@ const buildManualPricingSnapshot = async ({
        * QUANTITY_BASED:
        *     selected quantity price is already
        *     the total for the entire quantity.
+       *
+       * FIXED_QUANTITY:
+       *     fixed_price is already the total
+       *     for the cart line, at any quantity.
        */
 
-      const total =
-        value.pricing_type === "QUANTITY_BASED"
-          ? +unitPrice.toFixed(2)
-          : +(unitPrice * finalQty).toFixed(2);
+      const isLineTotal =
+        value.pricing_type === "QUANTITY_BASED" ||
+        value.pricing_type === "FIXED_QUANTITY";
+
+      const total = isLineTotal
+        ? +unitPrice.toFixed(2)
+        : +(unitPrice * finalQty).toFixed(2);
 
       customizationTotal += total;
 
@@ -920,14 +952,13 @@ const buildManualPricingSnapshot = async ({
           value.pricing_type,
 
         /*
-         * QUANTITY_BASED is not a unit price.
+         * QUANTITY_BASED and FIXED_QUANTITY are not unit prices.
          *
          * Store null so the snapshot is not misleading.
          */
-        unit_price:
-          value.pricing_type === "QUANTITY_BASED"
-            ? null
-            : +unitPrice.toFixed(2),
+        unit_price: isLineTotal
+          ? null
+          : +unitPrice.toFixed(2),
 
         quantity: finalQty,
 

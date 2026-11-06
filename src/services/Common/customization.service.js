@@ -12,6 +12,12 @@ const {
 const ApiError = require("../../utils/ApiError");
 const httpStatus = require("http-status");
 
+const PRICING_TYPES = ["FIXED", "TIERED", "QUANTITY_BASED", "FIXED_QUANTITY"];
+
+// Priced by the value's own fixed_price, with no pricing rows. FIXED charges it per item,
+// FIXED_QUANTITY once per cart line.
+const FIXED_PRICE_TYPES = ["FIXED", "FIXED_QUANTITY"];
+
 const parseBoolean = (value, defaultValue = false) => {
   if (value === undefined || value === null || value === "") {
     return defaultValue;
@@ -406,16 +412,16 @@ const createCustomizationOptionValue = async (optionId, body) => {
       throw new ApiError(httpStatus.BAD_REQUEST, "name is required");
     }
 
-    if (!["FIXED", "TIERED", "QUANTITY_BASED"].includes(pricing_type)) {
+    if (!PRICING_TYPES.includes(pricing_type)) {
       throw new ApiError(
         httpStatus.BAD_REQUEST,
-        "pricing_type must be FIXED, TIERED, or QUANTITY_BASED",
+        "pricing_type must be FIXED, TIERED, QUANTITY_BASED, or FIXED_QUANTITY",
       );
     }
 
     let fixedPrice = null;
 
-    if (pricing_type === "FIXED") {
+    if (FIXED_PRICE_TYPES.includes(pricing_type)) {
       if (
         fixed_price === undefined ||
         fixed_price === null ||
@@ -423,7 +429,7 @@ const createCustomizationOptionValue = async (optionId, body) => {
       ) {
         throw new ApiError(
           httpStatus.BAD_REQUEST,
-          "fixed_price is required for FIXED pricing",
+          `fixed_price is required for ${pricing_type} pricing`,
         );
       }
 
@@ -491,10 +497,10 @@ const updateCustomizationOptionValue = async (id, body) => {
     }
 
     if (pricing_type !== undefined) {
-      if (!["FIXED", "TIERED", "QUANTITY_BASED"].includes(pricing_type)) {
+      if (!PRICING_TYPES.includes(pricing_type)) {
         throw new ApiError(
           httpStatus.BAD_REQUEST,
-          "pricing_type must be FIXED, TIERED, or QUANTITY_BASED",
+          "pricing_type must be FIXED, TIERED, QUANTITY_BASED, or FIXED_QUANTITY",
         );
       }
 
@@ -508,25 +514,23 @@ const updateCustomizationOptionValue = async (id, body) => {
     const finalPricingType =
       updateData.pricing_type || optionValue.pricing_type;
 
-    if (finalPricingType !== optionValue.pricing_type) {
-      await CustomizationOptionValuePricing.update(
-        {
-          is_active: false,
-        },
-        {
-          where: {
-            customization_option_value_id: id,
-            is_active: true,
-          },
-        },
-      );
-    }
+    if (FIXED_PRICE_TYPES.includes(finalPricingType)) {
+      const amount =
+        fixed_price !== undefined ? fixed_price : optionValue.fixed_price;
 
-    if (finalPricingType === "FIXED") {
-      const finalFixedPrice =
-        fixed_price !== undefined
-          ? Number(fixed_price)
-          : Number(optionValue.fixed_price);
+      // Number() turns these into 0, which the cart would charge. A TIERED value being
+      // switched has no saved amount to fall back on.
+      if (
+        finalPricingType === "FIXED_QUANTITY" &&
+        (amount === null || amount === "")
+      ) {
+        throw new ApiError(
+          httpStatus.BAD_REQUEST,
+          "fixed_price is required for FIXED_QUANTITY pricing",
+        );
+      }
+
+      const finalFixedPrice = Number(amount);
 
       if (!Number.isFinite(finalFixedPrice) || finalFixedPrice < 0) {
         throw new ApiError(
@@ -544,6 +548,21 @@ const updateCustomizationOptionValue = async (id, body) => {
       fixed_price !== undefined
     ) {
       updateData.fixed_price = null;
+    }
+
+    // After the checks above, so a refused change leaves the old pricing rows working.
+    if (finalPricingType !== optionValue.pricing_type) {
+      await CustomizationOptionValuePricing.update(
+        {
+          is_active: false,
+        },
+        {
+          where: {
+            customization_option_value_id: id,
+            is_active: true,
+          },
+        },
+      );
     }
 
     await optionValue.update(updateData);
@@ -718,13 +737,13 @@ const createPricing = async (valueId, body) => {
   }
 
   /* ============================================================
-   * FIXED
+   * FIXED AND FIXED_QUANTITY
    * ============================================================ */
 
-  if (value.pricing_type === "FIXED") {
+  if (FIXED_PRICE_TYPES.includes(value.pricing_type)) {
     throw new ApiError(
       httpStatus.BAD_REQUEST,
-      "Pricing entries cannot be added to a FIXED customization value.",
+      `Pricing entries cannot be added to a ${value.pricing_type} customization value.`,
     );
   }
 
@@ -854,13 +873,13 @@ const updatePricing = async (pricingId, body) => {
   }
 
   /* ============================================================
-   * FIXED
+   * FIXED AND FIXED_QUANTITY
    * ============================================================ */
 
-  if (value.pricing_type === "FIXED") {
+  if (FIXED_PRICE_TYPES.includes(value.pricing_type)) {
     throw new ApiError(
       httpStatus.BAD_REQUEST,
-      "Pricing entries cannot be updated for a FIXED customization value.",
+      `Pricing entries cannot be updated for a ${value.pricing_type} customization value.`,
     );
   }
 

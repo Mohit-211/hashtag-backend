@@ -4,6 +4,7 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
+| [2026-11-06: `FIXED_QUANTITY` customization pricing](#2026-11-06) | Not live yet | None: `22d03d2` already sends it. Add it to products only after the shop's release |
 | [2026-11-04: ShipStation after payment](#2026-11-04-shipping) | `4b5729f`, live | **Recommended**: the failure reason and a "Try again" button on the order's Shipping tab |
 | [2026-11-04: customers' real graphics on orders](#2026-11-04) | `4b5729f`, live | **Recommended**: a download link per graphic on the order screen |
 | [2026-10-26: client decisions, first backend changes](#2026-10-26) | `8f53487` to `27de06f`, live | Read the notes; the Settings page, Q31, Q42, Q44, Q45 and Q56 in the to-do list |
@@ -55,6 +56,23 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 
 1. **`payment_status=ALL`:** coming in the next release: `GET order/admin?payment_status=ALL` lists orders of every payment status. Without the parameter it still lists paid orders only.
 2. **The 2 unpaid orders the panel doesn't show:** when a customer's cart changes, the backend soft-deletes their latest unpaid order (`invalidatePendingOrder` in `cartWishlist.service.js`), and orders are paranoid, so those two are hidden from every list. Nothing is missing on the panel's side; the behaviour itself is on the payments list (audit H8).
+
+---
+
+<a id="2026-11-06"></a>
+## 2026-11-06: `FIXED_QUANTITY` customization pricing (not live yet)
+
+The backend now supports the panel's **Fixed quantity** choice (`BACKEND_QUESTIONS.md` F26), with its `fixed_price` charged once per cart line. The panel's `22d03d2` needs no change: once this release is live, the `400` stops and the values save. `FIXED` (**One price**) is still charged per item.
+
+- **`POST customization-option/:optionId/value`** takes `pricing_type: "FIXED_QUANTITY"` and requires a `fixed_price` of 0 or more, as for `FIXED`. A value of this type has no pricing rows. The `400` for an unknown type now lists all four.
+- **`PUT customization-option/customization-option-value/:id`** takes the type and saves `fixed_price`. Switching a `TIERED` or `QUANTITY_BASED` value to it switches off the old pricing rows.
+  - `400` when the amount is missing, null or empty and there's no saved amount to keep, as when switching a `TIERED` value. Sent to `FIXED`, that same request still saves 0.
+  - A refused change now leaves the value and its pricing rows as they were, for every type. Before, a refused amount switched the rows off anyway.
+- **`POST customization-option/value/:valueId/pricing`** and **`PUT customization-option/value/pricing/:pricingId`** answer `400` for this type, as for `FIXED`.
+- **Reads need no change:** `GET customization-option`, `GET customization-option/:id` and `GET customization-option/product/:productId/customizations` return the type with `fixed_price` and an empty `pricing`.
+- **Order lines** in `GET order/admin` have `pricing_type: "FIXED_QUANTITY"`, `unit_price: null`, `quantity` and `total`, with no `pricing_tier`. `OrdersPage.tsx` already reads `total` for this type.
+- **Once per cart line** answers F26's question. The cart makes one line per variant, so three colours at $100.00 add $300.00.
+- **Before adding it to a product:** wait for the shop's release ([frontend-changes.md](frontend-changes.md#2026-11-06)). Until then the shop's price preview can show the wrong amount, though the cart charges the right one.
 
 ---
 

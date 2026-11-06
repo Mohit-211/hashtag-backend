@@ -25,7 +25,12 @@ CustomizationOptionValue.init(
     },
 
     pricing_type: {
-      type: DataTypes.ENUM("FIXED", "TIERED", "QUANTITY_BASED"),
+      type: DataTypes.ENUM(
+        "FIXED",
+        "TIERED",
+        "QUANTITY_BASED",
+        "FIXED_QUANTITY",
+      ),
       allowNull: false,
       defaultValue: "FIXED",
     },

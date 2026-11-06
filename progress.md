@@ -2,7 +2,7 @@
 
 Tracks every finding in [AUDIT_REPORT.md](AUDIT_REPORT.md) (audit of 8 October 2026, commit `268b548`) and what has been done about it. Update this file in the same commit as the fix.
 
-**Last updated:** 4 November 2026 (graphics and the $35 fee, and ShipStation after payment, live in `4b5729f`). `fix/bug-sweep` was merged into `main` on 16 October and is live in production.
+**Last updated:** 6 November 2026 (`FIXED_QUANTITY` customization pricing built, not deployed; graphics and the $35 fee, and ShipStation after payment, live in `4b5729f`). `fix/bug-sweep` was merged into `main` on 16 October and is live in production.
 
 **Status:** ✅ done · ◐ partly done · ❌ open.
 
@@ -50,6 +50,14 @@ Found after the audit: N1 to N4 (bottom of this file).
    - Set `TRUST_PROXY` for Cloudflare (N1).
 3. **Deploy:** `git pull`, then `npm install --omit=dev`, then `pm2 restart backend --update-env`.
 4. **After the shop's release:** remove `EXPOSE_SUPPLIER_COST` and restart.
+
+### Deploying `FIXED_QUANTITY` customization pricing
+
+**Status (6 Nov):** built, not deployed.
+
+1. **Before pushing:** back up and run `migrations/2026-11-06_customization_fixed_quantity_before_deploy.sql`. Until it has run, saving the type fails.
+2. **The push:** the deploy stops at the migration check. Start the Deploy workflow with "migrations done" ticked ([docs/deployment.md](docs/deployment.md)).
+3. **The shop's release:** [docs/frontend-changes.md](docs/frontend-changes.md#2026-11-06). The team adds values of this type to products only after it.
 
 ### Deploying graphics and the $35 fee (live)
 
@@ -202,6 +210,9 @@ Changes the shop and the admin panel need: [docs/frontend-changes.md](docs/front
 | N2 | The repository is public and contains the audit | ❌ | Make the GitHub repository private. Still public on 26 October, as are hashtag-next and the admin panel |
 | N3 | Public uploads saved before the rate limit | ✅ | `44141b0` |
 | N4 | Database backups stopped partway: a row in `products` is bigger than `mysqldump`'s default packet, so the 15 Oct backup ends there | ✅ | Use `--max-allowed-packet=1G` and check the end of the file ([migrations/README.md](migrations/README.md)). The 4 Nov backup is complete |
+| N5 | Changing the quantity of a pre-made cart line answered `400` when its customization value was added to the product in a later save: repricing only looked at the product's oldest mapping | ✅ | With `FIXED_QUANTITY` pricing, not deployed yet |
+| N6 | A refused customization pricing change still switched off the value's pricing rows, so the cart could no longer price it | ✅ | With `FIXED_QUANTITY` pricing, not deployed yet |
+| N7 | Switching a value to `FIXED` with no `fixed_price` saves 0, so the cart charges nothing | ❌ | Left as it is: `FIXED` wasn't to change in the `FIXED_QUANTITY` work, which refuses this for its own type |
 
 ## Client decisions
 
