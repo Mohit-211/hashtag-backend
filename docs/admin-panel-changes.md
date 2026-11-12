@@ -4,7 +4,7 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
-| [2026-11-12: "No Parent Category only" across the catalog](#2026-11-12) | Not live yet | None: the panel's `fe828f9` already sends it (F28) |
+| [2026-11-12: "No Parent Category only" across the catalog](#2026-11-12) | `20ebba1`, live | None: the panel's `fe828f9` already sends it (F28) |
 | [2026-11-06: `FIXED_QUANTITY` customization pricing](#2026-11-06) | `a8cb702`, live | None: `22d03d2` already sends it. Add it to products only after the shop's release |
 | [2026-11-04: ShipStation after payment](#2026-11-04-shipping) | `4b5729f`, live | **Recommended**: the failure reason and a "Try again" button on the order's Shipping tab |
 | [2026-11-04: customers' real graphics on orders](#2026-11-04) | `4b5729f`, live | **Recommended**: a download link per graphic on the order screen |
@@ -61,9 +61,9 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 ---
 
 <a id="2026-11-12"></a>
-## 2026-11-12: "No Parent Category only" across the catalog (not live yet)
+## 2026-11-12: "No Parent Category only" across the catalog (live)
 
-`GET product/admin/get/all` takes `no_parent_category=true` (`BACKEND_QUESTIONS.md` F28). The panel's `fe828f9` already sends it, so it needs no change: once this is live, the filter covers the whole catalog instead of the page that's loaded.
+Live since 12 November (`20ebba1`). `GET product/admin/get/all` takes `no_parent_category=true` (`BACKEND_QUESTIONS.md` F28). The panel's `fe828f9` already sends it, so it needs no change: the filter now covers the whole catalog instead of the page that's loaded.
 
 - **Which products:** those with no category, or none of whose categories is linked to a parent category. It's the rule that fills `categories[].parent_categories` in this response, with deleted links, categories and parent categories skipped, so a returned row never shows a parent. A link or parent category that's only inactive still counts, as it does in `parent_categories`.
 - **Count and pages:** `total` and `totalPages` count only matching products.
