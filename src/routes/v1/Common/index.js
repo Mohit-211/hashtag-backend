@@ -26,6 +26,7 @@ const addOnRoute = require("./addonProduct.route");
 const customizationRoute = require('./customization.route')
 const galleryRoute = require("./gallery.route");
 const graphicRoute = require("./graphic.route");
+const pricingTemplateRoute = require("./pricingTemplate.route");
 
 const commonRoutes = [
   {
@@ -132,6 +133,10 @@ const commonRoutes = [
   {
     path: "/graphics",
     route: graphicRoute,
+  },
+  {
+    path: "/pricing-template",
+    route: pricingTemplateRoute,
   },
 ];
 

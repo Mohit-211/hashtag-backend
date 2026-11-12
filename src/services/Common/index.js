@@ -29,6 +29,7 @@ const addonProductService = require('./addonProduct.service');
 const customizationService = require('./customization.service')
 const galleryService = require('./gallery.service');
 const graphicService = require('./graphic.service');
+const pricingTemplateService = require('./pricingTemplate.service');
 
 module.exports = {
     roleService,
@@ -62,4 +63,5 @@ module.exports = {
     customizationService,
     galleryService,
     graphicService,
+    pricingTemplateService,
 };

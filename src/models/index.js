@@ -20,6 +20,7 @@ const ContactUs = require("./contactUs.model");
 const Faq = require("./faq.model");
 const GalleryImage = require("./galleryImage.model");
 const UserGraphic = require("./userGraphic.model");
+const PricingTemplate = require("./pricingTemplate.model");
 const AppSetting = require("./appSetting.model");
 
 const Payment = require("./payment.model");
@@ -119,6 +120,7 @@ module.exports = {
   Order,
   OrderItem,
   UserGraphic,
+  PricingTemplate,
 
   Carrier,
   CarrierService,

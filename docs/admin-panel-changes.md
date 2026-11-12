@@ -4,6 +4,7 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
+| [2026-11-12: pricing templates](#2026-11-12-templates) | Not live yet | None: the panel's F29 code already calls them this way |
 | [2026-11-12: the website's category list leaves out empty categories](#2026-11-12-categories) | Not live yet | None: the panel's admin token gets every category, as before |
 | [2026-11-12: "No Parent Category only" across the catalog](#2026-11-12) | `20ebba1`, live | None: the panel's `fe828f9` already sends it (F28) |
 | [2026-11-06: `FIXED_QUANTITY` customization pricing](#2026-11-06) | `a8cb702`, live | None: `22d03d2` already sends it. Add it to products only after the shop's release |
@@ -58,6 +59,32 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 
 1. **`payment_status=ALL`:** coming in the next release: `GET order/admin?payment_status=ALL` lists orders of every payment status. Without the parameter it still lists paid orders only.
 2. **The 2 unpaid orders the panel doesn't show:** when a customer's cart changes, the backend soft-deletes their latest unpaid order (`invalidatePendingOrder` in `cartWishlist.service.js`), and orders are paranoid, so those two are hidden from every list. Nothing is missing on the panel's side; the behaviour itself is on the payments list (audit H8).
+
+---
+
+<a id="2026-11-12-templates"></a>
+## 2026-11-12: pricing templates (not live yet)
+
+Four admin-only endpoints for the Pricing Templates page and the Save and Load dialogs (`BACKEND_QUESTIONS.md` F29). The panel's code calls them as built, so it needs no change. Until they're live they answer `404`, and the panel says templates aren't available yet.
+
+| Endpoint | Body | Answer |
+|---|---|---|
+| `GET pricing-template` | | `200 { data: [template, ...] }`: every template that isn't deleted, newest `updated_at` first, then highest `id`. No paging. |
+| `POST pricing-template` | `{ name, pricing_mode, bulk_pricing, quantity_pricing }` | `201 { data: template }` |
+| `PUT pricing-template/:id` | the same | `200 { data: template }`. Replaces the name and rows, and moves `updated_at` even when nothing changed. `404` for an unknown or deleted id. |
+| `DELETE pricing-template/:id` | | `200`. Soft delete. `404` for an unknown or deleted id. |
+
+- **A template** is `{ id, name, pricing_mode, bulk_pricing, quantity_pricing, created_at, updated_at }`. `pricing_mode` is `"tiered"` with `bulk_pricing: [{ min_qty, max_qty, price }]` and `quantity_pricing: null`, or `"quantity_fixed"` with `quantity_pricing: [{ quantity, price }]` and `bulk_pricing: null`. The other mode's list is ignored on POST and PUT.
+- **Checks**, answered with `400` and a `message` to show as it is:
+  - `name`: trimmed, 1 to 100 characters.
+  - `pricing_mode`: `"tiered"` or `"quantity_fixed"`. `"fixed"` is refused.
+  - 1 to 50 rows.
+  - Tiered: `min_qty` a whole number above 0, `price` above 0, `max_qty` null on the last row only and otherwise a whole number above `min_qty`. Each `min_qty` must be above the previous row's `max_qty`; gaps are fine.
+  - Fixed quantities: each `quantity` a whole number above 0 and listed once, `price` above 0. Saved smallest quantity first.
+  - Numbers sent as strings are saved as numbers, and any other field in a row is dropped.
+- **`409`** when another template that isn't deleted has the name, compared without case or accents: `A template called "Bulk tiers" already exists. Use another name.` Renaming a template to its own name in other capitals is fine, and a deleted template's name can be used again.
+- **`401`** without a valid admin token, as on the other admin routes.
+- Templates aren't linked to products: loading one copies its rows, so editing or deleting a template changes no product.
 
 ---
 

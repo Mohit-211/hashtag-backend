@@ -34,6 +34,7 @@ const { COLOR_FILTERS } = require("../../utils/colorFilter");
 const { variantInStock, productInStock } = require("../../utils/stock");
 const settings = require("../../config/settings");
 const { buildPricingTiers, buildSellingTiers, netPriceTiers } = require("../../utils/pricing/pricing.util");
+const { parseQuantityPricing } = require("../../utils/pricing/pricingRows");
 const {
   resolveTierProductIds,
   resolveAllTierProductIds,
@@ -159,39 +160,7 @@ const resolveVariantPricing = (v, sku) => {
       );
     }
 
-    const seenQuantities = new Set();
-
-    quantityPricing = v.quantity_pricing.map((item, index) => {
-      const quantity = Number(item?.quantity);
-      const price = Number(item?.price);
-
-      if (!Number.isInteger(quantity) || quantity <= 0) {
-        throw new ApiError(
-          httpStatus.BAD_REQUEST,
-          `Variant "${sku}", Quantity ${index + 1}: quantity must be a positive whole number`,
-        );
-      }
-
-      if (!Number.isFinite(price) || price <= 0) {
-        throw new ApiError(
-          httpStatus.BAD_REQUEST,
-          `Variant "${sku}", Quantity ${index + 1}: price must be more than 0`,
-        );
-      }
-
-      if (seenQuantities.has(quantity)) {
-        throw new ApiError(
-          httpStatus.BAD_REQUEST,
-          `Variant "${sku}": quantity ${quantity} is duplicated`,
-        );
-      }
-
-      seenQuantities.add(quantity);
-
-      return { quantity, price };
-    });
-
-    quantityPricing.sort((a, b) => a.quantity - b.quantity);
+    quantityPricing = parseQuantityPricing(v.quantity_pricing, `Variant "${sku}"`);
   }
 
   let price = Number(v.price || 0);
