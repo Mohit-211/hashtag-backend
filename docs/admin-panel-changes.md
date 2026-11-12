@@ -4,7 +4,7 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
-| [2026-11-12: pricing templates](#2026-11-12-templates) | Not live yet | None: the panel's F29 code already calls them this way |
+| [2026-11-12: pricing templates](#2026-11-12-templates) | `adeb71f`, live | None: the panel's F29 code already calls them this way |
 | [2026-11-12: the website's category list leaves out empty categories](#2026-11-12-categories) | `64c340f`, live | None: the panel's admin token gets every category, as before |
 | [2026-11-12: "No Parent Category only" across the catalog](#2026-11-12) | `20ebba1`, live | None: the panel's `fe828f9` already sends it (F28) |
 | [2026-11-06: `FIXED_QUANTITY` customization pricing](#2026-11-06) | `a8cb702`, live | None: `22d03d2` already sends it. Add it to products only after the shop's release |
@@ -63,9 +63,9 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 ---
 
 <a id="2026-11-12-templates"></a>
-## 2026-11-12: pricing templates (not live yet)
+## 2026-11-12: pricing templates (live)
 
-Four admin-only endpoints for the Pricing Templates page and the Save and Load dialogs (`BACKEND_QUESTIONS.md` F29). The panel's code calls them as built, so it needs no change. Until they're live they answer `404`, and the panel says templates aren't available yet.
+Live since 12 November (`adeb71f`). Four admin-only endpoints for the Pricing Templates page and the Save and Load dialogs (`BACKEND_QUESTIONS.md` F29). The panel's code calls them as built, so it needs no change: once it's deployed, the page and dialogs work instead of saying templates aren't available yet.
 
 | Endpoint | Body | Answer |
 |---|---|---|
