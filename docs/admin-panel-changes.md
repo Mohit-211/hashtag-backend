@@ -4,6 +4,7 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
+| [2026-11-12: "No Parent Category only" across the catalog](#2026-11-12) | Not live yet | None: the panel's `fe828f9` already sends it (F28) |
 | [2026-11-06: `FIXED_QUANTITY` customization pricing](#2026-11-06) | `a8cb702`, live | None: `22d03d2` already sends it. Add it to products only after the shop's release |
 | [2026-11-04: ShipStation after payment](#2026-11-04-shipping) | `4b5729f`, live | **Recommended**: the failure reason and a "Try again" button on the order's Shipping tab |
 | [2026-11-04: customers' real graphics on orders](#2026-11-04) | `4b5729f`, live | **Recommended**: a download link per graphic on the order screen |
@@ -56,6 +57,18 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 
 1. **`payment_status=ALL`:** coming in the next release: `GET order/admin?payment_status=ALL` lists orders of every payment status. Without the parameter it still lists paid orders only.
 2. **The 2 unpaid orders the panel doesn't show:** when a customer's cart changes, the backend soft-deletes their latest unpaid order (`invalidatePendingOrder` in `cartWishlist.service.js`), and orders are paranoid, so those two are hidden from every list. Nothing is missing on the panel's side; the behaviour itself is on the payments list (audit H8).
+
+---
+
+<a id="2026-11-12"></a>
+## 2026-11-12: "No Parent Category only" across the catalog (not live yet)
+
+`GET product/admin/get/all` takes `no_parent_category=true` (`BACKEND_QUESTIONS.md` F28). The panel's `fe828f9` already sends it, so it needs no change: once this is live, the filter covers the whole catalog instead of the page that's loaded.
+
+- **Which products:** those with no category, or none of whose categories is linked to a parent category. It's the rule that fills `categories[].parent_categories` in this response, with deleted links, categories and parent categories skipped, so a returned row never shows a parent. A link or parent category that's only inactive still counts, as it does in `parent_categories`.
+- **Count and pages:** `total` and `totalPages` count only matching products.
+- **With other filters:** it combines with `search`, `source`, `sync_locked`, `min_price`/`max_price` and `use_case_id`/`tier`. With `parent_category_id` or `grand_category_id` nothing can match, so the answer is an empty page: `{ data: [], total: 0, page, totalPages: 0 }`.
+- **Any other value**, `false` and `TRUE` included, means no filter. Answers without the parameter don't change.
 
 ---
 

@@ -4258,6 +4258,22 @@ const getAdminStats = async () => {
   }
 };
 
+// True when no category of the product is linked to a parent category. The joins and the
+// deleted_at checks are the ones Sequelize generates for categories -> parent_categories in
+// getAllProductsAdmin's include, so a product this lets through never shows a parent there.
+// `Product` is the alias Sequelize gives products in both the count and the list query.
+const NO_PARENT_CATEGORY_SQL = `NOT EXISTS (
+  SELECT 1
+  FROM product_category_mapping AS pcm
+  INNER JOIN product_categories AS pc
+    ON pc.id = pcm.product_category_id AND pc.deleted_at IS NULL
+  INNER JOIN parent_category_mapping AS pam
+    ON pam.product_category_id = pc.id AND pam.deleted_at IS NULL
+  INNER JOIN parent_categories AS pa
+    ON pa.id = pam.parent_category_id AND pa.deleted_at IS NULL
+  WHERE pcm.product_id = \`Product\`.\`id\` AND pcm.deleted_at IS NULL
+)`;
+
 const getAllProductsAdmin = async (query) => {
   try {
     const {
@@ -4272,6 +4288,7 @@ const getAllProductsAdmin = async (query) => {
       max_price, // NEW
       tier,
       use_case_id,
+      no_parent_category,
     } = query;
 
     const pageNum = Math.max(1, parseInt(page, 10) || 1);
@@ -4291,6 +4308,19 @@ const getAllProductsAdmin = async (query) => {
       where.sync_locked = true;
     } else if (sync_locked === "false" || sync_locked === false) {
       where.sync_locked = false;
+    }
+
+    // ── No Parent Category filter ─────────────────────────────────────
+    // Products that would show no parent in categories[].parent_categories
+    // below. It sits in `where` beside the id lists the other filters build,
+    // so it combines with all of them and the count stays right.
+    if (no_parent_category === "true" || no_parent_category === true) {
+      // A Parent or Grand Category filter only ever matches products that have one.
+      if (parent_category_id || grand_category_id) {
+        return { data: [], total: 0, page: pageNum, totalPages: 0 };
+      }
+
+      where[Op.and] = [sequelize.literal(NO_PARENT_CATEGORY_SQL)];
     }
 
     // ── Use Case / Tier filter ────────────────────────────────────────
