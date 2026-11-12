@@ -3,10 +3,11 @@ const router = express.Router();
 const { productCategoryController, parentCategoryController, grandCategoryController } = require("../../../controllers");
 const { adminAuthMiddleware } = require("../../../middlewares");
 
-const { requireAdmin } = adminAuthMiddleware;
+const { requireAdmin, identifyAdmin } = adminAuthMiddleware;
 
 router.get("/get-parent-categories", parentCategoryController.getAllParentCategories);
-router.get("/get-grand-categories", grandCategoryController.getAllGrandCategories);
+// Admins get every category; the website only categories with products to show.
+router.get("/get-grand-categories", identifyAdmin, grandCategoryController.getAllGrandCategories);
 router.post("/add-category-to-parent", requireAdmin, parentCategoryController.addCategoryToParent);
 router.post("/add-parent-to-grand", requireAdmin, grandCategoryController.addParentToGrand);
 router.post("/remove-category-from-parent", requireAdmin, parentCategoryController.removeCategoryFromParent);

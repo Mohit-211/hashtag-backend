@@ -15,7 +15,9 @@ const createGrandCategory = catchAsync(async (req, res) => {
 });
 
 const getAllGrandCategories = catchAsync(async (req, res) => {
-  const data = await grandCategoryService.getAllGrandCategories(req.query);
+  const data = await grandCategoryService.getAllGrandCategories(req.query, {
+    shopper: !req.admin,
+  });
 
   return responseWrapper(res, data, "");
 });

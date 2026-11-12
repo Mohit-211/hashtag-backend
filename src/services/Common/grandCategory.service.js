@@ -1,14 +1,82 @@
 const httpStatus = require("http-status");
 const moment = require("moment");
 const slugify = require("slugify");
-const { Op } = require("sequelize");
+const { Op, QueryTypes } = require("sequelize");
 const ApiError = require("../../utils/ApiError");
+const sequelize = require("../../config/central.db");
+const logger = require("../../config/logger");
+const { productInStockSql } = require("../../utils/stock");
 const {
   GrandCategory,
   ParentCategory,
   ProductCategory,
   GrandCategoryMapping,
 } = require("../../models");
+
+// The website lists only what a customer can shop: a parent category that has a product
+// GET product?category_id=<parent> would list (not deleted, active, not discontinued, in
+// stock), and a grand category with at least one such parent. Every join skips deleted rows,
+// as the includes do. One row per grand category and parent category pair.
+const SHOP_CATEGORIES_SQL = `
+  SELECT gcm.grand_category_id, gcm.parent_category_id
+  FROM grand_category_mapping AS gcm
+  INNER JOIN parent_categories AS pa
+    ON pa.id = gcm.parent_category_id AND pa.deleted_at IS NULL
+  WHERE gcm.deleted_at IS NULL
+    AND EXISTS (
+      SELECT 1
+      FROM parent_category_mapping AS pam
+      INNER JOIN product_categories AS pc
+        ON pc.id = pam.product_category_id AND pc.deleted_at IS NULL
+      INNER JOIN product_category_mapping AS pcm
+        ON pcm.product_category_id = pc.id AND pcm.deleted_at IS NULL
+      INNER JOIN products AS shop_product
+        ON shop_product.id = pcm.product_id AND shop_product.deleted_at IS NULL
+        AND shop_product.is_active = 1 AND shop_product.is_discontinued = 0
+      WHERE pam.parent_category_id = gcm.parent_category_id AND pam.deleted_at IS NULL
+        AND ${productInStockSql("shop_product.id")}
+    )`;
+
+// The same for every shopper, so it's kept in memory and worked out again at most once a minute.
+// A category that gains or loses its last product shows up or goes within about a minute.
+const SHOP_CATEGORIES_TTL_MS = 60 * 1000;
+let shopCategories = null;
+let shopCategoriesLoading = null;
+
+const refreshShopCategories = () => {
+  if (!shopCategoriesLoading) {
+    shopCategoriesLoading = sequelize
+      .query(SHOP_CATEGORIES_SQL, { type: QueryTypes.SELECT })
+      .then((rows) => {
+        shopCategories = {
+          loadedAt: Date.now(),
+          grandIds: [...new Set(rows.map((row) => row.grand_category_id))],
+          parentIds: [...new Set(rows.map((row) => row.parent_category_id))],
+        };
+        return shopCategories;
+      })
+      .finally(() => {
+        shopCategoriesLoading = null;
+      });
+  }
+
+  return shopCategoriesLoading;
+};
+
+// When the list is a minute old, the request that notices still gets it and the refresh runs
+// in the background, so no shopper waits for the query: only the first one after a restart.
+const getShopCategories = async () => {
+  if (!shopCategories) return refreshShopCategories();
+
+  if (Date.now() - shopCategories.loadedAt >= SHOP_CATEGORIES_TTL_MS) {
+    refreshShopCategories().catch((error) => {
+      // The last list stays in use, and the next request tries again.
+      logger.warn(`Refreshing the website's category list failed: ${error.message}`);
+    });
+  }
+
+  return shopCategories;
+};
 
 const createGrandCategory = async (reqBody) => {
   try {
@@ -32,7 +100,9 @@ const createGrandCategory = async (reqBody) => {
   }
 };
 
-const getAllGrandCategories = async (query) => {
+// `shopper`: the website's list, with only categories that have products to show. Admins
+// (shopper: false) get every category.
+const getAllGrandCategories = async (query, { shopper = false } = {}) => {
   try {
     let { page = 1, limit = 20, search } = query;
 
@@ -51,27 +121,42 @@ const getAllGrandCategories = async (query) => {
       };
     }
 
+    const parentCategories = {
+      model: ParentCategory,
+      as: "parent_categories",
+
+      through: {
+        attributes: [],
+      },
+
+      attributes: ["id", "title", "slug"],
+    };
+
+    const order = [["title", "ASC"]];
+
+    if (shopper) {
+      const { grandIds, parentIds } = await getShopCategories();
+
+      // In the where, so the count and the pages cover only these grand categories.
+      whereCondition.id = { [Op.in]: grandIds };
+      parentCategories.where = { id: { [Op.in]: parentIds } };
+      parentCategories.required = false;
+
+      // With that filter the database returns parents in any order, so the menu would
+      // reshuffle between requests. Id order is the order the website got them in before.
+      order.push([{ model: ParentCategory, as: "parent_categories" }, "id", "ASC"]);
+    }
+
     const { rows, count } = await GrandCategory.findAndCountAll({
       where: whereCondition,
 
-      include: [
-        {
-          model: ParentCategory,
-          as: "parent_categories",
-
-          through: {
-            attributes: [],
-          },
-
-          attributes: ["id", "title", "slug"],
-        },
-      ],
+      include: [parentCategories],
 
       limit,
       offset,
       distinct: true,
 
-      order: [["title", "ASC"]],
+      order,
     });
 
     return {

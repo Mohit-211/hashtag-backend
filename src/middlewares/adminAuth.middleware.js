@@ -53,6 +53,19 @@ const requireAdmin = catchAsync(async (req, res, next) => {
     next();
 });
 
+// For public routes the website and the panel share: sets req.admin when the request carries
+// a valid admin token (the same checks as requireAdmin), and lets everyone else through as a
+// shopper. Never answers 401.
+const identifyAdmin = (req, res, next) => {
+    let passed = false;
+    requireAdmin(req, res, (error) => {
+        if (passed) return;
+        passed = true;
+        if (error) req.admin = undefined;
+        next();
+    });
+};
+
 // Use after requireAdmin.
 const requireSuperAdmin = (req, res, next) => {
     if (!req.admin || !isSuperAdminRecord(req.admin)) {
@@ -114,6 +127,7 @@ module.exports = {
     ADMIN_TOKEN_TYPE,
     isSuperAdminRecord,
     requireAdmin,
+    identifyAdmin,
     requireSuperAdmin,
     validateCreateAdminBody,
     validateLoginAdminBody,

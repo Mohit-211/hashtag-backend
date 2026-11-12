@@ -7,13 +7,14 @@ const variantInStock = () => ({
   [Op.or]: [{ stock: { [Op.gt]: 0 } }, { track_inventory: false }],
 });
 
-// For a Product query: the product has at least one variant on sale and in stock.
-const productInStock = () =>
-  sequelize.literal(
-    "EXISTS (SELECT 1 FROM product_variants AS stocked" +
-      " WHERE stocked.product_id = `Product`.`id`" +
-      " AND stocked.is_active = 1 AND stocked.deleted_at IS NULL" +
-      " AND (stocked.stock > 0 OR stocked.track_inventory = 0))",
-  );
+// SQL: the product whose id is in `productIdColumn` has at least one variant on sale and in stock.
+const productInStockSql = (productIdColumn) =>
+  "EXISTS (SELECT 1 FROM product_variants AS stocked" +
+  ` WHERE stocked.product_id = ${productIdColumn}` +
+  " AND stocked.is_active = 1 AND stocked.deleted_at IS NULL" +
+  " AND (stocked.stock > 0 OR stocked.track_inventory = 0))";
 
-module.exports = { variantInStock, productInStock };
+// For a Product query: the product has at least one variant on sale and in stock.
+const productInStock = () => sequelize.literal(productInStockSql("`Product`.`id`"));
+
+module.exports = { variantInStock, productInStock, productInStockSql };
