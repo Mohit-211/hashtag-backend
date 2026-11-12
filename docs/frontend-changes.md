@@ -6,7 +6,7 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
-| [2026-11-12: the category list shows only categories with products](#2026-11-12) | Not live yet | None required: read the notes |
+| [2026-11-12: the category list shows only categories with products](#2026-11-12) | `64c340f`, live | None required: read the notes |
 | [2026-11-06: `FIXED_QUANTITY` customization pricing](#2026-11-06) | `a8cb702`, live | **Required before a product gets this type**: show `fixed_price` as a total and never multiply it by quantity |
 | [2026-11-04: ShipStation after payment](#2026-11-04-shipping) | `4b5729f`, live | **Required**: stop calling `create-shipment-label`, show the order's totals, handle rate errors |
 | [2026-11-04: graphics and the $35 fee](#2026-11-04) | `4b5729f`, live | **Required now**: until it's out, customized clothing pays no $35. Send the real graphic, show the API's fee, add Saved graphics |
@@ -71,9 +71,9 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 ---
 
 <a id="2026-11-12"></a>
-## 2026-11-12: the category list shows only categories with products (not live yet)
+## 2026-11-12: the category list shows only categories with products (live)
 
-For the website, `GET product-category/get-grand-categories` now leaves out every parent category with nothing to buy, and every grand category left with none. Nothing in the shop has to change: the answer has the same shape, with fewer entries. On 12 November that hides 9 of the 39 parent categories, and Office & Stationery, none of whose 3 parent categories has a product.
+Live since 12 November (`64c340f`). For the website, `GET product-category/get-grand-categories` now leaves out every parent category with nothing to buy, and every grand category left with none. Nothing in the shop has to change: the answer has the same shape, with fewer entries. On 12 November that hides 9 of the 39 parent categories, and Office & Stationery, none of whose 3 parent categories has a product.
 
 - **Parent categories kept:** those where `GET product?category_id=<parent id>` would list at least one product (active, not discontinued, in stock), so a customer browsing the menu never opens an empty category.
 - **Grand categories:** listed only when at least one of their parent categories is kept, and `total` and `totalPages` count only those. A grand category with no parent categories isn't listed either, so the fallback in `buildFilterParams` that sends the grand category's own id as `category_id` is no longer reached from this list.

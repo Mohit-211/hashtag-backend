@@ -5,7 +5,7 @@ What each backend release changes for the admin panel, and what the panel has to
 | Release | Backend commit | Panel action |
 |---|---|---|
 | [2026-11-12: pricing templates](#2026-11-12-templates) | Not live yet | None: the panel's F29 code already calls them this way |
-| [2026-11-12: the website's category list leaves out empty categories](#2026-11-12-categories) | Not live yet | None: the panel's admin token gets every category, as before |
+| [2026-11-12: the website's category list leaves out empty categories](#2026-11-12-categories) | `64c340f`, live | None: the panel's admin token gets every category, as before |
 | [2026-11-12: "No Parent Category only" across the catalog](#2026-11-12) | `20ebba1`, live | None: the panel's `fe828f9` already sends it (F28) |
 | [2026-11-06: `FIXED_QUANTITY` customization pricing](#2026-11-06) | `a8cb702`, live | None: `22d03d2` already sends it. Add it to products only after the shop's release |
 | [2026-11-04: ShipStation after payment](#2026-11-04-shipping) | `4b5729f`, live | **Recommended**: the failure reason and a "Try again" button on the order's Shipping tab |
@@ -89,9 +89,9 @@ Four admin-only endpoints for the Pricing Templates page and the Save and Load d
 ---
 
 <a id="2026-11-12-categories"></a>
-## 2026-11-12: the website's category list leaves out empty categories (not live yet)
+## 2026-11-12: the website's category list leaves out empty categories (live)
 
-`GET product-category/get-grand-categories` now gives the website only the grand and parent categories that have products to show. The panel needs no change: it sends its admin token on every request, and a valid admin token gets the full list exactly as before, empty categories included.
+Live since 12 November (`64c340f`). `GET product-category/get-grand-categories` now gives the website only the grand and parent categories that have products to show. The panel needs no change: it sends its admin token on every request, and a valid admin token gets the full list exactly as before, empty categories included.
 
 - If the panel calls it without a valid token, as when a session has just expired, it gets the website's shorter list rather than an error. Its other calls answer `401` then, which signs the admin out.
 - The rule, and what it hides today, are in [frontend-changes.md](frontend-changes.md#2026-11-12).
