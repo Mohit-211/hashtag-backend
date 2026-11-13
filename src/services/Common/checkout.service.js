@@ -1129,9 +1129,9 @@ const createPayPalOrder = async (body) => {
         ],
 
         applicationContext: {
-          returnUrl: "http://localhost:3000/checkout/paypal/success",
+          returnUrl: "https://hashtagbillionaire.com/checkout/paypal/success",
 
-          cancelUrl: "http://localhost:3000/checkout/paypal/cancel",
+          cancelUrl: "https://hashtagbillionaire.com/checkout/paypal/cancel",
         },
       },
     };
