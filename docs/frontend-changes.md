@@ -6,7 +6,7 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
-| [2026-11-13: colours and sizes on product cards](#2026-11-13) | Not live yet | Optional: show colour swatches and the size range on cards |
+| [2026-11-13: colours and sizes on product cards](#2026-11-13) | `630d20c`, live | Optional: show colour swatches and the size range on cards |
 | [2026-11-12: the category list shows only categories with products](#2026-11-12) | `64c340f`, live | None required: read the notes |
 | [2026-11-06: `FIXED_QUANTITY` customization pricing](#2026-11-06) | `a8cb702`, live | **Required before a product gets this type**: show `fixed_price` as a total and never multiply it by quantity |
 | [2026-11-04: ShipStation after payment](#2026-11-04-shipping) | `4b5729f`, live | **Required**: stop calling `create-shipment-label`, show the order's totals, handle rate errors |
@@ -72,9 +72,9 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 ---
 
 <a id="2026-11-13"></a>
-## 2026-11-13: colours and sizes on product cards (not live yet)
+## 2026-11-13: colours and sizes on product cards (live)
 
-`GET product` and `GET industry/use-case/products` add two fields to every product, for cards with colour swatches and a size range. Everything else in the answer is unchanged.
+Live since 13 November (`630d20c`). `GET product` and `GET industry/use-case/products` add two fields to every product, for cards with colour swatches and a size range. Everything else in the answer is unchanged.
 
 ```json
 {
@@ -98,7 +98,7 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
   - `color_code` can hold two codes for two-tone colours: `"#000000,#008000"`.
   - Only colours with something in stock are listed, as with the list's prices.
   - It's empty when there's no colour to choose: business cards, flyers, banners, and SAGE products whose only colour is "Various". Show no swatches then.
-- **`size_range`:** the sizes as one text to show as it is, or `null` when there are none (hats, coasters, mugs, most promotional products). Examples: `"XS - 4XL"`, `"LT - 4XLT"`, `"XS - 4XL, LT - 4XLT"` when there are regular and tall sizes, `"OSFA"`, `"Adjustable"`, `"3030 - 4832"` (waist and inseam), and for products the team adds, the size-like option: `"4\" × 6\" - 11\" × 17\""` (flyers), `"1.5\" - 4\""` (patches).
+- **`size_range`:** the sizes as one text to show as it is, or `null` when there are none (hats, coasters, mugs, most promotional products). Examples: `"XS - 4XL"`, `"LT - 4XLT"`, `"XS - 4XL, LT - 4XLT"` when there are regular and tall sizes, `"OSFA"`, `"Adjustable"`, `"One Size"` (many SAGE products), `"3030 - 4832"` (waist and inseam), and for products the team adds, the size-like option: `"4\" × 6\" - 11\" × 17\""` (flyers), `"1.5\" - 4\""` (patches).
 
 ---
 
