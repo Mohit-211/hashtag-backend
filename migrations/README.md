@@ -27,4 +27,4 @@ There is no `npm run migrate`. It used `sequelize.sync({ alter: true })`, which 
 | `2026-11-04_shipstation_after_payment_before_deploy.sql` | before deploying ShipStation after payment | run 4 Nov |
 | `2026-11-06_customization_fixed_quantity_before_deploy.sql` | before deploying `FIXED_QUANTITY` pricing | run 6 Nov |
 | `2026-11-12_pricing_templates_before_deploy.sql` | before deploying `adeb71f` | run 12 Nov |
-| `2026-11-13_payments_go_live_before_deploy.sql` | before deploying the payments go-live release | not run yet |
+| `2026-11-13_payments_go_live_before_deploy.sql` | before deploying `2634b76` | not run yet |

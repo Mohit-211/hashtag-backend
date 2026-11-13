@@ -4,7 +4,7 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
-| [2026-11-13: payments go-live](#2026-11-13-go-live) | not deployed yet | Done in Hashtag-Billionaire-Admin in the same release (see the section) |
+| [2026-11-13: payments go-live](#2026-11-13-go-live) | `2634b76`, not deployed yet | Done in Hashtag-Billionaire-Admin `66757ce`, not deployed yet. Deploy the backend first: the buttons come from its `actions` flags |
 | [2026-11-12: pricing templates](#2026-11-12-templates) | `adeb71f`, live | None: the panel's F29 code already calls them this way |
 | [2026-11-12: the website's category list leaves out empty categories](#2026-11-12-categories) | `64c340f`, live | None: the panel's admin token gets every category, as before |
 | [2026-11-12: "No Parent Category only" across the catalog](#2026-11-12) | `20ebba1`, live | None: the panel's `fe828f9` already sends it (F28) |
@@ -66,7 +66,7 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 <a id="2026-11-13-go-live"></a>
 ## 2026-11-13: payments go-live (not deployed yet)
 
-The panel's side was changed in the same release. Run `migrations/2026-11-13_payments_go_live_before_deploy.sql` before deploying the backend.
+The panel's side was changed in the same release (`66757ce`). Run `migrations/2026-11-13_payments_go_live_before_deploy.sql` before deploying the backend.
 
 ### Orders: `GET order/admin`
 - `payment_status` filter: `SUCCESS` (the default), `PENDING` (unpaid), `REJECTED` (payment failed) or `ALL`.

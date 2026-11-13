@@ -6,7 +6,7 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
-| [2026-11-13: payments go-live](#2026-11-13-go-live) | not deployed yet | Done in hashtag-next in the same release (see the section) |
+| [2026-11-13: payments go-live](#2026-11-13-go-live) | `2634b76`, not deployed yet | Done in hashtag-next `744ba16` and `5d0fcff`, not deployed yet |
 | [2026-11-13: colours and sizes on product cards](#2026-11-13) | `630d20c`, live | Optional: show colour swatches and the size range on cards |
 | [2026-11-12: the category list shows only categories with products](#2026-11-12) | `64c340f`, live | None required: read the notes |
 | [2026-11-06: `FIXED_QUANTITY` customization pricing](#2026-11-06) | `a8cb702`, live | **Required before a product gets this type**: show `fixed_price` as a total and never multiply it by quantity |
@@ -75,7 +75,7 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 <a id="2026-11-13-go-live"></a>
 ## 2026-11-13: payments go-live (not deployed yet)
 
-The release that lets the shop take real money. The shop's side was changed in hashtag-next in the same release, so this section is the reference for what the API now does. A database migration runs first: `migrations/2026-11-13_payments_go_live_before_deploy.sql`.
+The release that lets the shop take real money. The shop's side was changed in hashtag-next in the same release (`744ba16` decoration pricing, `5d0fcff` checkout), so this section is the reference for what the API now does. A database migration runs first: `migrations/2026-11-13_payments_go_live_before_deploy.sql`.
 
 ### Statuses: one meaning everywhere
 
