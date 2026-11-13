@@ -35,6 +35,7 @@ const { variantInStock, productInStock } = require("../../utils/stock");
 const settings = require("../../config/settings");
 const { buildPricingTiers, buildSellingTiers, netPriceTiers } = require("../../utils/pricing/pricing.util");
 const { parseQuantityPricing } = require("../../utils/pricing/pricingRows");
+const { sizeRange, groupColours, pickFrontImage } = require("../../utils/listingVariants");
 const {
   resolveTierProductIds,
   resolveAllTierProductIds,
@@ -1487,6 +1488,81 @@ const withListingPrice = async (data, minVariant, markupMap) => {
 };
 
 // Listing cards for plain product rows: each priced from its cheapest variant in stock.
+// Front picture of each variant that has one: variant id -> URL.
+const frontImagesOf = async (variantIds) => {
+  if (!variantIds.length) return new Map();
+
+  const images = await VariantAttachment.findAll({
+    where: { variant_id: { [Op.in]: variantIds }, is_active: true },
+    attributes: ["id", "variant_id", "file_name", "file_uri", "is_primary"],
+    raw: true,
+  });
+
+  const byVariant = new Map();
+  for (const image of images) {
+    if (!image.file_uri) continue;
+    const id = Number(image.variant_id);
+    if (!byVariant.has(id)) byVariant.set(id, []);
+    byVariant.get(id).push(image);
+  }
+
+  return new Map([...byVariant].map(([id, list]) => [id, pickFrontImage(list).file_uri]));
+};
+
+// Admin's order for sizes nothing else can order ("Economy", "Premium"): by size row, then variant.
+const bySizeRow = (a, b) =>
+  (Number(a.size_id) || Infinity) - (Number(b.size_id) || Infinity) || Number(a.id) - Number(b.id);
+
+// Adds two fields to listing cards:
+// - variants: one per colour, { variant_id, color_name, color_code, image }, in the supplier's
+//   order. image is the colour's front picture, or null when there's none (keep the product's).
+//   Empty when the product has no colour to choose.
+// - size_range: "XS - 3XL", `4" × 6" - 11" × 17"`, "OSFA"; null when there are no sizes.
+// `variants` are the page's in-stock variants with id, product_id, color, color_code, size and
+// size_id. Pictures cost one query, and a second only for colours whose smallest size has none.
+const withColoursAndSizes = async (products, variants) => {
+  const byProduct = new Map();
+  for (const variant of variants) {
+    const productId = Number(variant.product_id);
+    if (!byProduct.has(productId)) byProduct.set(productId, []);
+    byProduct.get(productId).push(variant);
+  }
+
+  const cards = products.map((product) => {
+    const own = byProduct.get(Number(product.id)) || [];
+    return {
+      product,
+      colours: groupColours(own),
+      size_range: sizeRange([...own].sort(bySizeRow).map((variant) => variant.size)),
+    };
+  });
+
+  const images = await frontImagesOf(cards.flatMap((card) => card.colours.map((colour) => colour.variant_ids[0])));
+
+  const retry = cards.flatMap((card) =>
+    card.colours
+      .filter((colour) => !images.has(colour.variant_ids[0]))
+      .flatMap((colour) => colour.variant_ids.slice(1)),
+  );
+  for (const [id, uri] of await frontImagesOf(retry)) images.set(id, uri);
+
+  return cards.map(({ product, colours, size_range }) => ({
+    ...product,
+    variants: colours.map((colour) => {
+      const variantId = colour.variant_ids.find((id) => images.has(id)) ?? colour.variant_ids[0];
+      return {
+        variant_id: variantId,
+        color_name: colour.color_name,
+        color_code: colour.color_code,
+        image: images.get(variantId) || null,
+      };
+    }),
+    size_range,
+  }));
+};
+
+// Listing cards priced from their cheapest variant, with their colours and sizes. Used by
+// GET industry/use-case/products.
 const withListingPrices = async (products) => {
   const variants = await ProductVariant.findAll({
     where: {
@@ -1494,13 +1570,15 @@ const withListingPrices = async (products) => {
       is_active: true,
       [Op.and]: [variantInStock()],
     },
-    attributes: ["product_id", "price", "case_price", "supplier", "meta"],
+    attributes: ["id", "product_id", "price", "case_price", "supplier", "meta", "color", "color_code", "size", "size_id"],
     raw: true,
   });
 
   const variantMap = cheapestVariantByProduct(variants);
 
-  return Promise.all(products.map((product) => withListingPrice(product, variantMap[product.id])));
+  const priced = await Promise.all(products.map((product) => withListingPrice(product, variantMap[product.id])));
+
+  return withColoursAndSizes(priced, variants);
 };
 
 // What a shopper pays for a variant (Q47): one calculation for guests, signed-in customers
@@ -2020,13 +2098,16 @@ const getAllProducts = async (query) => {
     const variants = await ProductVariant.findAll({
       where: { product_id: { [Op.in]: productIds }, is_active: true, [Op.and]: [variantInStock()] },
       attributes: [
+        "id",
         "product_id",
         "price",
         "case_price",
         "supplier",
         "meta",
         "size",
+        "size_id",
         "color",
+        "color_code",
       ],
       raw: true,
     });
@@ -2044,7 +2125,7 @@ const getAllProducts = async (query) => {
     );
 
     return {
-      data: formattedProducts,
+      data: await withColoursAndSizes(formattedProducts, variants),
       pagination: {
         total: count,
         page,
