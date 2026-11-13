@@ -4,6 +4,7 @@ const responseWrapper = require("../../config/responseWrapper");
 const { orderService, addressService } = require("../../services");
 const { getShippingRates } = require("../../config/shipstation");
 const shipmentService = require("../../services/Common/shipment.service");
+const orderAdminService = require("../../services/Common/orderAdmin.service");
 const { NOT_SHIPPED_MESSAGE } = require("../../config/shippingRegions");
 const { Address, Cart, ProductVariant, Order } = require("../../models");
 const ApiError = require("../../utils/ApiError");
@@ -45,8 +46,13 @@ const getShippingRatesController = catchAsync(async (req, res) => {
   return responseWrapper(res, rates, "Shipping Rates", 200);
 });
 
+// page and limit come from the query string; a GET has no body to carry them.
 const getOrders = catchAsync(async (req, res) => {
-  const data = await orderService.getOrders(req.body);
+  const data = await orderService.getOrders({
+    user: req.body.user,
+    page: req.query.page,
+    limit: req.query.limit,
+  });
   return responseWrapper(res, data, "", httpStatus.OK);
 });
 
@@ -130,10 +136,25 @@ const createShipmentLabel = catchAsync(async (req, res) => {
   );
 });
 
-// The admin's "try again" when an order's label failed after payment.
+// The admin's Buy label: automatic labels are off, or buying the label failed.
 const retryOrderShipment = catchAsync(async (req, res) => {
   const data = await shipmentService.retryOrderShipment(req.params.id);
   return responseWrapper(res, data, "Label created", httpStatus.OK);
+});
+
+// Voids an unused label, puts stock back and marks the order cancelled. Doesn't refund.
+const adminCancelOrder = catchAsync(async (req, res) => {
+  const data = await orderAdminService.adminCancelOrder(req.params.id, {
+    reason: req.body?.reason,
+    adminId: req.admin?.id,
+  });
+  return responseWrapper(res, data, "Order cancelled", httpStatus.OK);
+});
+
+// Hides an unpaid or cancelled order.
+const adminDeleteOrder = catchAsync(async (req, res) => {
+  const data = await orderAdminService.adminDeleteOrder(req.params.id, { adminId: req.admin?.id });
+  return responseWrapper(res, data, "Order deleted", httpStatus.OK);
 });
 
 const getAdminOrders = catchAsync(async (req, res) => {
@@ -155,6 +176,8 @@ module.exports = {
   getShippingRatesController,
   createShipmentLabel,
   retryOrderShipment,
+  adminCancelOrder,
+  adminDeleteOrder,
 
   shipstationWebhook,
 

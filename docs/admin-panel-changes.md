@@ -4,6 +4,7 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
+| [2026-11-13: payments go-live](#2026-11-13-go-live) | not deployed yet | Done in Hashtag-Billionaire-Admin in the same release (see the section) |
 | [2026-11-12: pricing templates](#2026-11-12-templates) | `adeb71f`, live | None: the panel's F29 code already calls them this way |
 | [2026-11-12: the website's category list leaves out empty categories](#2026-11-12-categories) | `64c340f`, live | None: the panel's admin token gets every category, as before |
 | [2026-11-12: "No Parent Category only" across the catalog](#2026-11-12) | `20ebba1`, live | None: the panel's `fe828f9` already sends it (F28) |
@@ -61,6 +62,32 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 2. **The 2 unpaid orders the panel doesn't show:** when a customer's cart changes, the backend soft-deletes their latest unpaid order (`invalidatePendingOrder` in `cartWishlist.service.js`), and orders are paranoid, so those two are hidden from every list. Nothing is missing on the panel's side; the behaviour itself is on the payments list (audit H8).
 
 ---
+
+<a id="2026-11-13-go-live"></a>
+## 2026-11-13: payments go-live (not deployed yet)
+
+The panel's side was changed in the same release. Run `migrations/2026-11-13_payments_go_live_before_deploy.sql` before deploying the backend.
+
+### Orders: `GET order/admin`
+- `payment_status` filter: `SUCCESS` (the default), `PENDING` (unpaid), `REJECTED` (payment failed) or `ALL`.
+- Each order adds `handling_amount`, `tax_rate`, `tax_amount`, `attention_note`, `cancelled_at`, `cancel_reason`, and `actions: { can_buy_label, can_cancel, can_delete }`. The flags are the only rule the panel uses for its buttons; the endpoints check the same rules.
+- `attention_note` is something the team must deal with: stock that ran out between checkout and payment, a payment that arrived for a cancelled order, or a second payment for a paid order (refund one).
+- Statuses mean the same everywhere (order, payment, shipment); the list is in [the shop's notes](frontend-changes.md#2026-11-13-go-live).
+
+### Order actions
+| Button | Endpoint | Allowed when | What it does |
+|---|---|---|---|
+| Buy label / Try again | `POST order/admin/:id/label` | Paid, not cancelled, no label, shipment `PENDING` or `FAILED` | Buys the label now; works whether automatic labels are on or off. `502` carries ShipStation's reason, `409` means one is already being bought. |
+| Cancel order | `POST order/admin/:id/cancel` `{ reason? }` | Not cancelled and not yet with the carrier | Voids an unused label, takes the order off ShipStation, puts stock back if it was paid, sets `CANCELLED`. **Doesn't refund** (question 34): refund in Square or PayPal. Answers `{ order, warnings }`; `409` when ShipStation won't void the label, and then nothing changed. |
+| Delete order | `DELETE order/admin/:id` | Unpaid (no payment still processing, no label), or cancelled | Hides the order (soft delete) from the panel and the customer's account. |
+
+### Settings
+- **Shipping → "Buy shipping labels automatically"** (`SHIPSTATION_AUTO_LABELS`, on by default). Off: paid orders wait with shipment `PENDING`, nothing goes to ShipStation, and the admin presses Buy label. Turn it off while payments are in sandbox: ShipStation labels are always real.
+- **Order fees → "Handling fee"** (`HANDLING_FEE_RULE`, new type `handling_fee`, JSON text `{ amount, label, category_ids, suppliers }`). It's charged once per order when any product is in one of the categories **and** from one of the suppliers; an empty list matches any. Amount 0, or both lists empty, means no fee. Suppliers are `SS`, `SANMAR`, `OTTOCAP`, `MANUAL`, `SAGE`, or `SAGE:<number>`. The migration sets today's rule: $35, Tumblers, SAGE:51093.
+- `GET admin/settings/handling-fee-options` → `{ categories: [{ id, title, supplier }], suppliers: [{ value, label }] }` for the pickers.
+
+### Payments: `GET payment/admin/all`
+Now admin-only, as are `payment/count` and `payment/sum`. `order.shipping_amount` is what the customer paid; the label's cost is the new `order.actual_shipping_cost`. New: `order.handling_amount`, `order.tax_amount`.
 
 <a id="2026-11-12-templates"></a>
 ## 2026-11-12: pricing templates (live)

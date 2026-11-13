@@ -19,7 +19,9 @@ const mask = (text) => (text.length >= 20 ? `${text.slice(0, 5)}…${text.slice(
 
 const asText = (value) => {
   if (value === null || value === undefined) return null;
-  return Array.isArray(value) ? value.join(",") : String(value);
+  if (Array.isArray(value)) return value.join(",");
+  // A handling_fee rule is an object; the page edits it as JSON text.
+  return typeof value === "object" ? JSON.stringify(value) : String(value);
 };
 
 const describe = (setting, admins, reveal) => {

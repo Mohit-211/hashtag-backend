@@ -10,6 +10,8 @@ const { emailLimiter, settingsKeyLimiter } = require("../../../middlewares/rateL
 router.use(adminAuthMiddleware.requireAdmin);
 
 router.get("/", settingsController.getSettings);
+// The categories and suppliers the order handling fee can be limited to.
+router.get("/handling-fee-options", settingsController.getHandlingFeeOptions);
 router.post("/unlock", settingsKeyLimiter, settingsController.unlockSettings);
 router.put("/", settingsKeyLimiter, settingsController.updateSettings);
 router.post("/test-email", emailLimiter, settingsController.sendTestEmail);

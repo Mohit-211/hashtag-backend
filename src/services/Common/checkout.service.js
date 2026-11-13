@@ -3,7 +3,6 @@ const ApiError = require("../../utils/ApiError");
 const httpStatus = require("http-status");
 const {
   User,
-  Cart,
   ProductVariant,
   Payment,
   Order,
@@ -14,7 +13,6 @@ const {
   Size,
   ProductAttachment,
 } = require("../../models");
-const { cancelShipstationShipment } = require("../../config/shipstation");
 
 const { SquareClient, SquareEnvironment } = require("square");
 const decodeHtmlEntities = require("../../utils/decodeHtmlEntities");
@@ -31,12 +29,14 @@ const {
   sumQuantity,
 } = require("../../utils/orderFormat");
 
-const { OrdersController } = require("@paypal/paypal-server-sdk");
+const { OrdersController, PaymentsController } = require("@paypal/paypal-server-sdk");
+const { Op } = require("sequelize");
+const sequelize = require("../../config/central.db");
+const logger = require("../../config/logger");
 const { getPaypalClient } = require("../../config/paypal");
-const { markGraphicsOrdered } = require("./graphic.service");
-const { shipPaidOrder } = require("./shipment.service");
 const settings = require("../../config/settings");
-const { paymentStatusTypes, orderStatusTypes } = require("../../config/types");
+const { paymentStatusTypes, orderStatusTypes, paymentModeTypes } = require("../../config/types");
+const { completeOrderPayment, failOrderPayment } = require("./paymentCompletion.service");
 
 // Built from the Settings page values (Payments), and again when they change.
 let square = { signature: null, client: null };
@@ -69,454 +69,372 @@ const getSquareConfig = async () => {
   };
 };
 
-const getOrCreateSquareCustomer = async (user) => {
-  try {
-    // EXISTING
-    if (user.square_customer_id) {
-      return user.square_customer_id;
-    }
+// Square payment ids and the mode we store for them.
+const SQUARE_SOURCE_MODES = ["CARD", "GOOGLE_PAY", "APPLE_PAY", "CASH_APP", "AFTERPAY", "ACH"];
 
-    // CREATE
-    const response = await squareClient().customers.create({
-      givenName: user.user_profile?.name || "Customer",
+// A Square charge that hasn't settled blocks a second charge for this long; after that it's
+// checked with Square again (settlePendingSquarePayments) before anything else happens.
+const SQUARE_PENDING_HOURS = 24;
 
-      emailAddress: user.email,
+const squareErrorOf = (error) => error?.errors?.[0] || error?.body?.errors?.[0] || null;
 
-      phoneNumber: user.user_profile?.mobile || undefined,
-    });
+// What to tell the customer when Square refuses a charge.
+const DECLINE_MESSAGES = {
+  CARD_DECLINED: "Your card was declined. Please use another card or another way to pay.",
+  GENERIC_DECLINE: "Your card was declined. Please use another card or another way to pay.",
+  INSUFFICIENT_FUNDS: "The card doesn't have enough funds. Please use another card.",
+  CVV_FAILURE: "The card's security code didn't match. Please check it and try again.",
+  ADDRESS_VERIFICATION_FAILURE: "The billing ZIP code didn't match the card. Please check it and try again.",
+  INVALID_EXPIRATION: "The card's expiry date isn't valid. Please check it and try again.",
+  INVALID_CARD: "The card number isn't valid. Please check it and try again.",
+  INVALID_ACCOUNT: "The card can't be used. Please use another card.",
+  CARD_EXPIRED: "The card has expired. Please use another card.",
+  CARD_NOT_SUPPORTED: "This card type isn't accepted. Please use another card.",
+  TRANSACTION_LIMIT: "The card's limit was reached. Please use another card.",
+  PAYMENT_LIMIT_EXCEEDED: "The payment limit was reached. Please use another way to pay.",
+  VOICE_FAILURE: "Your bank needs to approve this payment. Please call them, or use another card.",
+  CARD_DECLINED_VERIFICATION_REQUIRED: "Your bank needs to verify this payment. Please try again or use another card.",
+  GIFT_CARD_AVAILABLE_AMOUNT: "The gift card doesn't cover the total. Please use another card.",
+};
 
-    const customer = response.customer;
+const declineMessage = (error) => {
+  const detail = squareErrorOf(error);
+  return DECLINE_MESSAGES[detail?.code] || detail?.detail || "The payment didn't go through. Please try again or use another way to pay.";
+};
 
-    await user.update({
-      square_customer_id: customer.id,
-    });
-
-    return customer.id;
-  } catch (error) {
-    console.error("🚨 Square Customer Error:", error);
-
-    const squareMessage =
-      error?.errors?.[0]?.detail ||
-      error?.body?.errors?.[0]?.detail ||
-      error.message;
-
-    throw new ApiError(400, squareMessage);
+// What payments.payment_mode records for a Square payment. Google Pay and Apple Pay reach Square
+// as cards, so the method the customer chose wins for those.
+const squareModeOf = (payment, requested) => {
+  if (requested === "GOOGLE_PAY" || requested === "APPLE_PAY") return requested;
+  if (payment?.sourceType === "WALLET" && payment.walletDetails?.brand === "CASH_APP") return "CASH_APP";
+  if (payment?.sourceType === "CASH_APP" || requested === "CASH_APP") return "CASH_APP";
+  if (payment?.sourceType === "BUY_NOW_PAY_LATER") return "AFTERPAY";
+  if (payment?.sourceType === "BANK_ACCOUNT") return "ACH";
+  if (payment?.sourceType === "CARD") {
+    return payment.cardDetails?.card?.cardType === "DEBIT" ? "DEBIT_CARD" : "CREDIT_CARD";
   }
+  return requested && requested !== "CARD" ? requested : "CARD";
 };
 
-// Not awaited: a webhook has to answer quickly, and a failed label stays on the order for the
-// admin. Payment is already done either way.
-const shipInBackground = (order) => {
-  shipPaidOrder(order.id).catch((error) => {
-    console.error(`🚨 Shipping ${order.order_number} failed:`, error.message);
-  });
-};
+const squareAmount = (payment) => Number(payment?.amountMoney?.amount ?? 0) / 100;
 
-const createPayment = async (body) => {
-  try {
-    const { user, sourceId, order_id, payment_mode } = body;
+// The Square customer to attach payments to. A saved id from the other Square mode (sandbox
+// vs production) doesn't exist there, so it's checked and replaced when Square doesn't know it.
+const getOrCreateSquareCustomer = async (user) => {
+  const client = squareClient();
 
-    // ==================================================
-    // ALLOWED PAYMENT MODES
-    // ==================================================
-
-    const allowedModes = [
-      "CARD",
-      "GOOGLE_PAY",
-      "APPLE_PAY",
-      "CASH_APP",
-      "AFTERPAY",
-      "BANK_ACCOUNT",
-      "ACH",
-    ];
-
-    if (payment_mode && !allowedModes.includes(payment_mode)) {
-      throw new ApiError(httpStatus.BAD_REQUEST, "Invalid payment mode");
-    }
-
-    // ==================================================
-    // ORDER
-    // ==================================================
-
-    const order = await Order.findOne({
-      where: {
-        id: order_id,
-
-        user_id: user.id,
-      },
-    });
-
-    if (!order) {
-      throw new ApiError(httpStatus.NOT_FOUND, "Order not found");
-    }
-
-    if (order.payment_status === "SUCCESS") {
-      throw new ApiError(httpStatus.BAD_REQUEST, "Order already paid");
-    }
-
-    const squareCustomerId = await getOrCreateSquareCustomer(user);
-
-    const response = await squareClient().payments.create({
-      sourceId,
-      idempotencyKey: crypto.randomUUID(),
-      amountMoney: {
-        amount: BigInt(Math.round(Number(order.total_amount) * 100)),
-        currency: order.currency,
-      },
-      autocomplete: true,
-      customerId: squareCustomerId,
-      note: `Payment for Order ${order.order_number}`,
-      metadata: {
-        order_id: order.id.toString(),
-        payment_mode: payment_mode || "CARD",
-      },
-    });
-
-    const payment = response.payment;
-
-    // ==================================================
-    // DETECT ACTUAL PAYMENT TYPE
-    // ==================================================
-
-    let actualPaymentMode = payment_mode || "CARD";
-    // CARD
-    if (payment.sourceType === "CARD") {
-      const cardType = payment.cardDetails?.card?.cardType;
-
-      if (actualPaymentMode === "CARD") {
-        actualPaymentMode = cardType === "DEBIT" ? "DEBIT_CARD" : "CREDIT_CARD";
+  if (user.square_customer_id) {
+    try {
+      await client.customers.get({ customerId: user.square_customer_id });
+      return user.square_customer_id;
+    } catch (error) {
+      if (error?.statusCode !== 404) {
+        logger.error(`Square customer check failed for user ${user.id}: ${squareErrorOf(error)?.detail || error.message}`);
+        // Not knowing is no reason to block the payment: pay without a customer.
+        return undefined;
       }
     }
+  }
 
-    // CASH APP
-    if (payment.sourceType === "CASH_APP") {
-      actualPaymentMode = "CASH_APP";
-    }
-
-    // AFTERPAY
-    if (payment.sourceType === "BUY_NOW_PAY_LATER") {
-      actualPaymentMode = "AFTERPAY";
-    }
-
-    // ==================================================
-    // SAVE PAYMENT
-    // ==================================================
-
-    await Payment.create({
-      square_customer_id: squareCustomerId,
-      transaction_id: payment.id,
-      order_id: order.id,
-      amount: order.total_amount,
-      currency: order.currency,
-      payment_status: "PENDING",
-      user_id: user.id,
-      payment_mode: actualPaymentMode,
-      description: `Payment for Order ${order.order_number}`,
+  try {
+    const response = await client.customers.create({
+      givenName: user.user_profile?.name || "Customer",
+      emailAddress: user.email,
+      referenceId: String(user.id),
     });
 
-    return {
-      payment_id: payment.id,
-
-      order_id: order.id,
-
-      status: payment.status,
-
-      payment_mode: actualPaymentMode,
-
-      total: order.total_amount,
-    };
+    await user.update({ square_customer_id: response.customer.id });
+    return response.customer.id;
   } catch (error) {
-    console.error("🚨 Create Payment Error:", error);
-
-    throw new ApiError(error.statusCode || 500, error.message);
+    logger.error(`Square customer create failed for user ${user.id}: ${squareErrorOf(error)?.detail || error.message}`);
+    return undefined;
   }
 };
 
-const getSquarePaymentStatus = async (body) => {
-  try {
-    const { user, order_id } = body;
+// Asks Square about this order's unsettled charges and records what it says. Returns true if the
+// order is paid afterwards. Square's word is final; our PENDING row only says we asked.
+const settlePendingSquarePayments = async (order) => {
+  const pending = await Payment.findAll({
+    where: { order_id: order.id, payment_provider: "SQUARE", payment_status: "PENDING" },
+  });
 
-    if (!order_id) {
-      throw new ApiError(httpStatus.BAD_REQUEST, "order_id is required.");
-    }
-
-    // ==================================================
-    // FIND ORDER
-    // ==================================================
-
-    const order = await Order.findOne({
-      where: {
-        id: order_id,
-        user_id: user.id,
-      },
-      attributes: [
-        "id",
-        "order_number",
-        "payment_status",
-        "payment_method",
-        "status",
-      ],
-    });
-
-    if (!order) {
-      throw new ApiError(httpStatus.NOT_FOUND, "Order not found.");
-    }
-
-    // ==================================================
-    // FIND PAYMENT
-    // ==================================================
-
-    const payment = await Payment.findOne({
-      where: {
-        order_id: order.id,
-      },
-      order: [["id", "DESC"]],
-      attributes: [
-        "id",
-        "transaction_id",
-        "payment_status",
-        "payment_mode",
-        "payment_provider",
-        "amount",
-        "currency",
-      ],
-    });
-
-    // ==================================================
-    // RESPONSE
-    // ==================================================
-
-    return {
-      order_id: order.id,
-      order_number: order.order_number,
-
-      // This is the important status for frontend
-      payment_status: order.payment_status,
-
-      order_status: order.status,
-
-      payment_method: order.payment_method,
-
-      payment: payment
-        ? {
-            payment_id: payment.id,
-            transaction_id: payment.transaction_id,
-            payment_status: payment.payment_status,
-            payment_mode: payment.payment_mode,
-            payment_provider: payment.payment_provider,
-            amount: payment.amount,
-            currency: payment.currency,
-          }
-        : null,
-    };
-  } catch (error) {
-    console.error("🚨 Get Square Payment Status Error:", error);
-
-    if (error instanceof ApiError) {
+  for (const row of pending) {
+    let payment;
+    try {
+      ({ payment } = await squareClient().payments.get({ paymentId: row.transaction_id }));
+    } catch (error) {
+      if (error?.statusCode === 404) {
+        await row.update({ payment_status: "REJECTED" });
+        continue;
+      }
       throw error;
     }
 
-    throw new ApiError(
-      httpStatus.INTERNAL_SERVER_ERROR,
-      "Failed to get payment status.",
-    );
+    if (payment?.status === "COMPLETED") {
+      await completeOrderPayment({
+        orderId: order.id,
+        provider: "SQUARE",
+        transactionId: payment.id,
+        amount: squareAmount(payment),
+        currency: payment.amountMoney?.currency,
+        mode: row.payment_mode,
+        squareCustomerId: payment.customerId || row.square_customer_id,
+      });
+    } else if (["FAILED", "CANCELED"].includes(payment?.status)) {
+      await failOrderPayment({ orderId: order.id, provider: "SQUARE", transactionId: payment.id });
+    }
   }
+
+  await order.reload();
+  return order.payment_status === "SUCCESS";
 };
 
-const squareWebhook = async (body) => {
-  try {
-    // ==================================================
-    // EVENT TYPE
-    // ==================================================
+const paymentResult = (order, payment, mode) => ({
+  order_id: order.id,
+  order_number: order.order_number,
+  payment_id: payment?.id || null,
+  payment_status: order.payment_status,
+  payment_mode: mode,
+  total: Number(order.total_amount),
+});
 
-    const eventType = body.type;
+// Charges the order's total with a Square token (card, Google Pay or Cash App). The order is
+// paid as soon as Square says COMPLETED; the webhook only fills in what this missed.
+const createPayment = async (body) => {
+  const { user, sourceId, order_id } = body;
+  const requested = String(body.payment_mode || "CARD").toUpperCase();
 
-    if (eventType !== "payment.updated") {
-      return;
-    }
-
-    // ==================================================
-    // PAYMENT OBJECT
-    // ==================================================
-
-    const paymentObject = body.data?.object?.payment;
-
-    if (!paymentObject) {
-      console.log("❌ Payment object missing");
-      return;
-    }
-
-    const paymentId = paymentObject.id;
-
-    console.log(`💳 Processing Payment: ${paymentId}`);
-
-    // ==================================================
-    // PAYMENT RECORD
-    // ==================================================
-
-    const paymentRecord = await Payment.findOne({
-      where: {
-        transaction_id: paymentId,
-      },
-    });
-
-    if (!paymentRecord) {
-      console.log("❌ Payment record not found");
-      return;
-    }
-
-    // ==================================================
-    // ORDER
-    // ==================================================
-
-    const order = await Order.findByPk(paymentRecord.order_id, {
-      include: [
-        {
-          model: OrderItem,
-          as: "items",
-        },
-      ],
-    });
-
-    if (!order) {
-      console.log("❌ Order not found");
-      return;
-    }
-
-    // ==================================================
-    // SUCCESS PAYMENT
-    // ==================================================
-
-    if (paymentObject.status === "COMPLETED") {
-      // ================================================
-      // AVOID DUPLICATE WEBHOOKS
-      // ================================================
-
-      if (paymentRecord.payment_status === "SUCCESS") {
-        console.log("⚠️ Payment already processed");
-
-        return;
-      }
-
-      // ================================================
-      // VALIDATE STOCK
-      // ================================================
-
-      for (let item of order.items) {
-        const variant = await ProductVariant.findByPk(item.variant_id);
-
-        if (!variant) {
-          throw new ApiError(httpStatus.NOT_FOUND, `Variant not found: ${item.variant_id}`);
-        }
-
-        if (variant.track_inventory && variant.stock < item.quantity) {
-          throw new ApiError(httpStatus.BAD_REQUEST, `Insufficient stock for ${variant.sku}`);
-        }
-      }
-
-      // ================================================
-      // REDUCE STOCK
-      // ================================================
-
-      for (let item of order.items) {
-        const variant = await ProductVariant.findByPk(item.variant_id);
-
-        if (variant?.track_inventory) {
-          await variant.decrement("stock", {
-            by: item.quantity,
-          });
-        }
-      }
-
-      // ================================================
-      // UPDATE ORDER
-      // ================================================
-
-      await order.update({
-        payment_status: "SUCCESS",
-
-        status: order.label_id ? "SHIPPED" : "CONFIRMED",
-
-        shipment_status: order.label_id ? "SUCCESS" : "PENDING",
-
-        payment_method: paymentRecord.payment_mode,
-      });
-
-      // ================================================
-      // UPDATE PAYMENT
-      // ================================================
-
-      await paymentRecord.update({
-        payment_status: "SUCCESS",
-      });
-
-      // ================================================
-      // CLEAR CART
-      // ================================================
-
-      await Cart.destroy({
-        where: {
-          user_id: order.user_id,
-        },
-      });
-
-      shipInBackground(order);
-
-      await markGraphicsOrdered(order);
-
-      console.log(`✅ PAYMENT SUCCESS: ${order.order_number}`);
-
-      return;
-    }
-
-    // ==================================================
-    // FAILED / CANCELED PAYMENT
-    // ==================================================
-
-    if (["FAILED", "CANCELED"].includes(paymentObject.status)) {
-      console.log(`🚫 PAYMENT FAILED: ${order.order_number}`);
-
-      // ================================================
-      // UPDATE PAYMENT
-      // ================================================
-
-      await paymentRecord.update({
-        payment_status: "REJECTED",
-      });
-
-      // ================================================
-      // UPDATE ORDER
-      // ================================================
-
-      await order.update({
-        payment_status: "REJECTED",
-
-        status: "PAYMENT_FAILED",
-      });
-
-      // ================================================
-      // VOID LABEL
-      // ================================================
-
-      try {
-        await cancelShipstationShipment(order);
-
-        console.log(`🚫 Label voided for ${order.order_number}`);
-      } catch (voidError) {
-        console.error("🚨 Void Label Error:", voidError.message);
-      }
-
-      return;
-    }
-
-    // ==================================================
-    // PENDING / AUTHORIZED
-    // ==================================================
-
-    console.log(`ℹ️ Payment status ignored: ${paymentObject.status}`);
-  } catch (error) {
-    console.error("🚨 Square Webhook Error:", error);
+  if (!SQUARE_SOURCE_MODES.includes(requested)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Invalid payment mode");
   }
+
+  if (!sourceId || typeof sourceId !== "string") {
+    throw new ApiError(httpStatus.BAD_REQUEST, "The payment details are missing. Please try again.");
+  }
+
+  const found = await Order.findOne({ where: { id: order_id, user_id: user.id } });
+  if (!found) throw new ApiError(httpStatus.NOT_FOUND, "Order not found");
+
+  // An earlier charge that hasn't settled is checked with Square first.
+  if (await settlePendingSquarePayments(found)) {
+    throw new ApiError(httpStatus.CONFLICT, "This order is already paid.");
+  }
+
+  const idempotencyKey = `${found.id}-${crypto.createHash("sha256").update(`${found.id}:${sourceId}`).digest("hex").slice(0, 32)}`;
+  const squareCustomerId = await getOrCreateSquareCustomer(user);
+
+  let payment;
+  let order;
+  let declineText = null;
+
+  // One charge at a time per order: the order row stays locked until the charge is recorded.
+  await sequelize.transaction(async (transaction) => {
+    order = await Order.findOne({
+      where: { id: order_id, user_id: user.id },
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+
+    if (order.payment_status === "SUCCESS") {
+      throw new ApiError(httpStatus.CONFLICT, "This order is already paid.");
+    }
+
+    if (order.status === "CANCELLED") {
+      throw new ApiError(httpStatus.CONFLICT, "This order was cancelled. Please place a new order.");
+    }
+
+    const total = Number(order.total_amount);
+    if (!(total > 0)) {
+      throw new ApiError(httpStatus.BAD_REQUEST, "This order has nothing to pay.");
+    }
+
+    const inProgress = await Payment.findOne({
+      where: {
+        order_id: order.id,
+        payment_provider: "SQUARE",
+        payment_status: "PENDING",
+        transaction_id: { [Op.ne]: null },
+        created_at: { [Op.gt]: new Date(Date.now() - SQUARE_PENDING_HOURS * 60 * 60 * 1000) },
+      },
+      transaction,
+    });
+
+    if (inProgress) {
+      throw new ApiError(httpStatus.CONFLICT, "A payment for this order is already being processed. Check My Orders in a minute.");
+    }
+
+    try {
+      ({ payment } = await squareClient().payments.create({
+        sourceId,
+        idempotencyKey,
+        amountMoney: {
+          amount: BigInt(Math.round(total * 100)),
+          currency: order.currency || "USD",
+        },
+        autocomplete: true,
+        customerId: squareCustomerId,
+        locationId: settings.get("SQUARE_LOCATION_ID") || undefined,
+        // Shown in Square's dashboard, and how the webhook finds the order if our row is missing.
+        referenceId: order.order_number,
+        note: `Order ${order.order_number}`,
+      }));
+    } catch (error) {
+      const detail = squareErrorOf(error);
+      logger.error(`Square charge for ${order.order_number} refused: ${detail?.code || error.statusCode} ${detail?.detail || error.message}`);
+
+      // A decline: Square's payment, when it sends one, is recorded as failed below.
+      const declined = error?.body?.payment || error?.payment;
+      if (declined?.id) {
+        payment = declined;
+        declineText = declineMessage(error);
+      } else {
+        throw new ApiError(
+          error?.statusCode >= 500 || !error?.statusCode ? httpStatus.BAD_GATEWAY : httpStatus.BAD_REQUEST,
+          declineMessage(error),
+        );
+      }
+    }
+
+    await Payment.findOrCreate({
+      where: { transaction_id: payment.id, payment_provider: "SQUARE" },
+      defaults: {
+        order_id: order.id,
+        user_id: user.id,
+        amount: total,
+        currency: order.currency || "USD",
+        payment_status: "PENDING",
+        payment_mode: squareModeOf(payment, requested),
+        square_customer_id: squareCustomerId || null,
+        description: `Square payment for order ${order.order_number}`,
+      },
+      transaction,
+    });
+
+    // A new attempt after a failed one: the order is unpaid again, not failed, while this one
+    // settles. A completed or failed charge moves it on below.
+    if (order.payment_status === "REJECTED") {
+      await order.update({ payment_status: "PENDING", status: "PENDING_PAYMENT" }, { transaction });
+    }
+  });
+
+  const mode = squareModeOf(payment, requested);
+
+  if (payment.status === "COMPLETED") {
+    await completeOrderPayment({
+      orderId: order.id,
+      provider: "SQUARE",
+      transactionId: payment.id,
+      amount: squareAmount(payment),
+      currency: payment.amountMoney?.currency,
+      mode,
+      squareCustomerId: payment.customerId || squareCustomerId || null,
+    });
+  } else if (["FAILED", "CANCELED"].includes(payment.status)) {
+    await failOrderPayment({ orderId: order.id, provider: "SQUARE", transactionId: payment.id, mode });
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      declineText || "The payment didn't go through. Please try again or use another way to pay.",
+    );
+  }
+
+  await order.reload();
+  return paymentResult(order, payment, mode);
+};
+
+// The website polls this while a payment settles. A charge still PENDING is checked with Square.
+const getSquarePaymentStatus = async (body) => {
+  const { user, order_id } = body;
+
+  if (!order_id) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "order_id is required.");
+  }
+
+  const order = await Order.findOne({ where: { id: order_id, user_id: user.id } });
+
+  if (!order) {
+    throw new ApiError(httpStatus.NOT_FOUND, "Order not found.");
+  }
+
+  if (order.payment_status !== "SUCCESS") {
+    try {
+      await settlePendingSquarePayments(order);
+    } catch (error) {
+      logger.error(`Square status check for ${order.order_number} failed: ${error.message}`);
+    }
+  }
+
+  const payment = await Payment.findOne({
+    where: { order_id: order.id },
+    order: [["id", "DESC"]],
+    attributes: ["id", "transaction_id", "payment_status", "payment_mode", "payment_provider", "amount", "currency"],
+  });
+
+  return {
+    order_id: order.id,
+    order_number: order.order_number,
+    // PENDING, SUCCESS or REJECTED: the one the website goes by.
+    payment_status: order.payment_status,
+    order_status: order.status,
+    payment_method: order.payment_method,
+    payment: payment
+      ? {
+          payment_id: payment.id,
+          transaction_id: payment.transaction_id,
+          payment_status: payment.payment_status,
+          payment_mode: payment.payment_mode,
+          payment_provider: payment.payment_provider,
+          amount: payment.amount,
+          currency: payment.currency,
+        }
+      : null,
+  };
+};
+
+// Square's payment.created / payment.updated events. The event itself isn't trusted (audit C3):
+// the payment is read back from Square with our own key, and only that is acted on, so a forged
+// or replayed event changes nothing. Throws on our errors, so Square retries.
+const squareWebhook = async (body) => {
+  if (!["payment.created", "payment.updated"].includes(body?.type)) return { ignored: true };
+
+  const paymentId = body?.data?.object?.payment?.id || body?.data?.id;
+  if (!paymentId || typeof paymentId !== "string") return { ignored: true };
+
+  let payment;
+  try {
+    ({ payment } = await squareClient().payments.get({ paymentId }));
+  } catch (error) {
+    // Not a payment of this Square account (for example, sandbox while production is set).
+    if (error?.statusCode === 404) return { ignored: true };
+    throw error;
+  }
+
+  if (!payment) return { ignored: true };
+
+  const row = await Payment.findOne({ where: { transaction_id: payment.id, payment_provider: "SQUARE" } });
+
+  let orderId = row?.order_id;
+  if (!orderId && payment.referenceId) {
+    const order = await Order.findOne({ where: { order_number: payment.referenceId } });
+    orderId = order?.id;
+  }
+
+  if (!orderId) return { ignored: true };
+
+  if (payment.status === "COMPLETED") {
+    await completeOrderPayment({
+      orderId,
+      provider: "SQUARE",
+      transactionId: payment.id,
+      amount: squareAmount(payment),
+      currency: payment.amountMoney?.currency,
+      mode: row?.payment_mode || squareModeOf(payment),
+      squareCustomerId: payment.customerId || row?.square_customer_id || null,
+    });
+  } else if (["FAILED", "CANCELED"].includes(payment.status)) {
+    await failOrderPayment({ orderId, provider: "SQUARE", transactionId: payment.id, mode: row?.payment_mode });
+  }
+
+  return { handled: true };
 };
 
 const getPaymentHistory = async (body, query) => {
@@ -679,6 +597,8 @@ const getPaymentHistory = async (body, query) => {
               total_amount: Number(order.total_amount || 0),
 
               subtotal_amount: Number(order.subtotal_amount || 0),
+
+              handling_amount: Number(order.handling_amount || 0),
 
               shipping_amount: Number(order.shipping_amount || 0),
 
@@ -940,7 +860,12 @@ const getAllPayments = async (query) => {
 
         payment_status: data.payment_status,
 
-        payment_method: data.payment_method,
+        // The column is payment_mode; payment_method was always undefined (panel question F4).
+        payment_method: data.payment_mode,
+
+        payment_mode: data.payment_mode,
+
+        payment_provider: data.payment_provider,
 
         created_at: data.created_at,
 
@@ -966,9 +891,14 @@ const getAllPayments = async (query) => {
 
               subtotal_amount: Number(order.subtotal_amount || 0),
 
-              shipping_amount: Number(
-                order.actual_shipping_cost || order.shipping_amount || 0,
-              ),
+              handling_amount: Number(order.handling_amount || 0),
+
+              tax_amount: Number(order.tax_amount || 0),
+
+              // What the customer paid; the label's cost is actual_shipping_cost.
+              shipping_amount: Number(order.shipping_amount || 0),
+
+              actual_shipping_cost: Number(order.actual_shipping_cost || 0),
 
               total_amount: Number(order.total_amount || 0),
 
@@ -1037,8 +967,8 @@ const getAllPayments = async (query) => {
 
                   total: Number(item.total_price || 0),
 
-                  // This list has no admin sign-in until the payments release (C1), so
-                  // customers' original files stay out of it.
+                  // Customers' original graphic files stay out of this list; the Orders page,
+                  // which production works from, has them.
                   customization_config: withoutGraphics(itemCustomization),
 
                   pricing_snapshot: itemPricing,
@@ -1079,515 +1009,259 @@ const getAllPayments = async (query) => {
   }
 };
 
-// paypal service functions
+// ====================== PAYPAL ======================
 
+// PayPal's own reason from an SDK error: { status, issue, description }.
+const paypalErrorOf = (error) => {
+  let result = error?.result;
+  if (!result && typeof error?.body === "string") {
+    try {
+      result = JSON.parse(error.body);
+    } catch {
+      result = null;
+    }
+  }
+  return {
+    status: error?.statusCode || null,
+    issue: result?.details?.[0]?.issue || result?.name || null,
+    description: result?.details?.[0]?.description || result?.message || error?.message || null,
+  };
+};
+
+const PAYPAL_MESSAGES = {
+  INSTRUMENT_DECLINED: "PayPal declined this payment method. Please choose another one in PayPal, or another way to pay.",
+  PAYER_ACTION_REQUIRED: "PayPal needs you to finish the payment there first. Please try PayPal again.",
+  ORDER_NOT_APPROVED: "The PayPal payment wasn't approved. Please try PayPal again.",
+  TRANSACTION_REFUSED: "PayPal refused this payment. Please use another way to pay.",
+  MAX_NUMBER_OF_PAYMENT_ATTEMPTS_EXCEEDED: "Too many PayPal attempts for this order. Please use another way to pay.",
+};
+
+const paypalAmount = (money) => Number(money?.value || 0);
+
+// Starts a PayPal checkout for the order's total. The website sends the customer to approval_url.
 const createPayPalOrder = async (body) => {
+  const { user, order_id } = body;
+
+  if (!order_id) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "order_id is required.");
+  }
+
+  const order = await Order.findOne({ where: { id: order_id, user_id: user.id } });
+
+  if (!order) {
+    throw new ApiError(httpStatus.NOT_FOUND, "Order not found.");
+  }
+
+  if (order.payment_status === paymentStatusTypes.SUCCESS) {
+    throw new ApiError(httpStatus.CONFLICT, "This order is already paid.");
+  }
+
+  if (order.status === orderStatusTypes.CANCELLED) {
+    throw new ApiError(httpStatus.CONFLICT, "This order was cancelled. Please place a new order.");
+  }
+
+  const amount = Number(order.total_amount);
+
+  if (!(amount > 0)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "This order has nothing to pay.");
+  }
+
+  const website = settings.getRequired("FRONTEND_URL");
+
+  let paypalOrder;
   try {
-    const { user, order_id } = body;
-
-    if (!order_id) {
-      throw new ApiError(httpStatus.BAD_REQUEST, "order_id is required.");
-    }
-
-    const order = await Order.findOne({
-      where: {
-        id: order_id,
-        user_id: user.id,
-      },
-    });
-
-    if (!order) {
-      throw new ApiError(httpStatus.NOT_FOUND, "Order not found.");
-    }
-
-    if (order.payment_status === paymentStatusTypes.SUCCESS) {
-      throw new ApiError(httpStatus.BAD_REQUEST, "Order is already paid.");
-    }
-
-    const amount = Number(order.total_amount);
-
-    if (!amount || amount <= 0) {
-      throw new ApiError(httpStatus.BAD_REQUEST, "Invalid order amount.");
-    }
-
-    const ordersController = new OrdersController(getPaypalClient());
-
-    const request = {
+    const response = await new OrdersController(getPaypalClient()).createOrder({
       body: {
         intent: "CAPTURE",
-
         purchaseUnits: [
           {
+            // How the capture and the webhook find the order.
             referenceId: String(order.id),
-
+            customId: order.order_number,
+            description: `HashtagBillionaire order ${order.order_number}`,
             amount: {
               currencyCode: order.currency || "USD",
-
               value: amount.toFixed(2),
             },
           },
         ],
-
         applicationContext: {
-          returnUrl: "https://hashtagbillionaire.com/checkout/paypal/success",
-
-          cancelUrl: "https://hashtagbillionaire.com/checkout/paypal/cancel",
+          returnUrl: `${website}/checkout/paypal/success`,
+          cancelUrl: `${website}/checkout/paypal/cancel`,
         },
       },
-    };
-
-    const response = await ordersController.createOrder(request);
-
-    const paypalOrder = response.result;
-
-    const approvalLink = paypalOrder.links?.find(
-      (link) => link.rel === "approve",
-    );
-
-    return {
-      order_id: order.id,
-      paypal_order_id: paypalOrder.id,
-
-      approval_url: approvalLink?.href || null,
-
-      status: paypalOrder.status,
-    };
+    });
+    paypalOrder = response.result;
   } catch (error) {
-    console.error("PayPal create order error:", error);
-
-    if (error instanceof ApiError) {
-      throw error;
-    }
-
-    throw new ApiError(
-      httpStatus.INTERNAL_SERVER_ERROR,
-      "Failed to create PayPal order.",
-    );
+    const detail = paypalErrorOf(error);
+    logger.error(`PayPal order for ${order.order_number} failed: ${detail.status} ${detail.issue} ${detail.description}`);
+    throw new ApiError(httpStatus.BAD_GATEWAY, "PayPal couldn't start the payment. Please try again or use another way to pay.");
   }
+
+  const approvalLink = paypalOrder.links?.find((link) => link.rel === "approve" || link.rel === "payer-action");
+
+  return {
+    order_id: order.id,
+    paypal_order_id: paypalOrder.id,
+    approval_url: approvalLink?.href || null,
+    status: paypalOrder.status,
+  };
 };
 
+// After the customer approves in PayPal: takes the money and marks the order paid straight away.
+// Safe to repeat (a refresh of the return page): an order already captured is read, not captured
+// again.
 const capturePayPalOrder = async (body) => {
-  try {
-    const { user, order_id, paypal_order_id } = body;
+  const { user, order_id, paypal_order_id } = body;
 
-    if (!order_id) {
-      throw new ApiError(httpStatus.BAD_REQUEST, "order_id is required.");
-    }
-
-    if (!paypal_order_id) {
-      throw new ApiError(
-        httpStatus.BAD_REQUEST,
-        "paypal_order_id is required.",
-      );
-    }
-
-    const order = await Order.findOne({
-      where: {
-        id: order_id,
-        user_id: user.id,
-      },
-      include: [
-        {
-          model: OrderItem,
-          as: "items",
-        },
-      ],
-    });
-
-    if (!order) {
-      throw new ApiError(httpStatus.NOT_FOUND, "Order not found.");
-    }
-
-    if (order.payment_status === paymentStatusTypes.SUCCESS) {
-      throw new ApiError(httpStatus.BAD_REQUEST, "Order is already paid.");
-    }
-
-    const ordersController = new OrdersController(getPaypalClient());
-
-    const response = await ordersController.captureOrder({
-      id: paypal_order_id,
-    });
-
-    const paypalOrder = response.result;
-
-    if (!paypalOrder) {
-      throw new ApiError(
-        httpStatus.BAD_REQUEST,
-        "Invalid PayPal capture response.",
-      );
-    }
-
-    if (paypalOrder.status !== "COMPLETED") {
-      throw new ApiError(
-        httpStatus.BAD_REQUEST,
-        `PayPal payment was not completed. Status: ${paypalOrder.status}`,
-      );
-    }
-
-    const capture = paypalOrder.purchaseUnits?.[0]?.payments?.captures?.[0];
-
-    if (!capture || capture.status !== "COMPLETED") {
-      throw new ApiError(
-        httpStatus.BAD_REQUEST,
-        "PayPal payment capture was not completed.",
-      );
-    }
-
-    /*
-     * Make sure the PayPal amount matches our Order amount.
-     * This prevents capturing a different amount against the order.
-     */
-    const capturedAmount = Number(capture.amount?.value || 0);
-    const orderAmount = Number(order.total_amount);
-
-    if (capturedAmount.toFixed(2) !== orderAmount.toFixed(2)) {
-      throw new ApiError(
-        httpStatus.BAD_REQUEST,
-        "PayPal payment amount does not match the order amount.",
-      );
-    }
-
-    return {
-      paypal_order_id: paypalOrder.id,
-      paypal_capture_id: capture.id,
-      status: capture.status,
-      amount: capture.amount,
-      order_id: order.id,
-      order_number: order.order_number,
-    };
-  } catch (error) {
-    console.error("PayPal capture order error:", error);
-
-    if (error instanceof ApiError) {
-      throw error;
-    }
-
-    throw new ApiError(
-      httpStatus.INTERNAL_SERVER_ERROR,
-      "Failed to capture PayPal payment.",
-    );
+  if (!order_id) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "order_id is required.");
   }
+
+  if (!paypal_order_id || typeof paypal_order_id !== "string") {
+    throw new ApiError(httpStatus.BAD_REQUEST, "paypal_order_id is required.");
+  }
+
+  const order = await Order.findOne({ where: { id: order_id, user_id: user.id } });
+
+  if (!order) {
+    throw new ApiError(httpStatus.NOT_FOUND, "Order not found.");
+  }
+
+  const result = (status, capture) => ({
+    order_id: order.id,
+    order_number: order.order_number,
+    paypal_order_id,
+    paypal_capture_id: capture?.id || null,
+    status,
+    payment_status: order.payment_status,
+    amount: capture?.amount || null,
+  });
+
+  if (order.payment_status === paymentStatusTypes.SUCCESS) {
+    return result("COMPLETED", null);
+  }
+
+  if (order.status === orderStatusTypes.CANCELLED) {
+    throw new ApiError(httpStatus.CONFLICT, "This order was cancelled, so the PayPal payment wasn't taken.");
+  }
+
+  const orders = new OrdersController(getPaypalClient());
+  let paypalOrder;
+
+  try {
+    paypalOrder = (await orders.captureOrder({ id: paypal_order_id })).result;
+  } catch (error) {
+    const detail = paypalErrorOf(error);
+
+    if (detail.issue === "ORDER_ALREADY_CAPTURED") {
+      paypalOrder = (await orders.getOrder({ id: paypal_order_id })).result;
+    } else {
+      logger.error(`PayPal capture for ${order.order_number} failed: ${detail.status} ${detail.issue} ${detail.description}`);
+      throw new ApiError(
+        detail.status && detail.status < 500 ? httpStatus.BAD_REQUEST : httpStatus.BAD_GATEWAY,
+        PAYPAL_MESSAGES[detail.issue] || "PayPal didn't complete the payment. Please try again or use another way to pay.",
+      );
+    }
+  }
+
+  const unit = paypalOrder?.purchaseUnits?.[0];
+
+  // The PayPal order must be the one made for this order.
+  if (String(unit?.referenceId) !== String(order.id)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "This PayPal payment doesn't belong to this order.");
+  }
+
+  const capture = unit?.payments?.captures?.[0];
+
+  if (!capture) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "PayPal didn't complete the payment. Please try again.");
+  }
+
+  if (capture.status === "COMPLETED") {
+    await completeOrderPayment({
+      orderId: order.id,
+      provider: "PAYPAL",
+      transactionId: capture.id,
+      amount: paypalAmount(capture.amount),
+      currency: capture.amount?.currencyCode || order.currency,
+      mode: paymentModeTypes.PAYPAL,
+    });
+    await order.reload();
+    return result("COMPLETED", capture);
+  }
+
+  if (capture.status === "PENDING") {
+    // PayPal is still reviewing it; its webhook completes the order. After an earlier failed
+    // attempt the order is unpaid again, not failed.
+    if (order.payment_status === paymentStatusTypes.REJECTED) {
+      await order.update({ payment_status: paymentStatusTypes.PENDING, status: orderStatusTypes.PENDING_PAYMENT });
+    }
+    return result("PENDING", capture);
+  }
+
+  await failOrderPayment({
+    orderId: order.id,
+    provider: "PAYPAL",
+    transactionId: capture.id,
+    amount: paypalAmount(capture.amount),
+    mode: paymentModeTypes.PAYPAL,
+  });
+  throw new ApiError(httpStatus.BAD_REQUEST, "PayPal declined the payment. Please use another way to pay.");
 };
 
+// PayPal's PAYMENT.CAPTURE.* events. The event itself isn't trusted (audit C3): the capture and its
+// order are read back from PayPal with our own credentials, and only that is acted on. Throws on
+// our errors, so PayPal retries.
 const paypalWebhook = async (body) => {
+  const eventType = body?.event_type;
+
+  if (!["PAYMENT.CAPTURE.COMPLETED", "PAYMENT.CAPTURE.DENIED", "PAYMENT.CAPTURE.DECLINED"].includes(eventType)) {
+    return { ignored: true };
+  }
+
+  const captureId = body?.resource?.id;
+  if (!captureId || typeof captureId !== "string") return { ignored: true };
+
+  let capture;
   try {
-    // ==================================================
-    // EVENT TYPE
-    // ==================================================
-
-    const eventType = body.event_type;
-
-    console.log(`🔔 PayPal Event: ${eventType}`);
-
-    // ==================================================
-    // PAYMENT CAPTURE COMPLETED
-    // ==================================================
-
-    if (eventType === "PAYMENT.CAPTURE.COMPLETED") {
-      const resource = body.resource;
-
-      if (!resource) {
-        console.log("❌ PayPal resource missing");
-        return;
-      }
-
-      // ==================================================
-      // PAYPAL CAPTURE
-      // ==================================================
-
-      const captureId = resource.id;
-
-      console.log(`💳 Processing PayPal Capture: ${captureId}`);
-
-      // ==================================================
-      // PAYPAL ORDER ID
-      // ==================================================
-
-      const paypalOrderId = resource.supplementary_data?.related_ids?.order_id;
-
-      if (!paypalOrderId) {
-        console.log("❌ PayPal Order ID missing");
-        return;
-      }
-
-      console.log(`🅿️ PayPal Order: ${paypalOrderId}`);
-
-      // ==================================================
-      // GET OUR ORDER ID
-      // ==================================================
-
-      /*
-       * We stored our internal order.id in PayPal:
-       *
-       * purchaseUnits[0].referenceId = order.id
-       *
-       * The capture webhook itself may not contain
-       * purchase_units/reference_id directly, so we need
-       * the PayPal order details.
-       */
-
-      const ordersController = new OrdersController(getPaypalClient());
-
-      const paypalOrderResponse = await ordersController.getOrder({
-        id: paypalOrderId,
-      });
-
-      const paypalOrder = paypalOrderResponse.result;
-
-      if (!paypalOrder) {
-        console.log("❌ PayPal Order not found");
-        return;
-      }
-
-      const purchaseUnit = paypalOrder.purchaseUnits?.[0];
-
-      if (!purchaseUnit) {
-        console.log("❌ PayPal Purchase Unit missing");
-        return;
-      }
-
-      const orderId = purchaseUnit.referenceId;
-
-      if (!orderId) {
-        console.log("❌ Internal Order ID missing from PayPal referenceId");
-        return;
-      }
-
-      console.log(`🛒 Internal Order ID: ${orderId}`);
-
-      // ==================================================
-      // ORDER
-      // ==================================================
-
-      const order = await Order.findByPk(orderId, {
-        include: [
-          {
-            model: OrderItem,
-            as: "items",
-          },
-        ],
-      });
-
-      if (!order) {
-        console.log(`❌ Order not found: ${orderId}`);
-        return;
-      }
-
-      // ==================================================
-      // DUPLICATE PAYMENT CHECK
-      // ==================================================
-
-      const existingPayment = await Payment.findOne({
-        where: {
-          transaction_id: captureId,
-          payment_provider: "PAYPAL",
-        },
-      });
-
-      if (existingPayment) {
-        console.log("⚠️ PayPal payment already processed");
-        return;
-      }
-
-      // ==================================================
-      // VALIDATE PAYMENT AMOUNT
-      // ==================================================
-
-      const capturedAmount = Number(resource.amount?.value || 0);
-      const orderAmount = Number(order.total_amount);
-
-      if (capturedAmount.toFixed(2) !== orderAmount.toFixed(2)) {
-        console.log(
-          `❌ Amount mismatch. PayPal: ${capturedAmount}, Order: ${orderAmount}`,
-        );
-
-        return;
-      }
-
-      // ==================================================
-      // VALIDATE STOCK
-      // ==================================================
-
-      for (const item of order.items) {
-        const variant = await ProductVariant.findByPk(item.variant_id);
-
-        if (!variant) {
-          throw new ApiError(httpStatus.NOT_FOUND, `Variant not found: ${item.variant_id}`);
-        }
-
-        if (variant.track_inventory && variant.stock < item.quantity) {
-          throw new ApiError(httpStatus.BAD_REQUEST, `Insufficient stock for ${variant.sku}`);
-        }
-      }
-
-      // ==================================================
-      // REDUCE STOCK
-      // ==================================================
-
-      for (const item of order.items) {
-        const variant = await ProductVariant.findByPk(item.variant_id);
-
-        if (variant?.track_inventory) {
-          await variant.decrement("stock", {
-            by: item.quantity,
-          });
-        }
-      }
-
-      // ==================================================
-      // CREATE PAYMENT RECORD
-      // ==================================================
-
-      await Payment.create({
-        transaction_id: captureId,
-
-        payment_provider: "PAYPAL",
-
-        currency: resource.amount?.currency_code || order.currency || "USD",
-
-        user_id: order.user_id,
-
-        order_id: order.id,
-
-        amount: capturedAmount,
-
-        square_customer_id: null,
-
-        description: `PayPal Payment - ${order.order_number}`,
-
-        payment_status: paymentStatusTypes.SUCCESS,
-
-        payment_mode: "PAYPAL",
-
-        is_active: true,
-      });
-
-      // ==================================================
-      // UPDATE ORDER
-      // ==================================================
-
-      await order.update({
-        payment_status: paymentStatusTypes.SUCCESS,
-
-        status: order.label_id
-          ? orderStatusTypes.SHIPPED
-          : orderStatusTypes.CONFIRMED,
-
-        shipment_status: order.label_id ? "SUCCESS" : "PENDING",
-
-        payment_method: "PAYPAL",
-      });
-
-      // ==================================================
-      // CLEAR CART
-      // ==================================================
-
-      await Cart.destroy({
-        where: {
-          user_id: order.user_id,
-        },
-      });
-
-      shipInBackground(order);
-
-      await markGraphicsOrdered(order);
-
-      console.log(`✅ PAYPAL PAYMENT SUCCESS: ${order.order_number}`);
-
-      return;
-    }
-
-    // ==================================================
-    // PAYMENT DENIED
-    // ==================================================
-
-    if (eventType === "PAYMENT.CAPTURE.DENIED") {
-      const resource = body.resource;
-
-      if (!resource) {
-        console.log("❌ PayPal resource missing");
-        return;
-      }
-
-      const captureId = resource.id;
-
-      console.log(`🚫 PayPal Capture Denied: ${captureId}`);
-
-      const paypalOrderId = resource.supplementary_data?.related_ids?.order_id;
-
-      if (!paypalOrderId) {
-        console.log("❌ PayPal Order ID missing");
-        return;
-      }
-
-      const ordersController = new OrdersController(getPaypalClient());
-
-      const paypalOrderResponse = await ordersController.getOrder({
-        id: paypalOrderId,
-      });
-
-      const paypalOrder = paypalOrderResponse.result;
-
-      const orderId = paypalOrder?.purchaseUnits?.[0]?.referenceId;
-
-      if (!orderId) {
-        console.log("❌ Internal Order ID missing");
-        return;
-      }
-
-      const order = await Order.findByPk(orderId);
-
-      if (!order) {
-        console.log("❌ Order not found");
-        return;
-      }
-
-      // Find existing payment if one exists
-      const paymentRecord = await Payment.findOne({
-        where: {
-          transaction_id: captureId,
-          payment_provider: "PAYPAL",
-        },
-      });
-
-      if (paymentRecord) {
-        await paymentRecord.update({
-          payment_status: paymentStatusTypes.REJECTED,
-        });
-      }
-
-      await order.update({
-        payment_status: paymentStatusTypes.REJECTED,
-        status: orderStatusTypes.FAILED,
-      });
-
-      // ==================================================
-      // VOID LABEL
-      // ==================================================
-
-      try {
-        await cancelShipstationShipment(order);
-
-        console.log(`🚫 Label voided for ${order.order_number}`);
-      } catch (voidError) {
-        console.error("🚨 Void Label Error:", voidError.message);
-      }
-
-      return;
-    }
-
-    // ==================================================
-    // OTHER EVENTS
-    // ==================================================
-
-    console.log(`ℹ️ PayPal event ignored: ${eventType}`);
-
-    return;
+    capture = (await new PaymentsController(getPaypalClient()).getCapturedPayment({ captureId })).result;
   } catch (error) {
-    console.error("🚨 PayPal Webhook Error:", error);
-
+    // Not a capture of this PayPal account (for example, sandbox while live is set).
+    if (paypalErrorOf(error).status === 404) return { ignored: true };
     throw error;
   }
+
+  const paypalOrderId = capture?.supplementaryData?.relatedIds?.orderId;
+  if (!paypalOrderId) return { ignored: true };
+
+  const paypalOrder = (await new OrdersController(getPaypalClient()).getOrder({ id: paypalOrderId })).result;
+  const orderId = paypalOrder?.purchaseUnits?.[0]?.referenceId;
+  if (!orderId) return { ignored: true };
+
+  const order = await Order.findByPk(orderId);
+  if (!order) return { ignored: true };
+
+  if (capture.status === "COMPLETED") {
+    await completeOrderPayment({
+      orderId: order.id,
+      provider: "PAYPAL",
+      transactionId: capture.id,
+      amount: paypalAmount(capture.amount),
+      currency: capture.amount?.currencyCode || order.currency,
+      mode: paymentModeTypes.PAYPAL,
+    });
+  } else if (["DECLINED", "FAILED"].includes(capture.status)) {
+    await failOrderPayment({
+      orderId: order.id,
+      provider: "PAYPAL",
+      transactionId: capture.id,
+      amount: paypalAmount(capture.amount),
+      mode: paymentModeTypes.PAYPAL,
+    });
+  }
+
+  return { handled: true };
 };
 
 module.exports = {

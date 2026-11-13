@@ -27,6 +27,10 @@ const tokenLimiter = limiter(15, 20, 'Too many attempts. Please try again in 15 
 // Public forms (contact us, sourcing requests).
 const publicFormLimiter = limiter(60, 10, 'Too many submissions. Please try again later.');
 
+// Payment webhooks: each event is read back from Square or PayPal, so a flood of made-up events
+// would turn into calls to them. Far above what either sends for this shop.
+const webhookLimiter = limiter(5, 300, 'Too many requests.');
+
 // The settings key on the admin Settings page: only wrong keys (403) count.
 const settingsKeyLimiter = limiter(15, 10, 'Too many wrong settings keys. Please try again in 15 minutes.', {
   skipSuccessfulRequests: true,
@@ -39,4 +43,5 @@ module.exports = {
   tokenLimiter,
   publicFormLimiter,
   settingsKeyLimiter,
+  webhookLimiter,
 };

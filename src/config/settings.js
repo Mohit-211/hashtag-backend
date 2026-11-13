@@ -5,6 +5,7 @@ const config = require("./config");
 const logger = require("./logger");
 const ApiError = require("../utils/ApiError");
 const { GROUPS, SETTINGS_BY_KEY } = require("./settingsCatalog");
+const { normalizeHandlingFeeRule } = require("../utils/pricing/handlingFeeRule");
 
 // The settings the admin manages on the Settings page (settingsCatalog.js). They're stored in
 // the app_settings table, loaded into memory at start and refreshed every minute, so get() is
@@ -130,6 +131,10 @@ const check = (setting, raw) => {
         return { error: "must be host names separated by commas, e.g. images.example.com" };
       }
       return { value: hosts, text: hosts.join(",") };
+    }
+    case "handling_fee": {
+      const result = normalizeHandlingFeeRule(text);
+      return result.error ? { error: result.error } : { value: result.value, text: JSON.stringify(result.value) };
     }
     default:
       return text ? { value: text, text } : { error: "can't be empty" };

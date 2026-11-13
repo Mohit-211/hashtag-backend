@@ -273,6 +273,30 @@ const findLabel = async (shipmentId) => {
   return (data.labels || []).find((label) => !label.voided && label.status !== "error") || null;
 };
 
+// ====================== VOID A LABEL ======================
+// Voids an unused label, so the carrier refunds it. Returns { approved, message }: ShipStation
+// can refuse, for example once the carrier has scanned the parcel.
+const voidLabel = async (labelId) => {
+  try {
+    const { data } = await shipstationApiClient.put(`/v2/labels/${labelId}/void`);
+    return { approved: Boolean(data?.approved), message: data?.message || null };
+  } catch (error) {
+    return { approved: false, message: shipstationMessage(error) };
+  }
+};
+
+// ====================== CANCEL A SHIPMENT ======================
+// Takes the order off ShipStation's Orders tab. A shipment with a label can only be cancelled
+// once the label is void. Returns { cancelled, message }.
+const cancelShipment = async (shipmentId) => {
+  try {
+    await shipstationApiClient.put(`/v2/shipments/${shipmentId}/cancel`);
+    return { cancelled: true, message: null };
+  } catch (error) {
+    return { cancelled: false, message: shipstationMessage(error) };
+  }
+};
+
 // ====================== CANCEL SHIPSTATION ORDER ======================
 const cancelShipstationShipment = async (order) => {
   try {
@@ -300,5 +324,7 @@ module.exports = {
   createShipment,
   purchaseLabel,
   findLabel,
+  voidLabel,
+  cancelShipment,
   cancelShipstationShipment,
 };

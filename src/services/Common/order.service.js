@@ -2,10 +2,7 @@
 
 const sequelize = require("../../config/central.db");
 const { calculatePricing } = require("../../config/pricing");
-const {
-  getShippingRates,
-  cancelShipstationShipment,
-} = require("../../config/shipstation");
+const { getShippingRates } = require("../../config/shipstation");
 const {
   Order,
   ProductVariant,
@@ -25,7 +22,7 @@ const { Op } = require("sequelize");
 const decodeHtmlEntities = require("../../utils/decodeHtmlEntities");
 const { NOT_SHIPPED_MESSAGE } = require("../../config/shippingRegions");
 const { canShipTo } = require("./address.service");
-const { applyGraphicFees, releaseOrderGraphics } = require("./graphic.service");
+const { applyGraphicFees } = require("./graphic.service");
 const {
   parseJson,
   getCustomizationArtwork,
@@ -38,6 +35,9 @@ const {
   sumQuantity,
 } = require("../../utils/orderFormat");
 const { paymentStatusTypes } = require("../../config/types");
+const { cartLineTotal } = require("../../utils/pricing/cartLineTotal");
+const { handlingFeeFor } = require("./handlingFee.service");
+const { orderActions, ordersWithPaymentInProgress } = require("./orderActions");
 
 const createOrder = async (body) => {
   const t = await sequelize.transaction();
@@ -148,7 +148,8 @@ const createOrder = async (body) => {
       let itemTotal = 0;
 
       if (pricingSnapshot) {
-        itemTotal = Number(pricingSnapshot.total_price || 0);
+        // An old SAGE line may still hold the per-line handling charge; the fee is per order now.
+        itemTotal = cartLineTotal(pricingSnapshot);
       } else {
         /*
        |--------------------------------------------------------------------------
@@ -191,11 +192,20 @@ const createOrder = async (body) => {
 
     const quotedShippingAmount = rate.price;
 
+    subtotal = Number(subtotal.toFixed(2));
+
+    // Once per order when a product in it triggers the fee (Settings page, Order fees), the same
+    // as the cart showed.
+    const handling = await handlingFeeFor(cartItems.map((item) => item.product_id));
+    const handlingAmount = Number(handling.amount || 0);
+
+    // Tax stays a flat 8.25% on the products (client question 29). The handling fee is taxed with
+    // them, as the per-line tumbler charge it replaces was.
     const TAX_RATE = 8.25;
 
-    const taxAmount = Number(((subtotal * TAX_RATE) / 100).toFixed(2));
+    const taxAmount = Number((((subtotal + handlingAmount) * TAX_RATE) / 100).toFixed(2));
 
-    const finalTotal = subtotal + taxAmount + quotedShippingAmount;
+    const finalTotal = subtotal + handlingAmount + taxAmount + quotedShippingAmount;
 
     const order = await Order.create(
       {
@@ -222,6 +232,8 @@ const createOrder = async (body) => {
         shipping_profit: 0,
 
         subtotal_amount: Number(subtotal.toFixed(2)),
+
+        handling_amount: handlingAmount,
 
         tax_rate: TAX_RATE,
 
@@ -286,7 +298,7 @@ const createOrder = async (body) => {
           pricingSnapshot?.product_price?.final_product_price || 0,
         );
 
-        itemTotal = Number(pricingSnapshot.total_price || 0);
+        itemTotal = cartLineTotal(pricingSnapshot);
       } else {
         /*
        |--------------------------------------------------------------------------
@@ -387,7 +399,8 @@ const createOrder = async (body) => {
 
     const updatedOrder = await Order.findByPk(order.id);
 
-    return updatedOrder;
+    // What the customer pays, for the payment step: subtotal + handling + tax + shipping.
+    return { ...updatedOrder.toJSON(), pricing_breakdown: buildOrderTotals(updatedOrder) };
   } catch (err) {
     await t.rollback();
 
@@ -398,8 +411,8 @@ const createOrder = async (body) => {
 };
 
 const getOrders = async ({ user, page = 1, limit = 10 }) => {
-  page = parseInt(page) || 1;
-  limit = parseInt(limit) || 10;
+  page = Math.max(parseInt(page) || 1, 1);
+  limit = Math.min(Math.max(parseInt(limit) || 10, 1), 50);
 
   const offset = (page - 1) * limit;
 
@@ -494,6 +507,8 @@ const getOrders = async ({ user, page = 1, limit = 10 }) => {
 
       subtotal_amount: data.subtotal_amount,
 
+      handling_amount: Number(data.handling_amount || 0),
+
       shipping_amount: data.shipping_amount,
 
       tax_rate: Number(data.tax_rate || 0),
@@ -501,6 +516,8 @@ const getOrders = async ({ user, page = 1, limit = 10 }) => {
       tax_amount: Number(data.tax_amount || 0),
 
       pricing_breakdown: buildOrderTotals(data),
+
+      status: data.status,
 
       payment_status: data.payment_status,
 
@@ -685,9 +702,18 @@ const getOrderById = async (body, order_id) => {
 
       subtotal_amount: data.subtotal_amount,
 
+      handling_amount: Number(data.handling_amount || 0),
+
+      tax_rate: Number(data.tax_rate || 0),
+
+      tax_amount: Number(data.tax_amount || 0),
+
       shipping_amount: data.shipping_amount,
 
       total_amount: data.total_amount,
+
+      // subtotal + handling + tax + shipping = total.
+      pricing_breakdown: buildOrderTotals(data),
 
       currency: data.currency,
 
@@ -702,6 +728,8 @@ const getOrderById = async (body, order_id) => {
       payment_status: data.payment_status,
 
       shipment_status: data.shipment_status,
+
+      cancelled_at: data.cancelled_at || null,
 
       /*
       |--------------------------------------------------------------------------
@@ -804,174 +832,24 @@ const getOrderById = async (body, order_id) => {
   }
 };
 
-const cancelOrder = async (body, order_id) => {
-  const t = await sequelize.transaction();
-
-  try {
-    const { user } = body;
-
-    // ==================================================
-    // FIND ORDER
-    // ==================================================
-
-    const order = await Order.findOne({
-      where: {
-        id: order_id,
-        user_id: user.id,
-      },
-
-      include: [
-        {
-          model: OrderItem,
-          as: "items",
-        },
-      ],
-
-      transaction: t,
-
-      lock: t.LOCK.UPDATE,
-    });
-
-    if (!order) {
-      throw new ApiError(httpStatus.NOT_FOUND, "Order not found");
-    }
-
-    // ==================================================
-    // BLOCKED STATUSES
-    // ==================================================
-
-    const blockedStatuses = ["DELIVERED", "CANCELLED", "SHIPPED"];
-
-    if (blockedStatuses.includes(order.status)) {
-      throw new ApiError(httpStatus.BAD_REQUEST, `Cannot cancel ${order.status} order`);
-    }
-
-    // ==================================================
-    // RESTORE STOCK ONLY IF PAYMENT SUCCESS
-    // ==================================================
-
-    if (order.payment_status === "SUCCESS") {
-      for (let item of order.items) {
-        const variant = await ProductVariant.findByPk(item.variant_id, {
-          transaction: t,
-          lock: t.LOCK.UPDATE,
-        });
-
-        if (variant?.track_inventory) {
-          await variant.increment("stock", {
-            by: item.quantity,
-            transaction: t,
-          });
-        }
-      }
-    }
-
-    // ==================================================
-    // VOID SHIPSTATION LABEL
-    // ==================================================
-
-    let shipmentError = null;
-
-    try {
-      if (order.label_id) {
-        await cancelShipstationShipment(order);
-
-        shipmentError = "Shipment cancelled and label voided";
-
-        console.log(`🚫 Label voided for ${order.order_number}`);
-      }
-    } catch (e) {
-      shipmentError = e.message?.substring(0, 500);
-
-      console.error("🚨 ShipStation Cancel Failed:", e.message);
-    }
-
-    // ==================================================
-    // UPDATE ORDER
-    // ==================================================
-
-    await order.update(
-      {
-        status: "CANCELLED",
-
-        shipment_status: "CANCELLED",
-
-        shipment_error: shipmentError,
-
-        is_active: false,
-      },
-      {
-        transaction: t,
-      },
-    );
-
-    await releaseOrderGraphics(order, t);
-
-    // ==================================================
-    // UPDATE PAYMENT
-    // ==================================================
-
-    await Payment.update(
-      {
-        payment_status:
-          order.payment_status === "SUCCESS" ? "SUCCESS" : "REJECTED",
-      },
-      {
-        where: {
-          order_id: order.id,
-        },
-
-        transaction: t,
-      },
-    );
-
-    // ==================================================
-    // UPDATE ORDER ITEMS
-    // ==================================================
-
-    await OrderItem.update(
-      {
-        shipment_status: "CANCELLED",
-
-        is_active: false,
-      },
-      {
-        where: {
-          order_id: order.id,
-        },
-
-        transaction: t,
-      },
-    );
-
-    // ==================================================
-    // COMMIT
-    // ==================================================
-
-    await t.commit();
-
-    console.log(`✅ Order Cancelled: ${order.order_number}`);
-
-    return {
-      success: true,
-
-      message: "Order cancelled successfully",
-    };
-  } catch (err) {
-    await t.rollback();
-
-    console.error("🚨 Cancel Order Error:", err.message);
-
-    throw new ApiError(err.statusCode || 500, err.message);
-  }
+// Customers can't cancel orders themselves yet: who may cancel, until when, and how refunds work
+// is open client question 34. Admins cancel from the admin panel (orderAdmin.service.js). The old
+// code here crashed before doing anything, so this changes nothing for customers.
+const cancelOrder = async () => {
+  throw new ApiError(
+    httpStatus.FORBIDDEN,
+    "Orders can't be cancelled online yet. Please contact us and we'll help.",
+  );
 };
 
+// order_id: just that order, whatever its status (the shape the cancel endpoint answers with).
 const getAdminOrders = async ({
   page = 1,
   limit = 10,
   search = "",
   status,
   payment_status,
+  order_id,
 }) => {
   page = parseInt(page) || 1;
   limit = parseInt(limit) || 10;
@@ -1003,6 +881,12 @@ const getAdminOrders = async ({
     delete where.payment_status;
   } else if (payment_status) {
     where.payment_status = payment_status;
+  }
+
+  if (order_id) {
+    delete where.payment_status;
+    delete where.status;
+    where.id = order_id;
   }
 
   /*
@@ -1244,6 +1128,8 @@ const getAdminOrders = async ({
       })
     : [];
 
+  const paymentInProgress = await ordersWithPaymentInProgress(ids.map(Number));
+
   const formatted = rows.map((order) => {
     const data = order.toJSON();
 
@@ -1262,6 +1148,13 @@ const getAdminOrders = async ({
 
       subtotal_amount: Number(data.subtotal_amount || 0),
 
+      // The order handling fee, once per order (Settings page, Order fees).
+      handling_amount: Number(data.handling_amount || 0),
+
+      tax_rate: Number(data.tax_rate || 0),
+
+      tax_amount: Number(data.tax_amount || 0),
+
       // What the customer paid; what the label cost is actual_shipping_cost (Q28).
       shipping_amount: Number(data.shipping_amount || 0),
 
@@ -1269,6 +1162,7 @@ const getAdminOrders = async ({
 
       shipping_profit: Number(data.shipping_profit || 0),
 
+      // subtotal + handling + tax + shipping.
       total_amount: Number(data.total_amount || 0),
 
       status: data.status,
@@ -1278,6 +1172,15 @@ const getAdminOrders = async ({
       shipment_status: data.shipment_status,
 
       shipment_error: data.shipment_error,
+
+      attention_note: data.attention_note || null,
+
+      cancelled_at: data.cancelled_at || null,
+
+      cancel_reason: data.cancel_reason || null,
+
+      // The buttons the admin panel shows; the endpoints behind them check the same rules.
+      actions: orderActions(data, { paymentInProgress: paymentInProgress.has(Number(data.id)) }),
 
       payment_method: data.payment_method,
 

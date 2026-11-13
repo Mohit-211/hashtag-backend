@@ -3,7 +3,8 @@
 // same name in .env is used instead (see settings.js).
 //
 // type:     string | url | email | sender | integer | number | boolean | enum | color |
-//           code2 (two capital letters) | hosts (comma-separated host names)
+//           code2 (two capital letters) | hosts (comma-separated host names) |
+//           handling_fee (JSON: amount, label, category_ids, suppliers; see handlingFeeRule.js)
 // secret:   encrypted in the database; the admin panel shows only the first and last 5
 //           characters until the settings key is entered
 // required: the site doesn't work fully without it; it can't be saved empty
@@ -14,6 +15,7 @@ const GROUPS = [
   { key: "email", label: "Email sending" },
   { key: "email_look", label: "How emails look" },
   { key: "shipping", label: "Shipping" },
+  { key: "fees", label: "Order fees" },
   { key: "payments", label: "Payments" },
   { key: "suppliers", label: "Suppliers" },
   { key: "services", label: "Other services" },
@@ -131,6 +133,25 @@ const SETTINGS = [
     required: true,
     description:
       "The V2 key from ShipStation: Settings, Account, API Settings, V2 API, Generate API Key. Rates, orders, labels and tracking. After changing it, run npm run shipstation:setup on the server.",
+  },
+  {
+    key: "SHIPSTATION_AUTO_LABELS",
+    group: "shipping",
+    label: "Buy shipping labels automatically",
+    type: "boolean",
+    default: true,
+    description:
+      "On: each paid order is sent to ShipStation and its label is bought straight away. Off: nothing goes to ShipStation until an admin presses Buy label on the order. Turn it off while payments are in sandbox, because ShipStation labels are always real.",
+  },
+
+  // Order fees
+  {
+    key: "HANDLING_FEE_RULE",
+    group: "fees",
+    label: "Handling fee",
+    type: "handling_fee",
+    description:
+      "Charged once per order when the order has at least one product in a chosen category and from a chosen supplier. Leave a list empty to match any. Amount 0, or both lists empty, turns it off.",
   },
 
   // Payments

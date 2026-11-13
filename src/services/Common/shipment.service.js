@@ -4,6 +4,7 @@ const { Op } = require("sequelize");
 const { Address, Carrier, Order, OrderItem, Product, ProductVariant } = require("../../models");
 const ApiError = require("../../utils/ApiError");
 const logger = require("../../config/logger");
+const settings = require("../../config/settings");
 const {
   createShipment,
   purchaseLabel,
@@ -28,6 +29,12 @@ const TRACKING_STATUSES = {
   SP: "DELIVERED",
   EX: "EXCEPTION",
 };
+
+// True while an attempt holds the claim: a label is being bought, or the order is being cancelled.
+const labelBeingBought = (order) =>
+  Boolean(order?.label_claimed_at) &&
+  !order.label_id &&
+  Date.now() - new Date(order.label_claimed_at).getTime() < CLAIM_TIMEOUT_MINUTES * 60 * 1000;
 
 // A label costs money and payment webhooks can repeat, so only the attempt that sets
 // label_claimed_at goes on.
@@ -82,7 +89,16 @@ const saveLabel = async (order, label) => {
 
 // Puts a paid order in ShipStation and buys its label. A failure doesn't touch the payment: it's
 // kept on the order for the admin, who can try again. Returns false if this attempt didn't run.
-const shipPaidOrder = async (orderId) => {
+//
+// After a payment it runs only while "Buy shipping labels automatically" is on (Settings page,
+// Shipping). Off, the paid order waits with shipment_status PENDING, nothing goes to ShipStation,
+// and an admin buys the label with Buy label (manual: true), which works either way.
+const shipPaidOrder = async (orderId, { manual = false } = {}) => {
+  if (!manual && settings.get("SHIPSTATION_AUTO_LABELS") === false) {
+    logger.info(`Label for order ${orderId} not bought: automatic labels are off.`);
+    return false;
+  }
+
   if (!(await claimLabel(orderId))) return false;
 
   const order = await Order.findByPk(orderId);
@@ -138,7 +154,8 @@ const shipPaidOrder = async (orderId) => {
   return true;
 };
 
-// The admin's "try again" for a paid order whose label failed.
+// The admin's Buy label: for a paid order with no label yet, because automatic labels are off
+// (shipment PENDING) or because buying it failed (FAILED, "Try again").
 const retryOrderShipment = async (orderId) => {
   const order = await Order.findByPk(orderId);
 
@@ -156,7 +173,11 @@ const retryOrderShipment = async (orderId) => {
     throw new ApiError(httpStatus.BAD_REQUEST, "This order already has a label");
   }
 
-  if (!(await shipPaidOrder(order.id))) {
+  if (!["PENDING", "FAILED"].includes(order.shipment_status)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, `A label can't be bought while the shipment is ${order.shipment_status}`);
+  }
+
+  if (!(await shipPaidOrder(order.id, { manual: true }))) {
     throw new ApiError(httpStatus.CONFLICT, "A label is already being bought for this order");
   }
 
@@ -219,4 +240,6 @@ module.exports = {
   shipPaidOrder,
   retryOrderShipment,
   updateOrderTracking,
+  labelBeingBought,
+  CLAIM_TIMEOUT_MINUTES,
 };

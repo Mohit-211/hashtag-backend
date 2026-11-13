@@ -40,9 +40,23 @@ The backend uses ShipStation API V2 and nothing else: rates, orders, labels and 
 
 Step 4 loads that account's carriers, registers the tracking webhook and prints sample rates. It creates no orders and buys no labels. Run it again after changing the key or the connected carriers: carrier ids belong to the account, so after a new key the old ones can stop rates, and with them checkout.
 
-**Testing:** a key from the web app has no sandbox, so every paid test order buys a real label. Use the cheapest service and void the label in ShipStation straight after.
+**Testing:** a key from the web app has no sandbox, so every paid test order buys a real label. While Square and PayPal are in sandbox, switch off **Buy shipping labels automatically** on the Settings page (Shipping): paid orders then wait, and an admin buys a label only when one is wanted. If one is bought by mistake, void it in ShipStation straight after.
+
+**Funds:** ShipStation's own carrier accounts (UPS, USPS, FedEx One Balance, DHL Express, SEKO) share one prepaid balance. Turn on auto-funding in ShipStation, sized for the dearest service the shop offers (UPS Next Day Air was about $69 for one small parcel in November), or labels fail with "Insufficient funds".
 
 **When a label fails:** the payment stands and the order stays paid. The reason is on the order in the admin panel, and the panel can try again.
+
+## Taking real payments
+
+Square and PayPal start in sandbox. To take real money, all of these on the same day:
+
+1. **Square** (Settings page, Payments): mode `production`, with the production application ID, location ID and access token from the Square Developer Dashboard. On that production app, add a webhook subscription for `payment.created` and `payment.updated` to `https://node.hashtagbillionaire.com/api/v1/payment/webhook/square`. Customers' saved Square customer ids from sandbox are replaced by themselves on their next payment.
+2. **PayPal** (Settings page, Payments): mode `production`, with the live client ID and secret. On the live PayPal app, add a webhook for `PAYMENT.CAPTURE.COMPLETED`, `PAYMENT.CAPTURE.DENIED` and `PAYMENT.CAPTURE.DECLINED` to `https://node.hashtagbillionaire.com/api/v1/payment/paypal/webhook`.
+3. **ShipStation**: balance funded and auto-funding on, then **Buy shipping labels automatically** on, if labels should be bought at payment. Leave it off to buy each label from the order page when the order is ready to ship.
+4. **Website address** (Settings page, Website and links) is the live shop. PayPal sends customers back to it.
+5. One real order end to end with each method: a card, Google Pay, PayPal, and Cash App from a US phone. Then refund them in Square and PayPal, and cancel the orders in the admin panel.
+
+Both webhooks read every event back from Square or PayPal before acting, so neither needs a signing key. They're a backup: the order is marked paid when the charge or capture completes.
 
 ## Upload limits
 

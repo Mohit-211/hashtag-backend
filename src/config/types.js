@@ -17,6 +17,9 @@ const paymentModeTypes = {
   ACH: "ACH",
   CARD: "CARD",
   UNKNOWN: "UNKNOWN",
+  // The payments.payment_mode column already allows it; without it here the model's ENUM listed
+  // undefined in its place.
+  PAYPAL: "PAYPAL",
 };
 
 const accountTypes = {

@@ -57,6 +57,13 @@ Order.init(
     shipping_amount: {
       type: DataTypes.DECIMAL(10, 2),
     },
+    // The order handling fee (Settings page, Order fees), charged once per order. Taxed with the
+    // products, as the old per-line tumbler charge was.
+    handling_amount: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: false,
+      defaultValue: 0,
+    },
 
     quoted_shipping_amount: {
       type: DataTypes.DECIMAL(10, 2),
@@ -152,6 +159,25 @@ Order.init(
 
     shipment_error: {
       type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    // Something the team must look at, shown on the admin's order page: stock that ran out after
+    // payment, or a payment that arrived for a cancelled order.
+    attention_note: {
+      type: DataTypes.STRING(500),
+      allowNull: true,
+    },
+    cancelled_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    // The admin who cancelled it.
+    cancelled_by: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    cancel_reason: {
+      type: DataTypes.STRING(255),
       allowNull: true,
     },
 

@@ -8,6 +8,8 @@ const { verifyShipstationWebhook } = require('../../../middlewares/shipstationWe
 
 router.get("/admin", adminAuthMiddleware.requireAdmin, orderController.getAdminOrders);
 router.post("/admin/:id/label", adminAuthMiddleware.requireAdmin, orderController.retryOrderShipment);
+router.post("/admin/:id/cancel", adminAuthMiddleware.requireAdmin, orderController.adminCancelOrder);
+router.delete("/admin/:id", adminAuthMiddleware.requireAdmin, orderController.adminDeleteOrder);
 
 router.post('/', [userAuthMiddleware.verifyAuthJWTToken], orderController.createOrder);
 router.get('/', [userAuthMiddleware.verifyAuthJWTToken],orderController.getOrders);

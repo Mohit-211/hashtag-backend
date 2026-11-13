@@ -43,6 +43,8 @@ const {
 } = require("./graphic.service");
 const { cancelShipstationShipment } = require("../../config/shipstation");
 const settings = require("../../config/settings");
+const { cartLineTotal } = require("../../utils/pricing/cartLineTotal");
+const { handlingFeeFor } = require("./handlingFee.service");
 
 // Variant's primary image, else its first image, else the product's first attachment.
 const getVariantImage = (variant) => {
@@ -2211,9 +2213,8 @@ const getCart = async (body) => {
               ?.final_product_price || 0,
           );
 
-          item_total = Number(
-            pricing_snapshot?.total_price || 0,
-          );
+          // Without an old per-line handling charge: it's an order fee now (summary below).
+          item_total = cartLineTotal(pricing_snapshot);
         }
 
         /*
@@ -2409,21 +2410,26 @@ const getCart = async (body) => {
      * ---------------------------------------------------------
      */
 
+    // Once per order, when a product in the cart triggers it (Settings page, Order fees). POST
+    // order charges the same.
+    const itemsTotal = +Number(cart_total || 0).toFixed(2);
+    const handlingFee = await handlingFeeFor(
+      data.filter((item) => item.variant).map((item) => item.product_id),
+    );
+
     return {
       items: filteredFormatted,
 
       summary: {
-        items_total:
-          +Number(
-            cart_total || 0,
-          ).toFixed(2),
+        items_total: itemsTotal,
+
+        handling_fee: handlingFee.amount,
+
+        handling_fee_label: handlingFee.label,
 
         shipping_cost: 0,
 
-        grand_total:
-          +Number(
-            cart_total || 0,
-          ).toFixed(2),
+        grand_total: +(itemsTotal + handlingFee.amount).toFixed(2),
       },
     };
   } catch (error) {

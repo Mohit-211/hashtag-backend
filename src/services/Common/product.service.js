@@ -36,6 +36,7 @@ const settings = require("../../config/settings");
 const { buildPricingTiers, buildSellingTiers, netPriceTiers } = require("../../utils/pricing/pricing.util");
 const { parseQuantityPricing } = require("../../utils/pricing/pricingRows");
 const { sizeRange, groupColours, pickFrontImage } = require("../../utils/listingVariants");
+const { productHandlingFee } = require("./handlingFee.service");
 const {
   resolveTierProductIds,
   resolveAllTierProductIds,
@@ -2492,6 +2493,9 @@ const getProductById = async (id, reqBody) => {
 
     data.variants = sortSizes(data.variants);
 
+    // { amount, label } when this product adds the order handling fee (once per order), else null.
+    data.order_handling_fee = await productHandlingFee(data.id);
+
     return data;
   } catch (error) {
     throw new ApiError(
@@ -2611,6 +2615,9 @@ const getGuestProductById = async (id) => {
     );
 
     data.variants = sortSizes(data.variants);
+
+    // { amount, label } when this product adds the order handling fee (once per order), else null.
+    data.order_handling_fee = await productHandlingFee(data.id);
 
     return data;
   } catch (error) {

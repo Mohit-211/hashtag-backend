@@ -6,6 +6,7 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
+| [2026-11-13: payments go-live](#2026-11-13-go-live) | not deployed yet | Done in hashtag-next in the same release (see the section) |
 | [2026-11-13: colours and sizes on product cards](#2026-11-13) | `630d20c`, live | Optional: show colour swatches and the size range on cards |
 | [2026-11-12: the category list shows only categories with products](#2026-11-12) | `64c340f`, live | None required: read the notes |
 | [2026-11-06: `FIXED_QUANTITY` customization pricing](#2026-11-06) | `a8cb702`, live | **Required before a product gets this type**: show `fixed_price` as a total and never multiply it by quantity |
@@ -70,6 +71,47 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 **Waiting on the client:** A8, DTG with several locations (Q8, reworded); which font settings besides the font list (Q23). **Later, by the client's choice:** A24 pre-made products from suppliers (Q26), A42 price filter (Q54), A46 Back button (Q57), policy pages editable in the admin (Q61).
 
 ---
+
+<a id="2026-11-13-go-live"></a>
+## 2026-11-13: payments go-live (not deployed yet)
+
+The release that lets the shop take real money. The shop's side was changed in hashtag-next in the same release, so this section is the reference for what the API now does. A database migration runs first: `migrations/2026-11-13_payments_go_live_before_deploy.sql`.
+
+### Statuses: one meaning everywhere
+
+| Field | Values |
+|---|---|
+| `status` | `PENDING_PAYMENT` (not paid yet) · `FAILED` (the last payment attempt failed; it can still be paid) · `CONFIRMED` (paid) · `SHIPPED` (tracking: in transit) · `DELIVERED` · `CANCELLED` (by an admin). `PENDING` is an old value: show it as awaiting payment. |
+| `payment_status` | `PENDING` · `SUCCESS` · `REJECTED` (last attempt failed). There's no `FAILED` or `REFUNDED`: refunds are done by hand in Square or PayPal. |
+| `shipment_status` | `PENDING` (no label yet) · `LABEL_CREATED` (`SUCCESS` on older orders means the same) · `FAILED` (buying the label failed; don't alarm the shopper) · `IN_TRANSIT` · `DELIVERED` · `EXCEPTION` · `CANCELLED`. `OUT_FOR_DELIVERY` and `RETURNED` are allowed but not set today. |
+
+### Money on an order
+`total_amount` = `subtotal_amount` + `handling_amount` + `tax_amount` + `shipping_amount`. Tax is still a flat 8.25% (question 29, open) and now covers products plus the handling fee, as the old per-line tumbler charge it replaces was taxed. `pricing_breakdown` repeats them as `{ subtotal, handling, tax, shipping, total }` on `POST order`, `GET order`, `GET order/:id` and `GET payment/history`.
+
+### The order handling fee (question 15)
+The client answered: once per order. An order pays the fee once if any product in it matches the rule an admin sets on the Settings page (Order fees). Today's rule is the old one: $35, SAGE category "Tumblers", SAGE supplier 51093.
+- `GET product/cart/get` → `summary` adds `handling_fee` (0 when none) and `handling_fee_label`; `grand_total` = `items_total` + `handling_fee`. Line totals never include it. Old cart lines that still carried $35 each have it taken out.
+- `GET product/:id` and `GET product/guest/:id` add `order_handling_fee`: `{ amount, label }` when the product triggers the fee, else `null`.
+- `POST order` stores it in `handling_amount`.
+
+### Decoration in `POST product/cart`
+- Each `customization` element carries its own `print_method`, `locations`, `colors` (screen print, 1–6) and `dtg_style` (`FRONT_REGULAR`, `OVERSIZED`, `FRONT_AND_BACK_REGULAR`, `FRONT_AND_BACK_OVERSIZED`). Colours set up with different decorations go in separate elements.
+- DTG is charged per location: style price × locations × quantity (client's answer to question 8).
+- Before this, the shop never sent the DTG style (DTG was charged $0) or the colour count (screen print was charged as 1 colour), and sent the last-chosen method for every colour.
+
+### Payments
+- `POST payment/square/create-payment` marks the order paid **as soon as Square completes the charge** and answers `payment_status`: `SUCCESS` (go to the confirmation), `PENDING` (poll `payment/square/payment-status`) or `REJECTED`. Declines come back as `400` with a sentence to show. `409` means already paid, a payment is already being processed, or the order was cancelled. One charge at a time per order, and a retried token never charges twice.
+- `POST payment/square/payment-status` checks a still-pending charge with Square before answering `PENDING`, `SUCCESS` or `REJECTED`.
+- `POST payment/paypal/capture-order` marks the order paid as soon as PayPal completes the capture, and answers `payment_status` (`SUCCESS` or `PENDING`). Refreshing the return page is safe. A PayPal order made for another order is refused.
+- Google Pay and Cash App must ask for the order's real total. They asked for $1.00 before.
+- Square's and PayPal's webhooks no longer trust the event: each reads the payment back from Square or PayPal (audit item C3). They're now a backup: the order is normally paid before they arrive.
+- A charge that lands after an admin cancelled the order, or a second charge for a paid order, is recorded and flagged for the team. Neither revives the order nor charges twice.
+
+### Other
+- `GET order?page=&limit=` now honours paging (before, every page was page 1). Each order adds `status` and `handling_amount`.
+- `GET order/:id` adds `tax_rate`, `tax_amount`, `handling_amount`, `pricing_breakdown` and `cancelled_at`.
+- `PATCH order/:id` (customer cancel) answers `403` "Orders can't be cancelled online yet. Please contact us." Customer cancelling is open question 34; the old code crashed.
+- PayPal's return links come from the Settings page's Website address (`FRONTEND_URL`) + `/checkout/paypal/success` and `/cancel`.
 
 <a id="2026-11-13"></a>
 ## 2026-11-13: colours and sizes on product cards (live)

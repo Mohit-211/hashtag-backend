@@ -130,8 +130,11 @@ const buildPricingBreakdown = (pricingSnapshot, isManual) => {
 };
 
 // Order-level totals block.
+// subtotal + handling + tax + shipping = total.
 const buildOrderTotals = (order) => ({
   subtotal: Number(order.subtotal_amount || 0),
+
+  handling: Number(order.handling_amount || 0),
 
   tax: Number(order.tax_amount || 0),
 

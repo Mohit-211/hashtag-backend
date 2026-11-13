@@ -3,20 +3,8 @@ const httpStatus = require("http-status");
 const ApiError = require("../ApiError");
 const { netPriceTiers } = require("./pricing.util");
 
-/*
-|--------------------------------------------------------------------------
-| SAGE HANDLING CHARGE
-|--------------------------------------------------------------------------
-*/
-
-const SAGE_HANDLING_CHARGE = {
-  enabled: true,
-  amount: 35,
-  name: "Handling Charges",
-
-  supplier_id: "51093",
-  category: "Tumblers",
-};
+// The tumblers' $35 handling charge used to be added to each SAGE cart line here. It is now an
+// order fee, charged once per order and set on the Settings page (handlingFee.service.js).
 
 const SAGE_DRINKWARE_SECOND_LOCATION_PRICE = 8;
 
@@ -626,12 +614,6 @@ const buildSagePricingSnapshot = async ({
   const supplier_markup =
     Number(productPricing.final_price) - Number(productPricing.base_price);
 
-  const handlingChargeApplicable = isSageHandlingChargeApplicable(product);
-
-  const handlingCharge = handlingChargeApplicable
-    ? Number(SAGE_HANDLING_CHARGE.amount)
-    : 0;
-
   /*
  |--------------------------------------------------------------------------
  | SAGE DRINKWARE PRINTING
@@ -692,9 +674,7 @@ const buildSagePricingSnapshot = async ({
     ),
   );
 
-  const total_price = Number(
-    (final_price_per_item * quantity + handlingCharge).toFixed(2),
-  );
+  const total_price = Number((final_price_per_item * quantity).toFixed(2));
 
   return {
     supplier: "SAGE",
@@ -702,12 +682,6 @@ const buildSagePricingSnapshot = async ({
     quantity,
 
     inquiry_only: false,
-
-    handling_charge: {
-      applicable: handlingChargeApplicable,
-      name: SAGE_HANDLING_CHARGE.name,
-      amount: handlingCharge,
-    },
 
     product_price: {
       actual_price: Number(productPricing.base_price),
@@ -765,36 +739,6 @@ const buildSagePricingSnapshot = async ({
       ...drinkwarePricingTable,
     ],
   };
-};
-
-const isSageHandlingChargeApplicable = (product) => {
-  if (!SAGE_HANDLING_CHARGE.enabled || !product) {
-    return false;
-  }
-
-  if (product.supplier !== "SAGE") {
-    return false;
-  }
-
-  if (String(product.supplier_id) !== SAGE_HANDLING_CHARGE.supplier_id) {
-    return false;
-  }
-
-  let categories = product.categories || [];
-
-  if (typeof categories === "string") {
-    try {
-      categories = JSON.parse(categories);
-    } catch (error) {
-      categories = [];
-    }
-  }
-
-  return categories.some(
-    (category) =>
-      String(category.title).toLowerCase() ===
-      SAGE_HANDLING_CHARGE.category.toLowerCase(),
-  );
 };
 
 module.exports = { buildPricingSnapshot, buildSagePricingSnapshot, lineMinimum };
