@@ -97,8 +97,12 @@ const DECLINE_MESSAGES = {
   GIFT_CARD_AVAILABLE_AMOUNT: "The gift card doesn't cover the total. Please use another card.",
 };
 
-const declineMessage = (error) => {
+// Cash App has no card to talk about, so any decline from it gets this instead.
+const CASH_APP_DECLINE = "Cash App declined this payment. Please try again in Cash App or use another way to pay.";
+
+const declineMessage = (error, requested) => {
   const detail = squareErrorOf(error);
+  if (requested === "CASH_APP" && DECLINE_MESSAGES[detail?.code]) return CASH_APP_DECLINE;
   return DECLINE_MESSAGES[detail?.code] || detail?.detail || "The payment didn't go through. Please try again or use another way to pay.";
 };
 
@@ -286,11 +290,11 @@ const createPayment = async (body) => {
       const declined = error?.body?.payment || error?.payment;
       if (declined?.id) {
         payment = declined;
-        declineText = declineMessage(error);
+        declineText = declineMessage(error, requested);
       } else {
         throw new ApiError(
           error?.statusCode >= 500 || !error?.statusCode ? httpStatus.BAD_GATEWAY : httpStatus.BAD_REQUEST,
-          declineMessage(error),
+          declineMessage(error, requested),
         );
       }
     }
