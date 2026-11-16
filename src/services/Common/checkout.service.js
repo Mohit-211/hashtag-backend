@@ -675,8 +675,13 @@ const getAllPayments = async (query) => {
      |--------------------------------------------------------------------------
      */
 
-    const page = Number(query.page || 1);
-    const limit = Number(query.limit || 10);
+    // No upper limit: until it pages again, the panel asks for every payment at once (F30).
+    const positive = (value, fallback) => {
+      const number = Number.parseInt(value, 10);
+      return number > 0 ? number : fallback;
+    };
+    const page = positive(query.page, 1);
+    const limit = positive(query.limit, 10);
     const offset = (page - 1) * limit;
 
     /*
@@ -700,20 +705,24 @@ const getAllPayments = async (query) => {
      |--------------------------------------------------------------------------
      */
 
-    const userWhere = {};
+    // Matches the customer's email or name. Only the page of ids below needs these joins.
+    const searchInclude = search
+      ? [
+          {
+            model: User,
+            as: "user",
+            attributes: [],
+            required: false,
+            paranoid: false,
+            include: [{ model: Profile, as: "user_profile", attributes: [], required: false }],
+          },
+        ]
+      : [];
 
     if (search) {
-      userWhere[Op.or] = [
-        {
-          email: {
-            [Op.like]: `%${search}%`,
-          },
-        },
-        {
-          "$user.user_profile.name$": {
-            [Op.like]: `%${search}%`,
-          },
-        },
+      where[Op.or] = [
+        { "$user.email$": { [Op.like]: `%${search}%` } },
+        { "$user.user_profile.name$": { [Op.like]: `%${search}%` } },
       ];
     }
 
@@ -723,8 +732,32 @@ const getAllPayments = async (query) => {
      |--------------------------------------------------------------------------
      */
 
-    const { count, rows } = await Payment.findAndCountAll({
+    // Pick the page of payment ids first, then load those payments with their orders and
+    // items (F30). Paging the joined query counted item rows, not payments, so a page of 10
+    // held as few as 2 payments, pages overlapped and a payment could lose items.
+    const count = await Payment.count({
       where,
+      include: searchInclude,
+      distinct: true,
+      col: "id",
+    });
+
+    const pageIds = await Payment.findAll({
+      where,
+      include: searchInclude,
+      attributes: ["id"],
+      group: ["Payment.id"],
+      order: [["id", "DESC"]],
+      limit,
+      offset,
+      subQuery: false,
+      raw: true,
+    });
+
+    const ids = pageIds.map((row) => row.id);
+
+    const rows = !ids.length ? [] : await Payment.findAll({
+      where: { id: ids },
 
       include: [
         /*
@@ -741,8 +774,6 @@ const getAllPayments = async (query) => {
 
           // A closed account's payments keep showing who made them.
           paranoid: false,
-
-          where: userWhere,
 
           attributes: ["id", "email"],
 
@@ -824,13 +855,6 @@ const getAllPayments = async (query) => {
       ],
 
       order: [["id", "DESC"]],
-
-      limit,
-      offset,
-
-      distinct: true,
-
-      subQuery: false,
     });
 
     /*

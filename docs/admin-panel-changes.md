@@ -4,6 +4,7 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
+| [2026-11-16: the payments list pages by payment](#2026-11-16-payments) | not deployed yet | None needed. Once it's live, the Payments page can ask for one page at a time again (F30) |
 | [2026-11-13: payments go-live](#2026-11-13-go-live) | `2634b76`, live since 16 Nov | Done in Hashtag-Billionaire-Admin `66757ce`, live since 16 Nov |
 | [2026-11-12: pricing templates](#2026-11-12-templates) | `adeb71f`, live | None: the panel's F29 code already calls them this way |
 | [2026-11-12: the website's category list leaves out empty categories](#2026-11-12-categories) | `64c340f`, live | None: the panel's admin token gets every category, as before |
@@ -60,6 +61,23 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 
 1. **`payment_status=ALL`:** coming in the next release: `GET order/admin?payment_status=ALL` lists orders of every payment status. Without the parameter it still lists paid orders only.
 2. **The 2 unpaid orders the panel doesn't show:** when a customer's cart changes, the backend soft-deletes their latest unpaid order (`invalidatePendingOrder` in `cartWishlist.service.js`), and orders are paranoid, so those two are hidden from every list. Nothing is missing on the panel's side; the behaviour itself is on the payments list (audit H8).
+
+---
+
+<a id="2026-11-16-payments"></a>
+## 2026-11-16: the payments list pages by payment (not deployed yet)
+
+`GET payment/admin/all` now picks the page of payment ids first, then loads those payments with their orders and items, as `GET order/admin` does (`BACKEND_QUESTIONS.md` F30 and A4). The response is unchanged: `{ total, current_page, total_pages, payments }`.
+
+- **Paging:** `page` and `limit` count payments. Before, they counted joined item rows: a page of 10 held as few as 2 payments, pages repeated payments, most payments never appeared, and some lost order items.
+- **No upper limit:** the panel's current `limit=100000` still gets every payment in one answer, identical to today's. Once this is live, the page can ask for one page at a time again.
+- **`page` and `limit`:** anything that isn't a positive whole number falls back to page 1 and 10 a page. Before, `limit=abc` or a negative limit returned an error.
+- **`search`:** matches the customer's email or name and filters the payments, including payments from closed accounts. Before, any search returned an SQL error. The panel searches in the browser and doesn't send it.
+- **`payment_status`:** unchanged, now with correct paging.
+
+Tested against MariaDB 10.11 in strict mode, with 19 payments whose orders have 1 to 6 items:
+- The old code showed 6 payments on page 1 of 10, and 8 of the 19 across all pages.
+- The new code showed every payment once, with all of its items.
 
 ---
 
