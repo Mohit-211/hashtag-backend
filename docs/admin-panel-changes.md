@@ -4,8 +4,8 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
-| [2026-11-17: products from a CSV file](#2026-11-17-csv-import) | not deployed yet | Done in Hashtag-Billionaire-Admin (the Import from CSV page), not deployed yet |
-| [2026-11-16: the payments list pages by payment](#2026-11-16-payments) | `99bee9c`, pushed 16 Nov | None needed. The Payments page can ask for one page at a time again (F30) |
+| [2026-11-17: products from a CSV file](#2026-11-17-csv-import) | `67d1c9d`, live since 17 Nov | Done in Hashtag-Billionaire-Admin `b28fa57` (the Import from CSV page), live since 17 Nov |
+| [2026-11-16: the payments list pages by payment](#2026-11-16-payments) | `99bee9c`, live since 16 Nov | None needed. The Payments page can ask for one page at a time again (F30) |
 | [2026-11-13: payments go-live](#2026-11-13-go-live) | `2634b76`, live since 16 Nov | Done in Hashtag-Billionaire-Admin `66757ce`, live since 16 Nov |
 | [2026-11-12: pricing templates](#2026-11-12-templates) | `adeb71f`, live | None: the panel's F29 code already calls them this way |
 | [2026-11-12: the website's category list leaves out empty categories](#2026-11-12-categories) | `64c340f`, live | None: the panel's admin token gets every category, as before |
@@ -66,7 +66,7 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 ---
 
 <a id="2026-11-17-csv-import"></a>
-## 2026-11-17: products from a CSV file (not deployed yet)
+## 2026-11-17: products from a CSV file (live since 17 Nov)
 
 Admins can create many products at once from a CSV file: Products › Import CSV, or Catalog › Import from CSV in the sidebar. The panel's page is part of the same change. There's no migration: only existing tables are used.
 
@@ -119,10 +119,16 @@ The products and variants share an `import_batch_id`, with a matching `import_ba
 
 A 1,000-row file (500 products) imported in under a second.
 
+**Checked on the live database** after the deploy:
+- The example file checked clean: 3 products, 6 options, one new supplier category ("Tees") placed in T Shirts.
+- A full import of it ran inside a transaction that was rolled back. It created the products as described, and afterwards every table count was what it was before.
+- The rollback used product ids 105879 to 105881, so the next product id is higher.
+- There were no pricing templates on the live site yet, so the example prices its business cards with Price.
+
 ---
 
 <a id="2026-11-16-payments"></a>
-## 2026-11-16: the payments list pages by payment (pushed 16 Nov)
+## 2026-11-16: the payments list pages by payment (live since 16 Nov)
 
 `GET payment/admin/all` now picks the page of payment ids first, then loads those payments with their orders and items, as `GET order/admin` does (`BACKEND_QUESTIONS.md` F30 and A4). The response is unchanged: `{ total, current_page, total_pages, payments }`.
 
