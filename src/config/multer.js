@@ -137,4 +137,35 @@ const graphicUpload = multer({ storage, limits: graphicLimits, fileFilter }).fie
   { name: "graphic", maxCount: 1 },
 ]);
 
-module.exports = { upload, cartUpload, graphicUpload, limits, graphicLimits, GRAPHIC_FIELDS };
+// POST /product/import and /product/import/preview: one CSV file, read in memory and never
+// written to disk.
+const CSV_FIELD = "file";
+const csvLimits = { fileSize: 2 * 1024 * 1024, files: 1, fields: 20, fieldSize: 1024 * 1024 };
+const csvUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: csvLimits,
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname || "").toLowerCase();
+    if (file.fieldname === CSV_FIELD && [".csv", ".txt", ".tsv"].includes(ext)) {
+      return cb(null, true);
+    }
+    return cb(
+      new ApiError(
+        httpStatus.BAD_REQUEST,
+        "Upload the products as a .csv file. In Excel, Google Sheets or Numbers, save or download the sheet as CSV.",
+      ),
+    );
+  },
+}).single(CSV_FIELD);
+
+module.exports = {
+  upload,
+  cartUpload,
+  graphicUpload,
+  csvUpload,
+  limits,
+  graphicLimits,
+  csvLimits,
+  GRAPHIC_FIELDS,
+  CSV_FIELD,
+};

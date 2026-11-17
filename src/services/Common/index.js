@@ -30,6 +30,7 @@ const customizationService = require('./customization.service')
 const galleryService = require('./gallery.service');
 const graphicService = require('./graphic.service');
 const pricingTemplateService = require('./pricingTemplate.service');
+const productImportService = require('./productImport.service');
 
 module.exports = {
     roleService,
@@ -64,4 +65,5 @@ module.exports = {
     galleryService,
     graphicService,
     pricingTemplateService,
+    productImportService,
 };

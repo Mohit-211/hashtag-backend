@@ -5107,6 +5107,10 @@ const assignBrandToProducts = async (body) => {
 module.exports = {
   createProduct,
   addProductVariants,
+  // Shared with the CSV import (productImport.service), so both save variants the same way.
+  createSkuGenerator,
+  resolveVariantOptions,
+  resolveVariantPricing,
   duplicateProduct,
   updateManualProductFull,
   getAllProducts,

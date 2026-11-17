@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { productController, pricingController } = require("../../../controllers");
+const { productController, pricingController, productImportController } = require("../../../controllers");
 const { adminAuthMiddleware } = require("../../../middlewares");
 const { userAuthMiddleware } = require("../../../middlewares");
 
@@ -8,6 +8,10 @@ const { requireAdmin } = adminAuthMiddleware;
 
 // admin: product management
 router.post("/create-product", requireAdmin, productController.createProduct);
+// Several products from one CSV file (upload field "file", see upload.middleware.js).
+router.get("/import/format", requireAdmin, productImportController.getImportFormat);
+router.post("/import/preview", requireAdmin, productImportController.previewImport);
+router.post("/import", requireAdmin, productImportController.importProducts);
 router.post("/add-product-variants", requireAdmin, productController.addProductVariants);
 router.post("/duplicate/:id", requireAdmin, productController.duplicateProduct);
 router.put("/manual/full", requireAdmin, productController.updateManualProductFull);

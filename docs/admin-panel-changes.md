@@ -4,7 +4,8 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
-| [2026-11-16: the payments list pages by payment](#2026-11-16-payments) | not deployed yet | None needed. Once it's live, the Payments page can ask for one page at a time again (F30) |
+| [2026-11-17: products from a CSV file](#2026-11-17-csv-import) | not deployed yet | Done in Hashtag-Billionaire-Admin (the Import from CSV page), not deployed yet |
+| [2026-11-16: the payments list pages by payment](#2026-11-16-payments) | `99bee9c`, pushed 16 Nov | None needed. The Payments page can ask for one page at a time again (F30) |
 | [2026-11-13: payments go-live](#2026-11-13-go-live) | `2634b76`, live since 16 Nov | Done in Hashtag-Billionaire-Admin `66757ce`, live since 16 Nov |
 | [2026-11-12: pricing templates](#2026-11-12-templates) | `adeb71f`, live | None: the panel's F29 code already calls them this way |
 | [2026-11-12: the website's category list leaves out empty categories](#2026-11-12-categories) | `64c340f`, live | None: the panel's admin token gets every category, as before |
@@ -64,8 +65,64 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 
 ---
 
+<a id="2026-11-17-csv-import"></a>
+## 2026-11-17: products from a CSV file (not deployed yet)
+
+Admins can create many products at once from a CSV file: Products › Import CSV, or Catalog › Import from CSV in the sidebar. The panel's page is part of the same change. There's no migration: only existing tables are used.
+
+| Endpoint | What it does |
+|---|---|
+| `GET product/import/format` | The columns, each with whether it's per product or per row, and its help text. Also an example file, an empty template, the pricing templates and the limits. The page shows these, so the layout is defined in one place. |
+| `POST product/import/preview` | Multipart: `file` (the CSV) and an optional `default_pricing_template_id`. Checks the whole file and returns a report. Saves nothing. |
+| `POST product/import` | The same body. Checks the file again, then creates every product in one transaction, or nothing. Returns 201 with the new products, or 422 with the same report when the file has problems. |
+
+The report lists the products, options, new supplier categories and Sub-category links, plus errors and warnings, each with its spreadsheet row.
+
+All three are admin-only. The file is read in memory: `.csv`, `.txt` or `.tsv`, up to 2 MB and 1,000 rows.
+
+**The file:**
+- **One row per option (variant).** Rows with the same product name, in any case, are one product. Product columns (name, description, brand, supplier category, Sub-category, option names and types) can be given once or repeated. Different values on two rows of one product are an error.
+- **Options:** up to 3 (`Option N name`, `Option N type`, `Option N value`).
+  - Types: Drop-down, Color, Buttons, Size, Checkboxes. A blank type means Color for an option named Color or Colour, Size for one named Size, and Drop-down otherwise.
+  - `Color code` (#RRGGBB) belongs to the Color option.
+- **Pricing:** each row needs exactly one of these:
+  - `Price`: per piece, above 0;
+  - `Pricing template`: a template's name, whose rows are copied in the way Load template does;
+  - the default template chosen at upload.
+- **Other columns:**
+  - `Stock`: a whole number; blank means 0.
+  - `SKU`: blank generates `MAN-<id>-001`. A given SKU must not be used by any product, deleted ones included.
+  - `Case price`.
+  - `Weight (lb)`: sets `admin_weight_lb`, up to 150.
+- **Brand and categories:**
+  - `Brand`: the name of a published brand.
+  - `Supplier category`: the name of a Manual category, created if it doesn't exist. Separate several with `|`.
+  - `Sub-category`: must already exist. The supplier categories are placed in it, and a removed link is restored. With a Sub-category but no supplier category, a Manual category with the Sub-category's name is used.
+- **Reading the file:** commas, semicolons or tabs. Quotes, line breaks inside quotes, a UTF-8 byte order mark and UTF-16 are all read. Unknown columns are skipped with a warning.
+- **Warnings don't stop the import.** They cover:
+  - a product whose options all have stock 0, which won't show on the website;
+  - a product with no Sub-category;
+  - a name that already exists;
+  - skipped columns.
+
+**What gets saved** matches what Add Product saves:
+- a MANUAL product with `meta.options`;
+- one size row per option value;
+- variants priced by `resolveVariantPricing`.
+
+The products and variants share an `import_batch_id`, with a matching `import_batches` row named `CSV_PRODUCT_IMPORT <file name>`, so one import can be found later. The file carries no pictures; add them on each product's Edit page.
+
+**Tested** against MariaDB 10.11 in strict mode:
+- 59 service checks: the example file, 18 kinds of mistakes each reported on its row, semicolons, the default template, a removed link restored, and a failure halfway through leaving nothing behind;
+- the HTTP routes: 401, wrong file type, over 2 MB, no file, 422 and 201;
+- the panel page, in Chrome.
+
+A 1,000-row file (500 products) imported in under a second.
+
+---
+
 <a id="2026-11-16-payments"></a>
-## 2026-11-16: the payments list pages by payment (not deployed yet)
+## 2026-11-16: the payments list pages by payment (pushed 16 Nov)
 
 `GET payment/admin/all` now picks the page of payment ids first, then loads those payments with their orders and items, as `GET order/admin` does (`BACKEND_QUESTIONS.md` F30 and A4). The response is unchanged: `{ total, current_page, total_pages, payments }`.
 

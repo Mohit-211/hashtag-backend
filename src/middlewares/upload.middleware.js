@@ -6,9 +6,12 @@ const {
   upload,
   cartUpload,
   graphicUpload,
+  csvUpload,
   limits,
   graphicLimits,
+  csvLimits,
   GRAPHIC_FIELDS,
+  CSV_FIELD,
 } = require("../config/multer");
 const { requireAdmin } = require("./adminAuth.middleware");
 const { verifyAuthJWTToken } = require("./userAuth.middleware");
@@ -26,6 +29,7 @@ const FILE_ROUTES = [
   { method: "POST", path: /^\/graphics\/?$/, auth: verifyAuthJWTToken, upload: graphicUpload },
 
   { method: "POST", path: /^\/product\/create-product\/?$/, auth: requireAdmin },
+  { method: "POST", path: /^\/product\/import(\/preview)?\/?$/, auth: requireAdmin, upload: csvUpload },
   { method: "POST", path: /^\/product\/add-product-variants\/?$/, auth: requireAdmin },
   { method: "PUT", path: /^\/product\/manual\/full\/?$/, auth: requireAdmin },
   { method: "POST", path: /^\/product\/update\/?$/, auth: requireAdmin },
@@ -92,7 +96,11 @@ const uploadErrorMessage = (error) => {
     return new ApiError(httpStatus.BAD_REQUEST, "File uploads aren't accepted for this field or endpoint.");
   }
   if (error.code === "LIMIT_FILE_SIZE") {
-    const { fileSize } = GRAPHIC_FIELDS.includes(error.field) ? graphicLimits : limits;
+    const { fileSize } = GRAPHIC_FIELDS.includes(error.field)
+      ? graphicLimits
+      : error.field === CSV_FIELD
+        ? csvLimits
+        : limits;
     return new ApiError(httpStatus.BAD_REQUEST, `Each file must be ${fileSize / (1024 * 1024)} MB or smaller.`);
   }
   return new ApiError(httpStatus.BAD_REQUEST, `Upload rejected: ${error.message}`);
