@@ -4,7 +4,7 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
-| [2026-11-18: grand, parent and supplier category names](#2026-11-18-category-names) | not pushed yet | Done in Hashtag-Billionaire-Admin `91fe6df`, not pushed yet: every label now says Grand / Parent / Supplier Category |
+| [2026-11-18: grand, parent and supplier category names](#2026-11-18-category-names) | `98cddea`, live since 18 Nov | Done in Hashtag-Billionaire-Admin `91fe6df`, live since 18 Nov: every label now says Grand / Parent / Supplier Category |
 | [2026-11-17: products from a CSV file](#2026-11-17-csv-import) | `67d1c9d`, live since 17 Nov | Done in Hashtag-Billionaire-Admin `b28fa57` (the Import from CSV page), live since 17 Nov |
 | [2026-11-16: the payments list pages by payment](#2026-11-16-payments) | `99bee9c`, live since 16 Nov | None needed. The Payments page can ask for one page at a time again (F30) |
 | [2026-11-13: payments go-live](#2026-11-13-go-live) | `2634b76`, live since 16 Nov | Done in Hashtag-Billionaire-Admin `66757ce`, live since 16 Nov |
@@ -65,7 +65,7 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 2. **The 2 unpaid orders the panel doesn't show:** when a customer's cart changes, the backend soft-deletes their latest unpaid order (`invalidatePendingOrder` in `cartWishlist.service.js`), and orders are paranoid, so those two are hidden from every list. Nothing is missing on the panel's side; the behaviour itself is on the payments list (audit H8).
 
 <a id="2026-11-18-category-names"></a>
-## 2026-11-18: grand, parent and supplier category names
+## 2026-11-18: grand, parent and supplier category names (live since 18 Nov)
 
 The team and the client now use the database names everywhere: **grand category** (the Category on the website menu), **parent category** (the group inside it) and **supplier category** (the category a product comes in with). The panel used Categories / Sub Categories / Categories before.
 
