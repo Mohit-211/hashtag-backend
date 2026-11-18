@@ -84,18 +84,19 @@ const COLUMNS = [
     aliases: ["Supplier categories", "Product category", "Product categories"],
     level: "product",
     help:
-      "Optional. The product's own category, shown as Categories on the product form. When no Manual " +
+      "Optional. The product's own category, shown as Supplier Categories on the product form. When no Manual " +
       "category has this name, a new one is made. Separate several with |.",
   },
   {
     key: "sub_category",
-    header: "Sub-category",
-    aliases: ["Sub-categories", "Subcategory", "Parent category"],
+    header: "Parent category",
+    // Files made before 18 Nov 2026 say Sub-category; they still work.
+    aliases: ["Parent categories", "Sub-category", "Sub-categories", "Subcategory"],
     level: "product",
     help:
-      "Optional. An existing Sub-category. The supplier category is placed in it, so the product can " +
+      "Optional. An existing parent category. The supplier category is placed in it, so the product can " +
       "show under it on the website. With no supplier category, a Manual one with the " +
-      "Sub-category's name is used. Separate several with |.",
+      "parent category's name is used. Separate several with |.",
   },
   ...option(1),
   ...option(2),
@@ -369,8 +370,8 @@ const checkFile = async (file, { defaultTemplateId = null } = {}) => {
   });
   const subByTitle = firstByName(subCategories, "title");
 
-  // Links that already exist between Manual categories and Sub-categories (deleted ones too:
-  // the import restores those, as Sub Categories does).
+  // Links that already exist between Manual categories and parent categories (deleted ones too:
+  // the import restores those, as the Parent Categories page does).
   const existingLinks = await ParentCategoryMapping.findAll({
     where: { product_category_id: { [Op.in]: manualCategories.map((c) => c.id) } },
     attributes: ["parent_category_id", "product_category_id", "deleted_at"],
@@ -422,7 +423,7 @@ const checkFile = async (file, { defaultTemplateId = null } = {}) => {
       }
     }
 
-    // Supplier categories and Sub-categories
+    // Supplier categories and parent categories
     const categoryTitles = splitList(productValue("supplier_category"));
     const subTitles = splitList(productValue("sub_category"));
 
@@ -430,7 +431,7 @@ const checkFile = async (file, { defaultTemplateId = null } = {}) => {
     for (const title of subTitles) {
       const sub = subByTitle.get(keyOf(title));
       if (!sub) {
-        fail(first.number, "Sub-category", `No Sub-category is called "${title}". Use a name from the Sub Categories page.`);
+        fail(first.number, "Parent category", `No parent category is called "${title}". Use a name from the Parent Categories page.`);
       } else {
         subs.push(sub);
       }
@@ -443,8 +444,8 @@ const checkFile = async (file, { defaultTemplateId = null } = {}) => {
       return { id: null, key: keyOf(title), title: newCategories.get(keyOf(title)), is_new: true };
     };
 
-    // Every supplier category goes into every Sub-category given. With no supplier category,
-    // each Sub-category gets a Manual category of its own name.
+    // Every supplier category goes into every parent category given. With no supplier category,
+    // each parent category gets a Manual category of its own name.
     const categories = [];
     const pairs = [];
     if (categoryTitles.length) {
@@ -657,8 +658,8 @@ const checkFile = async (file, { defaultTemplateId = null } = {}) => {
     if (!subs.length) {
       warn(
         first.number,
-        "Sub-category",
-        `${short(group.name)}: no Sub-category, so the product won't appear under any category on the website (search still finds it).`,
+        "Parent category",
+        `${short(group.name)}: no parent category, so the product won't appear under any category on the website (search still finds it).`,
       );
     }
 
@@ -780,7 +781,7 @@ const importProducts = async (file, options) => {
       }
       const categoryId = (category) => category.id || newCategoryIds.get(category.key);
 
-      // Supplier categories into Sub-categories, as Sub Categories does (restoring a deleted link).
+      // Supplier categories into parent categories, as the Parent Categories page does (restoring a deleted link).
       for (const { category, sub } of plan.links) {
         const productCategoryId = categoryId(category);
         const existing = await ParentCategoryMapping.findOne({

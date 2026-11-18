@@ -4,6 +4,7 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
+| [2026-11-18: grand, parent and supplier category names](#2026-11-18-category-names) | not pushed yet | Done in Hashtag-Billionaire-Admin `91fe6df`, not pushed yet: every label now says Grand / Parent / Supplier Category |
 | [2026-11-17: products from a CSV file](#2026-11-17-csv-import) | `67d1c9d`, live since 17 Nov | Done in Hashtag-Billionaire-Admin `b28fa57` (the Import from CSV page), live since 17 Nov |
 | [2026-11-16: the payments list pages by payment](#2026-11-16-payments) | `99bee9c`, live since 16 Nov | None needed. The Payments page can ask for one page at a time again (F30) |
 | [2026-11-13: payments go-live](#2026-11-13-go-live) | `2634b76`, live since 16 Nov | Done in Hashtag-Billionaire-Admin `66757ce`, live since 16 Nov |
@@ -63,6 +64,14 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 1. **`payment_status=ALL`:** coming in the next release: `GET order/admin?payment_status=ALL` lists orders of every payment status. Without the parameter it still lists paid orders only.
 2. **The 2 unpaid orders the panel doesn't show:** when a customer's cart changes, the backend soft-deletes their latest unpaid order (`invalidatePendingOrder` in `cartWishlist.service.js`), and orders are paranoid, so those two are hidden from every list. Nothing is missing on the panel's side; the behaviour itself is on the payments list (audit H8).
 
+<a id="2026-11-18-category-names"></a>
+## 2026-11-18: grand, parent and supplier category names
+
+The team and the client now use the database names everywhere: **grand category** (the Category on the website menu), **parent category** (the group inside it) and **supplier category** (the category a product comes in with). The panel used Categories / Sub Categories / Categories before.
+
+- The CSV import's `Sub-category` column is now `Parent category`. `Sub-category`, `Sub-categories` and `Subcategory` are still read as the same column, so older files work. Its messages say parent category too.
+- API fields don't change: the import report still has `sub_categories` and `sub_category_links`.
+
 ---
 
 <a id="2026-11-17-csv-import"></a>
@@ -76,12 +85,12 @@ Admins can create many products at once from a CSV file: Products › Import CSV
 | `POST product/import/preview` | Multipart: `file` (the CSV) and an optional `default_pricing_template_id`. Checks the whole file and returns a report. Saves nothing. |
 | `POST product/import` | The same body. Checks the file again, then creates every product in one transaction, or nothing. Returns 201 with the new products, or 422 with the same report when the file has problems. |
 
-The report lists the products, options, new supplier categories and Sub-category links, plus errors and warnings, each with its spreadsheet row.
+The report lists the products, options, new supplier categories and parent category links, plus errors and warnings, each with its spreadsheet row.
 
 All three are admin-only. The file is read in memory: `.csv`, `.txt` or `.tsv`, up to 2 MB and 1,000 rows.
 
 **The file:**
-- **One row per option (variant).** Rows with the same product name, in any case, are one product. Product columns (name, description, brand, supplier category, Sub-category, option names and types) can be given once or repeated. Different values on two rows of one product are an error.
+- **One row per option (variant).** Rows with the same product name, in any case, are one product. Product columns (name, description, brand, supplier category, parent category, option names and types) can be given once or repeated. Different values on two rows of one product are an error.
 - **Options:** up to 3 (`Option N name`, `Option N type`, `Option N value`).
   - Types: Drop-down, Color, Buttons, Size, Checkboxes. A blank type means Color for an option named Color or Colour, Size for one named Size, and Drop-down otherwise.
   - `Color code` (#RRGGBB) belongs to the Color option.
@@ -97,11 +106,11 @@ All three are admin-only. The file is read in memory: `.csv`, `.txt` or `.tsv`, 
 - **Brand and categories:**
   - `Brand`: the name of a published brand.
   - `Supplier category`: the name of a Manual category, created if it doesn't exist. Separate several with `|`.
-  - `Sub-category`: must already exist. The supplier categories are placed in it, and a removed link is restored. With a Sub-category but no supplier category, a Manual category with the Sub-category's name is used.
+  - `Parent category`: must already exist. The supplier categories are placed in it, and a removed link is restored. With a parent category but no supplier category, a Manual category with the parent category's name is used. Until 18 Nov this column was called `Sub-category`; files with that header still work.
 - **Reading the file:** commas, semicolons or tabs. Quotes, line breaks inside quotes, a UTF-8 byte order mark and UTF-16 are all read. Unknown columns are skipped with a warning.
 - **Warnings don't stop the import.** They cover:
   - a product whose options all have stock 0, which won't show on the website;
-  - a product with no Sub-category;
+  - a product with no parent category;
   - a name that already exists;
   - skipped columns.
 
