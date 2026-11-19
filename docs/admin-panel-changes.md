@@ -4,7 +4,7 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
-| [2026-11-19: the Dashboard](#2026-11-19-dashboard) | deploying 19 Nov | Done in Hashtag-Billionaire-Admin, deploying 19 Nov: the Dashboard page, and the Orders page takes its filters from the link |
+| [2026-11-19: the Dashboard](#2026-11-19-dashboard) | `c1e6f1c`, live since 19 Nov | Done in Hashtag-Billionaire-Admin `5af5d20`, live since 19 Nov: the Dashboard page, and the Orders page takes its filters from the link |
 | [2026-11-18: grand, parent and supplier category names](#2026-11-18-category-names) | `98cddea`, live since 18 Nov | Done in Hashtag-Billionaire-Admin `91fe6df`, live since 18 Nov: every label now says Grand / Parent / Supplier Category |
 | [2026-11-17: products from a CSV file](#2026-11-17-csv-import) | `67d1c9d`, live since 17 Nov | Done in Hashtag-Billionaire-Admin `b28fa57` (the Import from CSV page), live since 17 Nov |
 | [2026-11-16: the payments list pages by payment](#2026-11-16-payments) | `99bee9c`, live since 16 Nov | None needed. The Payments page can ask for one page at a time again (F30) |
@@ -66,7 +66,7 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 2. **The 2 unpaid orders the panel doesn't show:** when a customer's cart changes, the backend soft-deletes their latest unpaid order (`invalidatePendingOrder` in `cartWishlist.service.js`), and orders are paranoid, so those two are hidden from every list. Nothing is missing on the panel's side; the behaviour itself is on the payments list (audit H8).
 
 <a id="2026-11-19-dashboard"></a>
-## 2026-11-19: the Dashboard
+## 2026-11-19: the Dashboard (live since 19 Nov)
 
 Five read-only endpoints for the panel's Dashboard page. All need an admin token. There's no migration: they only read existing tables.
 
@@ -93,7 +93,7 @@ Five read-only endpoints for the panel's Dashboard page. All need an admin token
 
 Answers carry `Cache-Control: no-store`. The code is in `src/services/Admin/dashboard.service.js` and `src/routes/v1/Admin/dashboard.route.js`.
 
-**Tested** on a throwaway MariaDB 10.11 in strict mode, with 15 months of made-up data: 150 customers, 634 orders and every status. A script recomputed every figure from the raw rows in a different way, and 677 checks matched. They covered every preset; custom ranges across both daylight-saving changes; every interval; top products, suppliers and grand categories, including overlaps, a deleted grand category and a removed link; customers; activity; and the 400s.
+**Tested** on a throwaway MariaDB 10.11 in strict mode, with 15 months of made-up data: 150 customers, 634 orders and every status. A script recomputed every figure from the raw rows in a different way, and 703 checks matched. They covered every preset; custom ranges across both daylight-saving changes; every interval; top products, suppliers and grand categories, including overlaps, a deleted grand category and a removed link; customers; activity; and the 400s. A browser walk-through on the same data had no console errors and no sideways scrolling on a phone; supplier names with entities showed decoded, and the dashboard's links opened the right order and filter on the Orders page.
 
 **Checked on the live database** before deploying, read-only. Every report ran on the real tables for today, the last 30 days, this year and the last 12 months, and each answered in 1–20 ms. Totals matched plain SQL, and every chart interval added up to the totals. This check is how the SKU-as-name issue was found.
 
