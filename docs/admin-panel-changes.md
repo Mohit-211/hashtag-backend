@@ -4,6 +4,7 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
+| [2026-11-19: the Dashboard](#2026-11-19-dashboard) | deploying 19 Nov | Done in Hashtag-Billionaire-Admin, deploying 19 Nov: the Dashboard page, and the Orders page takes its filters from the link |
 | [2026-11-18: grand, parent and supplier category names](#2026-11-18-category-names) | `98cddea`, live since 18 Nov | Done in Hashtag-Billionaire-Admin `91fe6df`, live since 18 Nov: every label now says Grand / Parent / Supplier Category |
 | [2026-11-17: products from a CSV file](#2026-11-17-csv-import) | `67d1c9d`, live since 17 Nov | Done in Hashtag-Billionaire-Admin `b28fa57` (the Import from CSV page), live since 17 Nov |
 | [2026-11-16: the payments list pages by payment](#2026-11-16-payments) | `99bee9c`, live since 16 Nov | None needed. The Payments page can ask for one page at a time again (F30) |
@@ -63,6 +64,48 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 
 1. **`payment_status=ALL`:** coming in the next release: `GET order/admin?payment_status=ALL` lists orders of every payment status. Without the parameter it still lists paid orders only.
 2. **The 2 unpaid orders the panel doesn't show:** when a customer's cart changes, the backend soft-deletes their latest unpaid order (`invalidatePendingOrder` in `cartWishlist.service.js`), and orders are paranoid, so those two are hidden from every list. Nothing is missing on the panel's side; the behaviour itself is on the payments list (audit H8).
+
+<a id="2026-11-19-dashboard"></a>
+## 2026-11-19: the Dashboard
+
+Five read-only endpoints for the panel's Dashboard page. All need an admin token. There's no migration: they only read existing tables.
+
+**Rules every figure follows:**
+- **A sale** is a paid order (`payment_status` SUCCESS) that isn't cancelled, counted on the day it was placed (`orders.created_at`).
+- **Paid orders that were cancelled** are reported apart, as `cancelled_after_payment`, because cancelling doesn't refund.
+- **Days, weeks and months** follow the store's clock, US Central (`America/Chicago`), for every viewer. Weeks start on Monday.
+- **The comparison** is always the period of the same length just before the range.
+- **Deleted rows** don't count.
+
+**The range** (overview, trend, top, customers):
+- `range` is one of `today`, `yesterday`, `last_7_days`, `last_30_days` (the default), `last_90_days`, `this_month`, `last_month`, `this_year`, `last_12_months`.
+- Or send `from` and `to` as `YYYY-MM-DD`. Both days are included, up to 731 days. A `to` after the store's today counts as today.
+- Every answer repeats the resolved `range`: `from`, `to`, `days`, `previous` {from, to}, `timezone`, and `includes_today` (today's figures are still growing).
+- A bad `range`, date, interval, `by` or `sort` answers 400 with a message.
+
+| Endpoint | Query | Answer (`data`) |
+|---|---|---|
+| `GET admin/dashboard/overview` | the range | `kpis`: `sales`, `orders`, `average_order_value`, `items_sold`, `customers` (buyers), `new_customers` (accounts created), each `{ value, previous, change }`; `change` is a fraction (0.25 = +25%), null when the previous period had nothing. `breakdown`: `product_sales`, `handling`, `tax`, `shipping`, `total` (they add up to `sales`), plus `shipping_labelled` and `label_cost` for the orders that have a label. `cancelled_after_payment` `{ orders, amount }`. `checkouts` `{ placed, paid, paid_rate }` for every order placed. `orders_by_status` `[{ status, orders, amount }]` (old PENDING counts as PENDING_PAYMENT). `payment_methods` `[{ method, label, orders, amount, share }]`. |
+| `GET admin/dashboard/trend` | the range; `interval` = `hour`, `day`, `week` or `month` (left out: hour up to 2 days, day up to 62, week up to 210, month beyond); at most 400 points | `interval` and `buckets`: per point `label`, `from`, `to`, `sales`, `orders`, `items`, `average_order_value`, `new_customers`, `upcoming` (later today on an hourly chart), `partial` (under way now), and `previous`: the same figures for the same stretch of the previous period. |
+| `GET admin/dashboard/top` | the range; `by` = `product` (default), `supplier` or `grand_category`; `sort` = `revenue` (default) or `units`; `limit` 1–50 (default 10) | `totals` `{ revenue, units }` of the order lines; `rows` `[{ id, name, units, revenue, orders, share }]`, products also with `supplier`, `supplier_label` and `image`. A product's `name` is its name today, as stored (supplier names can hold HTML entities), because an order line keeps only the variant's SKU as its name; `others`, the part beyond `limit`. Revenue is the lines' totals: products and decoration, before tax and shipping. **Grand categories:** a product counts in every grand category it's in today (supplier category › parent category › grand category, none deleted), and one in none counts under `id: null`. When a product is in several, `overlaps` is true and `others` is null. |
+| `GET admin/dashboard/customers` | the range; `limit` 1–50 (default 8) | `summary`: `buyers`; `first_time` and `returning`, each `{ customers, orders, sales }`, where first-time means their first-ever sale is in the range; `returning_rate`; `registered_total`; `ordered_total`. `top`: the biggest spenders in the range, `[{ user_id, name, email, orders, spent, last_order_at, first_order_at, returning }]`. |
+| `GET admin/dashboard/activity` | `limit` 1–25 (default 8). No range: these are now. | `to_ship` `{ orders, label_failed, oldest_at }`, the same rule as the Buy label button (paid, not cancelled, no label). `needs_attention` `{ orders }` with an `attention_note`. `unpaid_checkouts` `{ orders, amount, days: 7 }`. `sourcing_requests` `{ new, in_review }`. `messages` `{ new }` (Contact Us). `out_of_stock` `{ manual_products }`: Manual products the website hides because no option has stock. `recent_orders`: the latest paid orders, with `customer` `{ name, email }`, `items` and `total`. |
+
+Answers carry `Cache-Control: no-store`. The code is in `src/services/Admin/dashboard.service.js` and `src/routes/v1/Admin/dashboard.route.js`.
+
+**Tested** on a throwaway MariaDB 10.11 in strict mode, with 15 months of made-up data: 150 customers, 634 orders and every status. A script recomputed every figure from the raw rows in a different way, and 677 checks matched. They covered every preset; custom ranges across both daylight-saving changes; every interval; top products, suppliers and grand categories, including overlaps, a deleted grand category and a removed link; customers; activity; and the 400s.
+
+**Checked on the live database** before deploying, read-only. Every report ran on the real tables for today, the last 30 days, this year and the last 12 months, and each answered in 1–20 ms. Totals matched plain SQL, and every chart interval added up to the totals. This check is how the SKU-as-name issue was found.
+
+**In the panel** (Hashtag-Billionaire-Admin):
+- **Dashboard page:** a date range with presets and a custom range, kept in the address (`?range=` or `?from=&to=`).
+- **Figures:** five tiles that also pick what the chart shows.
+- **Trend chart:** compared with the previous period, with a crosshair tooltip and arrow keys, plus a table view.
+- **Cards:** needs your attention, where the money comes from, orders placed by status, payment methods, top products, sales by grand category or supplier, customers, and recent orders.
+- **Orders page:** now reads `?status=`, `?payment_status=` and `?search=` from the link, plus `?open=` (an order number, opened once the list loads). The dashboard's links use these.
+- **Status badges:** their looks moved to `src/lib/orderStatus.ts`, shared by both pages.
+
+---
 
 <a id="2026-11-18-category-names"></a>
 ## 2026-11-18: grand, parent and supplier category names (live since 18 Nov)
