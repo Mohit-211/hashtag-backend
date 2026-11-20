@@ -6,6 +6,7 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
+| [2026-11-20: graphics are PNG, JPG or SVG only](#2026-11-20-graphic-types) | deploying 20 Nov | Done in hashtag-next, not deployed yet: both graphic pickers limited to PNG, JPG, JPEG and SVG |
 | [2026-11-13: payments go-live](#2026-11-13-go-live) | `2634b76`, live since 16 Nov | Done in hashtag-next `744ba16` and `5d0fcff`, not deployed yet |
 | [2026-11-13: colours and sizes on product cards](#2026-11-13) | `630d20c`, live | Optional: show colour swatches and the size range on cards |
 | [2026-11-12: the category list shows only categories with products](#2026-11-12) | `64c340f`, live | None required: read the notes |
@@ -69,6 +70,31 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 | A35 | 39 | Tracking for signed-in customers; the admin picks ShipStation or manual updates | Show the order's status and tracking from the API, whichever way it's updated. |
 
 **Waiting on the client:** A8, DTG with several locations (Q8, reworded); which font settings besides the font list (Q23). **Later, by the client's choice:** A24 pre-made products from suppliers (Q26), A42 price filter (Q54), A46 Back button (Q57), policy pages editable in the admin (Q61).
+
+---
+
+<a id="2026-11-20-graphic-types"></a>
+## 2026-11-20: graphics are PNG, JPG or SVG only (deploying 20 Nov)
+
+Decided 20 Nov: customers' graphics can only be PNG, JPG/JPEG or SVG. ZIP, PDF, AI, EPS, PSD, WebP and every other format are refused. This replaces "any format" from [2026-11-04](#2026-11-04) (Q21). The 100 MB limit stays.
+
+**What changed in the API**, in both places a graphic is uploaded: `POST graphics` (field `graphic`) and `POST product/cart` (field `customization_images`):
+- The file name must end in .png, .jpg, .jpeg or .svg, in any case, and the type the browser reports must match or be generic. Otherwise 400: "Graphics must be PNG, JPG, JPEG or SVG files. ZIP, PDF and other files can't be uploaded."
+- The server then reads the file itself. A .png, .jpg or .jpeg must really be a PNG or JPEG picture, and an .svg must really be an SVG. A renamed file is refused with 400: `"logo.png" isn't a real PNG or JPG file.` followed by the sentence above.
+- A refused request saves nothing: every file in it is deleted and no cart line is added.
+- A saved graphic's `mime_type` is now its real type: `image/png`, `image/jpeg` or `image/svg+xml`.
+- Graphics saved before this keep working through `graphic_id`, whatever their format.
+- Unchanged: the cart's preview picture (`images`, `customization.png`) and every other upload field.
+
+**What the shop must do**, before this is deployed, so customers aren't surprised by the refusal:
+1. Limit both pickers with `accept=".png,.jpg,.jpeg,.svg"`: the file input in `Productcustomizationpage.tsx:3365` and in `ManualCustomizationPage.tsx:964`.
+2. Replace "Any file type" (`Productcustomizationpage.tsx:3406`, `ManualCustomizationPage.tsx:1006`) and "Any format, up to 100 MB" (`ProductAccordion.tsx:78`) with "PNG, JPG or SVG, up to 100 MB".
+3. Show the API's message when an upload is refused.
+
+Tested on 20 Nov with the real upload middleware, multer settings and error handler (auth stubbed, no database), 24 checks:
+- 6 files were accepted, including an Illustrator SVG export and an SVG sent with no type.
+- 11 were refused, including a ZIP and a PDF renamed to .png or .jpg, and an HTML page renamed to .svg.
+- Refused requests left no files behind.
 
 ---
 
@@ -287,7 +313,7 @@ Decided on 4 November. It replaces the per-line $35 digitizing fee and the $20 f
 
 ### What changed in the API
 
-- **`POST graphics`** saves a graphic. Multipart, signed in, one file in the field `graphic`. Any format, any dimensions, up to 100 MB, stored exactly as uploaded. Uploading saves it: there's no separate save step.
+- **`POST graphics`** saves a graphic. Multipart, signed in, one file in the field `graphic`. Any format (PNG, JPG/JPEG or SVG only since [20 Nov](#2026-11-20-graphic-types)), any dimensions, up to 100 MB, stored exactly as uploaded. Uploading saves it: there's no separate save step.
 
   ```json
   {
@@ -323,7 +349,7 @@ Decided on 4 November. It replaces the per-line $35 digitizing fee and the $20 f
   With one graphic for the whole line, send `"graphic_id": 12` beside `print_method` instead. The first file in `images` stays the preview, as today: what the cart and order lists show as `logo_image` and `customized_image`. It can be any dimensions. It doesn't identify the graphic and production doesn't use it.
 - **Cart lines** gain `graphics: [{ id, original_name, file_url }]`. The fee is on the first line that has the graphic: `pricing_snapshot.customization_price.setup_fee`, already included in that line's `total_price` and in `summary`. A line with two new graphics shows 70; the other lines with those graphics show 0.
 - **Orders:** items in `GET order`, `GET order/:id` and `GET payment/history` gain the same `graphics`.
-- **Pre-made products:** `customization_images` now takes any format, up to 100 MB, and saves it to the customer's graphics. In place of `image_index`, a customization item can send `graphic_id`.
+- **Pre-made products:** `customization_images` now takes any format (PNG, JPG/JPEG or SVG only since [20 Nov](#2026-11-20-graphic-types)), up to 100 MB, and saves it to the customer's graphics. In place of `image_index`, a customization item can send `graphic_id`.
 
 **How a graphic is recognised**, per customer: the same file is always the same graphic, in any format. Pictures the server can read (PNG, JPG, WebP, GIF, TIFF, AVIF, SVG) are also compared by how they look, so a resized, re-saved or recoloured copy counts as the same design: it's saved as its own graphic, production gets that file, and it shares the fee status (`is_new`). On 50 test logos, 96–98% of ordinary copies were recognised, and 86–90% of very small or heavily compressed ones. Short logos a letter apart can be taken for each other (a round "HB" and "HD"). AI, EPS, PSD, CDR and PDF only match as the exact same file, so a customer reusing one should pick it from Saved graphics.
 

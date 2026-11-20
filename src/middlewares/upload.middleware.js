@@ -17,6 +17,7 @@ const { requireAdmin } = require("./adminAuth.middleware");
 const { verifyAuthJWTToken } = require("./userAuth.middleware");
 const { emailLimiter, publicFormLimiter } = require("./rateLimiter");
 const ApiError = require("../utils/ApiError");
+const { checkGraphicContents } = require("../utils/graphicFileType");
 
 // Routes that accept file uploads (paths relative to /api/v1). Admin and customer
 // routes are authenticated before any file is written to disk. The two public routes
@@ -57,6 +58,26 @@ const removeUploadedFiles = (req) => {
   }
 };
 
+// Runs the upload, then checks that every saved graphic really is a PNG, JPEG or SVG. A request
+// with one that isn't is refused (400) before the route sees it, and all its files are deleted.
+const runUpload = (uploader, req, res, next) =>
+  uploader(req, res, (error) => {
+    if (error) return next(error);
+
+    const graphics = Object.values(req.files || {})
+      .flat()
+      .filter((file) => GRAPHIC_FIELDS.includes(file.fieldname));
+    if (!graphics.length) return next();
+
+    return checkGraphicContents(graphics).then(
+      () => next(),
+      (refusal) => {
+        removeUploadedFiles(req);
+        next(refusal);
+      },
+    );
+  });
+
 const uploadMiddleware = (req, res, next) => {
   const route = FILE_ROUTES.find(
     (candidate) => candidate.method === req.method && candidate.path.test(req.path),
@@ -73,19 +94,19 @@ const uploadMiddleware = (req, res, next) => {
       res.on("finish", () => {
         if (res.statusCode >= 400 && res.statusCode < 500) removeUploadedFiles(req);
       });
-      return upload(req, res, next);
+      return runUpload(upload, req, res, next);
     });
   }
 
   if (!route.auth) {
-    return upload(req, res, next);
+    return runUpload(upload, req, res, next);
   }
 
   // The route's own auth middleware runs again after the upload (multer replaces
   // req.body); requireAdmin reuses req.admin, so the admin isn't looked up twice.
   return route.auth(req, res, (error) => {
     if (error) return next(error);
-    return (route.upload || upload)(req, res, next);
+    return runUpload(route.upload || upload, req, res, next);
   });
 };
 

@@ -133,8 +133,9 @@ app.use(
   }),
 );
 
-// Customers' graphics (/graphics/x.ai). Any format is accepted, so nothing here may run in a
-// browser: opening one downloads it, and <img> and fetch can still read it.
+// Customers' graphics (/graphics/x.svg). New ones are PNG, JPG or SVG, older ones any format, and an
+// SVG can carry scripts, so nothing here may run in a browser: opening one downloads it, and <img>
+// and fetch can still read it.
 app.use(
   "/graphics",
   express.static(dirs.graphics, {

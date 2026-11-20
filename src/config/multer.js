@@ -3,10 +3,12 @@ const multer = require("multer");
 const path = require("path");
 const httpStatus = require("http-status");
 const ApiError = require("../utils/ApiError");
+const { isGraphicFile, GRAPHIC_TYPE_MESSAGE } = require("../utils/graphicFileType");
 
 const { dirs } = require("./storage");
 
-// Customers' graphics: any format, any dimensions, stored exactly as uploaded.
+// Customers' graphics: PNG, JPG/JPEG or SVG (see utils/graphicFileType.js), any dimensions,
+// stored exactly as uploaded.
 const GRAPHIC_FIELDS = ["graphic", "customization_images"];
 
 // Set storage engine
@@ -112,9 +114,13 @@ const limits = {
 // A graphic can be up to 100 MB (client decision Q21).
 const graphicLimits = { ...limits, fileSize: 100 * 1024 * 1024 };
 
+// Graphics: the name and type are checked here, before saving; upload.middleware.js checks the
+// saved file's contents.
 const fileFilter = function (req, file, cb) {
   if (GRAPHIC_FIELDS.includes(file.fieldname)) {
-    return cb(null, true);
+    return isGraphicFile(file)
+      ? cb(null, true)
+      : cb(new ApiError(httpStatus.BAD_REQUEST, GRAPHIC_TYPE_MESSAGE));
   }
 
   return checkFileType(file, cb);

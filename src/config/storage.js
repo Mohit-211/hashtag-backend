@@ -15,7 +15,8 @@ const dirs = {
   uploads: path.join(STORAGE_DIR, "uploads"),
   // Admin and customer uploads (product, brand, preview, profile images). Served at /images.
   images: path.join(STORAGE_DIR, "uploads", "images"),
-  // Customers' graphics in any format. Kept out of uploads, which /uploads serves as they are;
+  // Customers' graphics: PNG, JPG or SVG (older ones any format). Kept out of uploads, which
+  // /uploads serves as they are;
   // /graphics only serves them as downloads (see app.js).
   graphics: path.join(STORAGE_DIR, "graphics"),
   // Images downloaded from suppliers. Served at /uploads/suppliers.
