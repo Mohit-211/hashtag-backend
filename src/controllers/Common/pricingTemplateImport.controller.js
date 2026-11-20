@@ -39,7 +39,7 @@ const importTemplates = catchAsync(async (req, res) => {
   const { templates, created, replaced } = result.summary;
   const parts = [
     created ? `${created} new` : null,
-    replaced ? `${replaced} replaced` : null,
+    replaced ? `${replaced} updated` : null,
   ].filter(Boolean);
   return responseWrapper(
     res,

@@ -177,9 +177,12 @@ const checkFile = async (file, { replaceExisting = false } = {}) => {
   // Problems are listed top to bottom, as the spreadsheet reads; the file's own come first.
   const byRow = (a, b) => (a.row ?? 0) - (b.row ?? 0);
 
-  const report = ({ rows = 0, templates = [], ignored = [] } = {}) => ({
+  const report = ({ rows = 0, templates = [], ignored = [], alreadyExist = [] } = {}) => ({
     file_name: file.originalname || null,
     replace_existing: Boolean(replaceExisting),
+    // Templates in the file whose name is already a template: the panel asks whether to update
+    // them (replace_existing). Listed whether or not that was chosen.
+    already_exist: alreadyExist,
     summary: {
       rows,
       templates: templates.length,
@@ -284,6 +287,7 @@ const checkFile = async (file, { replaceExisting = false } = {}) => {
 
   const plan = [];
   const templates = [];
+  const alreadyExist = [];
 
   for (const group of groups.values()) {
     const { name } = group;
@@ -453,11 +457,19 @@ const checkFile = async (file, { replaceExisting = false } = {}) => {
     }
 
     const match = existingByName.get(nameKey(name));
+    if (match) {
+      alreadyExist.push({
+        name: match.name,
+        file_name: name,
+        rows: group.rows.map((row) => row.number),
+        style: STYLES[match.pricing_mode],
+      });
+    }
     if (match && !replaceExisting) {
       fail(
         first,
         "Template name",
-        `A template called "${match.name}" already exists. Rename this one in the file, or choose "Replace it" for templates that already exist and check again.`,
+        `"${match.name}" is already a template. Choose to update it with this file's prices, or give it another name in the file to add a new template.`,
       );
       continue;
     }
@@ -476,7 +488,7 @@ const checkFile = async (file, { replaceExisting = false } = {}) => {
     });
   }
 
-  return { report: report({ rows: dataRows.length, templates, ignored }), plan };
+  return { report: report({ rows: dataRows.length, templates, ignored, alreadyExist }), plan };
 };
 
 // ------------------------------------------------------------------------------------------

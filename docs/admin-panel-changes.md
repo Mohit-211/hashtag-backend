@@ -77,7 +77,7 @@ Admins can create or update many pricing templates at once from a CSV file, in e
 | `POST pricing-template/import/preview` | Multipart: `file` (the CSV) and an optional `replace_existing` (`true`). Checks the whole file and returns a report. Saves nothing. |
 | `POST pricing-template/import` | The same body. Checks the file again, then saves every template in one transaction, or none. Returns 201 with the saved templates, or 422 with the same report when the file has problems. |
 
-The report lists each template with its style, its prices in words and whether it's new or replaces an existing one. It also lists errors and warnings, sorted by spreadsheet row.
+The report lists each template with its style, its prices in words and whether it's new or updates an existing one. It also lists errors and warnings, sorted by spreadsheet row. Since the 20 Nov follow-up, `already_exist` names every template in the file whose name is already a template, with or without `replace_existing`, so the panel can ask about each one.
 
 All three are admin-only. The file is read in memory: `.csv`, `.txt` or `.tsv`, up to 2 MB and 1,000 rows.
 
@@ -95,7 +95,7 @@ Other rules:
 - **Tiers** can be listed in any order; they're sorted by From. Only the tier with the largest From can leave To blank, and tiers can't overlap. The same rules as the page apply, through `utils/pricing/pricingRows.js`.
 - **Limits:** at most 50 rows per template.
 - **Wrong-style columns:** filling a column of the other style, such as Quantity on a Variable ranges template, is a problem.
-- **Existing names:** a name that's already a template (not deleted) is a problem. With `replace_existing`, that template gets the file's style and prices and keeps its id, as an edit on the page does. Products that loaded it keep their own copy of its prices.
+- **Existing names:** a name that's already a template (not deleted) is a problem ("“Patches” is already a template…"). With `replace_existing`, that template is updated with the file's style and prices and keeps its id, as an edit on the page does. Products that loaded it keep their own copy of its prices.
 - **Warnings don't stop the import.** They cover:
   - a first tier that starts above 1;
   - a gap between tiers;
@@ -110,8 +110,9 @@ Other rules:
 - An **Import from CSV** button sits next to Add template.
 - The page follows Import products from CSV:
   1. **Fill in the spreadsheet:** the example file, the empty template, the two styles side by side with the example's rows, the rules and every column.
-  2. **Upload the file:** a choice for templates that already exist (Stop, or Replace them), and a drop zone. The file is checked as soon as it's chosen.
-  3. **Check and import:** counts, problems by row, warnings, and each template with its prices and what happens to it.
+  2. **Upload the file:** a drop zone. The file is checked as soon as it's chosen.
+  3. **Check and import:** counts, problems by row, warnings, and each template with its prices and what happens to it ("New template" or "Updates “Patches”").
+- **A name that's already a template** isn't changed unless the admin says so. The check asks, naming it: "“Patches” is already a template", with one button, "Update “Patches” with this file's prices". That checks the file again with `replace_existing`, and a "Don't update it" link undoes it. A newly chosen file never updates anything until asked. Until 20 Nov a "Templates that already exist" drop-down (Stop or Replace) did this up front; admins found it unclear.
 - The parts both import pages share moved to `src/components/common/ImportBlocks.tsx` and `src/lib/csvFiles.ts`. The products page looks and works as before.
 
 **Tested** on the commit's own code (HEAD plus this change only), against MariaDB 10.11 in strict mode with `pricing_templates` made by the 12 Nov migration. 61 checks passed:
@@ -123,6 +124,13 @@ Other rules:
 - the HTTP routes: 401, 201, 422, a `.xlsx` file, no file, and over 2 MB.
 
 The panel page was driven in headless Chrome against that backend: a file with mistakes, the test file, the same file again (refused, then replaced), the example (both styles), the products import page, and phone width. There were no console errors.
+
+The 20 Nov follow-up was checked the same way:
+- 61 backend checks with the new wording and `already_exist`.
+- A browser run seeded like the live panel, with only "Patches". A file with new prices for Patches plus a new template, Caps:
+  - the check asks about Patches by name, with no problems listed;
+  - Update, then Don't update, then Update again;
+  - the import gives "1 new template, 1 updated", with Patches at its new prices.
 
 <a id="2026-11-19-dashboard"></a>
 ## 2026-11-19: the Dashboard (live since 19 Nov)
