@@ -4,7 +4,7 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
-| [2026-11-20: pricing templates from a CSV file](#2026-11-20-template-import) | deploying 20 Nov | Done in Hashtag-Billionaire-Admin, deploying 20 Nov: Pricing Templates › Import from CSV |
+| [2026-11-20: pricing templates from a CSV file](#2026-11-20-template-import) | `898c128`, live since 20 Nov | Done in Hashtag-Billionaire-Admin `c597d0d`, live since 20 Nov: Pricing Templates › Import from CSV |
 | [2026-11-19: the Dashboard](#2026-11-19-dashboard) | `c1e6f1c`, live since 19 Nov | Done in Hashtag-Billionaire-Admin `5af5d20`, live since 19 Nov: the Dashboard page, and the Orders page takes its filters from the link |
 | [2026-11-18: grand, parent and supplier category names](#2026-11-18-category-names) | `98cddea`, live since 18 Nov | Done in Hashtag-Billionaire-Admin `91fe6df`, live since 18 Nov: every label now says Grand / Parent / Supplier Category |
 | [2026-11-17: products from a CSV file](#2026-11-17-csv-import) | `67d1c9d`, live since 17 Nov | Done in Hashtag-Billionaire-Admin `b28fa57` (the Import from CSV page), live since 17 Nov |
@@ -67,7 +67,7 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 2. **The 2 unpaid orders the panel doesn't show:** when a customer's cart changes, the backend soft-deletes their latest unpaid order (`invalidatePendingOrder` in `cartWishlist.service.js`), and orders are paranoid, so those two are hidden from every list. Nothing is missing on the panel's side; the behaviour itself is on the payments list (audit H8).
 
 <a id="2026-11-20-template-import"></a>
-## 2026-11-20: pricing templates from a CSV file (deploying 20 Nov)
+## 2026-11-20: pricing templates from a CSV file (live since 20 Nov)
 
 Admins can create or update many pricing templates at once from a CSV file, in either pricing style: Pricing Templates › Import from CSV (`/pricing-templates/import`). The panel's page is part of the same change. There's no migration: it saves into the `pricing_templates` table made on 12 Nov.
 
