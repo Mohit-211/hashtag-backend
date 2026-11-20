@@ -23,7 +23,7 @@ Paths are relative to `API_BASE_URL` (`…/api/v1/`). The admin token is attache
 | `GET admin/settings` | none | `200`: the page, secrets masked | `401` |
 | `POST admin/settings/unlock` | `{ "master_key": "…" }` | `200`: the page with every value in full and `revealed: true` | `403` wrong key; `429` too many wrong keys |
 | `PUT admin/settings` | `{ "master_key": "…", "values": { "SMTP_HOST": "smtp.example.com", "EMAIL_BRAND_NAME": null } }` | `200`, message "Settings saved": the page (masked) plus `saved` and `removed` | `400` invalid values; `403`; `429` |
-| `POST admin/settings/test-email` | none | `200`, `{ "sent_to": "<the admin's email>" }` | `503` mail server not set up; `502` the mail server refused, with its reason; `429` after 5 an hour |
+| `POST admin/settings/test-email` | none, or `{ "key": "EMAIL_FROM_ORDERS", "to": "someone@example.com" }` (both optional) | `200`, `{ "sent_to": "<to, or the admin's email>", "sent_from": "<the sender used>" }` | `400` a `key` without `test_email`, or `to` not an email address; `503` mail server not set up; `502` the mail server refused, with its reason; `429` after 20 an hour |
 
 ### The page
 
@@ -56,6 +56,7 @@ interface Setting {
   max?: number;
   secret: boolean;
   required: boolean;
+  test_email?: true;          // a sender that can send a test email (the four "… emails come from")
   value: string | null;       // the value in effect, as text; null when there is none
   default: string | null;     // what applies when nothing is saved; always null for secrets
   source: "admin" | "env" | "default" | "unset";
@@ -115,7 +116,7 @@ interface Setting {
   - the value, monospace for secrets;
   - the source badge, with "Changed by <name> on <date>" for `admin`;
   - the description as help text.
-- **Buttons:** "Edit settings" at the top, and "Send a test email" in the Email sending group.
+- **Buttons:** "Edit settings" at the top, "Send a test email" in the Email sending group, and "Send test email" beside each setting with `test_email`.
 
 ### Edit mode
 
@@ -154,6 +155,8 @@ Controls by `type`:
 "Send a test email" sends `POST admin/settings/test-email` from reading mode. The email goes to the signed-in admin with the **saved** settings, so changes must be saved first.
 - `200`: a toast with the answer's message ("Test email sent to …").
 - `502` or `503`: show the message as it is. It says what's wrong, e.g. *"The mail server didn't send it: Invalid login: 535 Authentication failed"*.
+
+"Send test email" beside a sender (`test_email: true`) opens a dialog with an optional "Send to" field, and sends `{ "key": "<that setting>", "to": "<the field, if filled>" }`. The email comes from that sender, so the inbox shows whether the mail account may send as it: from Gmail, an address not added under **Send mail as** arrives from the account's own address instead (deployment.md, Email addresses). A `400` stays in the dialog.
 
 ## Keep the key and the secrets out of reach
 

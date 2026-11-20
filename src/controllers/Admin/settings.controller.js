@@ -31,7 +31,7 @@ const getHandlingFeeOptions = catchAsync(async (req, res) => {
 });
 
 const sendTestEmail = catchAsync(async (req, res) => {
-  const data = await settingsService.sendTestEmail(req.admin);
+  const data = await settingsService.sendTestEmail(req.admin, { key: req.body?.key, to: req.body?.to });
   return responseWrapper(res, data, `Test email sent to ${data.sent_to}`, httpStatus.OK);
 });
 

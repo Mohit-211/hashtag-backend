@@ -5,6 +5,7 @@ const { GROUPS, SETTINGS } = require("../../config/settingsCatalog");
 const logger = require("../../config/logger");
 const { Admin } = require("../../models");
 const ApiError = require("../../utils/ApiError");
+const validateEmail = require("../../helpers/validateEmail");
 const { sendSettingsTestEmail } = require("../Common/email.service");
 
 // The admin panel's Settings page: everything that used to be in .env apart from what the server
@@ -40,6 +41,8 @@ const describe = (setting, admins, reveal) => {
     ...(setting.max !== undefined && { max: setting.max }),
     secret: Boolean(setting.secret),
     required: Boolean(setting.required),
+    // A sender that can send a test email (sendTestEmail with its key).
+    ...(setting.testEmail && { test_email: true }),
     value: text === null ? null : setting.secret && !reveal ? mask(text) : text,
     default: setting.secret ? null : defaultValue,
     source,
@@ -114,16 +117,33 @@ const updateSettings = async (body, admin) => {
   return { ...(await listSettings()), saved: result.saved, removed: result.removed };
 };
 
-// Sends a test email to the signed-in admin with the saved mail server settings. The mail
-// server's own answer is passed on (as a 502, which production shows), so the admin can fix it.
-const sendTestEmail = async (admin) => {
+// Sends a test email with the saved mail server settings: from the Sender, or with `key` from
+// that sender setting (one with test_email, e.g. EMAIL_FROM_ORDERS); to the signed-in admin, or
+// to `to`. The mail server's own answer is passed on (as a 502, which production shows), so the
+// admin can fix it. Returns { sent_to, sent_from }.
+const sendTestEmail = async (admin, { key, to } = {}) => {
+  const setting = key ? SETTINGS.find((candidate) => candidate.key === key) : null;
+  if (key && !setting?.testEmail) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "That setting can't send a test email.");
+  }
+
+  const recipient = to ? String(to).trim() : admin.email;
+  if (!recipient || !validateEmail(recipient)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Enter a valid email address to send the test to.");
+  }
+
+  let sentFrom;
   try {
-    await sendSettingsTestEmail(admin.email, admin.name);
+    sentFrom = await sendSettingsTestEmail(recipient, recipient === admin.email ? admin.name : null, {
+      key: setting?.key,
+      label: setting?.label,
+    });
   } catch (error) {
     if (error.statusCode === httpStatus.SERVICE_UNAVAILABLE) throw error;
     throw new ApiError(httpStatus.BAD_GATEWAY, `The mail server didn't send it: ${error.message}`);
   }
-  return { sent_to: admin.email };
+  logger.info(`Admin ${admin.id} sent a test email${setting ? ` (${setting.key})` : ""} to ${recipient}`);
+  return { sent_to: recipient, sent_from: sentFrom };
 };
 
 module.exports = {

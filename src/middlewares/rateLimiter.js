@@ -21,6 +21,10 @@ const loginLimiter = limiter(15, 10, 'Too many sign-in attempts. Please try agai
 // Anything that sends an email (forgot password, resend verification, register).
 const emailLimiter = limiter(60, 5, 'Too many requests. Please try again later.');
 
+// Test emails from the admin Settings page, one per sender: their own count, so testing doesn't
+// use up the office IP's emailLimiter (sign-up, forgot password) for the website.
+const testEmailLimiter = limiter(60, 20, 'Too many test emails. Please try again later.');
+
 // Submitting a token from an emailed link.
 const tokenLimiter = limiter(15, 20, 'Too many attempts. Please try again in 15 minutes.');
 
@@ -40,6 +44,7 @@ const settingsKeyLimiter = limiter(15, 10, 'Too many wrong settings keys. Please
 module.exports = {
   loginLimiter,
   emailLimiter,
+  testEmailLimiter,
   tokenLimiter,
   publicFormLimiter,
   settingsKeyLimiter,

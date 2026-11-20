@@ -72,7 +72,7 @@ Every email goes out through the one mail account on the Settings page (Email se
 
 Each address is a setting under Email sending ("Order emails come from", and so on), so it can be changed without a deploy. Not built yet: mockup approval and reprint emails (neither feature exists), and a new-order email to the team (client question 38).
 
-**Setting it up:** the four addresses must be ones the mail account may send as. In that Gmail account (patrick@), **Settings → Accounts → Send mail as → Add another email address**, once for each of order@, support@, info@ and quotes@. If Gmail asks to confirm an address, its code goes to that address, which as an alias of this account lands in the same inbox. Until an address is added there, Gmail sends that email as patrick@: nothing fails, and replies still go to the right address.
+**Setting it up:** the four addresses must be ones the mail account may send as. In that Gmail account (patrick@), **Settings → Accounts → Send mail as → Add another email address**, once for each of order@, support@, info@ and quotes@. If Gmail asks to confirm an address, its code goes to that address, which as an alias of this account lands in the same inbox. Until an address is added there, Gmail sends that email as patrick@: nothing fails, and replies still go to the right address. To check one, press **Send test email** beside it on the Settings page: the test comes from that address once Gmail allows it, and from patrick@ until then.
 
 The client's list spelled the quotes address `quotes@hashtagbillioniaire.com`; the code uses `quotes@hashtagbillionaire.com`, like the other three.
 

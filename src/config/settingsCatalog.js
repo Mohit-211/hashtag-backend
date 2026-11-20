@@ -106,6 +106,8 @@ const SETTINGS = [
     type: "sender",
     default: (get) => `${get("EMAIL_BRAND_NAME")} <${mailbox}@hashtagbillionaire.com>`,
     description,
+    // The Settings page offers "Send test email" from this address (POST admin/settings/test-email).
+    testEmail: true,
   })),
 
   // How emails look

@@ -3,7 +3,7 @@ const router = express.Router();
 
 const { settingsController } = require("../../../controllers");
 const { adminAuthMiddleware } = require("../../../middlewares");
-const { emailLimiter, settingsKeyLimiter } = require("../../../middlewares/rateLimiter");
+const { testEmailLimiter, settingsKeyLimiter } = require("../../../middlewares/rateLimiter");
 
 // The Settings page. Any admin can read it (secrets masked); revealing and saving take the
 // settings key from .env.
@@ -14,6 +14,7 @@ router.get("/", settingsController.getSettings);
 router.get("/handling-fee-options", settingsController.getHandlingFeeOptions);
 router.post("/unlock", settingsKeyLimiter, settingsController.unlockSettings);
 router.put("/", settingsKeyLimiter, settingsController.updateSettings);
-router.post("/test-email", emailLimiter, settingsController.sendTestEmail);
+// Body (optional): { key: a sender setting with test_email, to: an address other than the admin's }.
+router.post("/test-email", testEmailLimiter, settingsController.sendTestEmail);
 
 module.exports = router;

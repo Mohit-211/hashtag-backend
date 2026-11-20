@@ -164,10 +164,15 @@ const sendOrderShippedEmail = (to, order) => sendAs('order', to, orderShippedEma
 const sendOrderDeliveredEmail = (to, order) => sendAs('order', to, orderDeliveredEmail(withOrderContact(order)));
 
 
-// From the Settings page: proves the mail server settings work.
-const sendSettingsTestEmail = (to, name) => {
-    const mail = settingsTestEmail({ name });
-    return sendEmail(to, mail.subject, mail.text, mail.html);
+// From the Settings page: proves the mail server settings work. With `key` (a sender setting
+// such as EMAIL_FROM_ORDERS, `label` its name on the page) it's sent from that sender, to check
+// the mail account may send as it. Returns the sender it was sent as.
+const sendSettingsTestEmail = async (to, name, { key, label } = {}) => {
+    const from = (key && settings.get(key)) || settings.get('EMAIL_FROM') || null;
+    const address = key ? addressOf(from) : null;
+    const mail = settingsTestEmail({ name, label: key ? label : null, from, address, account: settings.get('SMTP_USERNAME') });
+    await sendEmail(to, mail.subject, mail.text, mail.html, key ? { from: from || undefined, replyTo: address || undefined } : {});
+    return from;
 };
 
 
