@@ -86,6 +86,28 @@ const SETTINGS = [
     description: "Receives contact-form messages and new sourcing requests.",
   },
 
+  // Who each kind of email to customers comes from (the client's addresses, 20 Nov 2026). Replies
+  // go back to the same address. Each must be an address the mail server may send from: an alias
+  // of its account works once that mailbox allows sending as the alias.
+  ...[
+    ["EMAIL_FROM_ORDERS", "Order emails come from", "order", "Order confirmed, cancelled, shipped and delivered."],
+    [
+      "EMAIL_FROM_SUPPORT",
+      "Account and support emails come from",
+      "support",
+      "Sign-up, password and account emails, and replies to support questions (order, shipping, payment and customization).",
+    ],
+    ["EMAIL_FROM_INFO", "General inquiry emails come from", "info", "Replies to general inquiries from the website's contact form."],
+    ["EMAIL_FROM_QUOTES", "Quote emails come from", "quotes", 'Sourcing requests ("can\'t find it") and their updates.'],
+  ].map(([key, label, mailbox, description]) => ({
+    key,
+    group: "email",
+    label,
+    type: "sender",
+    default: (get) => `${get("EMAIL_BRAND_NAME")} <${mailbox}@hashtagbillionaire.com>`,
+    description,
+  })),
+
   // How emails look
   { key: "EMAIL_BRAND_NAME", group: "email_look", label: "Name in emails", type: "string", default: "HashtagBillionaire" },
   {

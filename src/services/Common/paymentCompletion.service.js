@@ -10,6 +10,7 @@ const ApiError = require("../../utils/ApiError");
 const httpStatus = require("http-status");
 const { markGraphicsOrdered } = require("./graphic.service");
 const { shipPaidOrder } = require("./shipment.service");
+const { notifyOrderConfirmed } = require("./orderEmails.service");
 
 const NOTE_LIMIT = 500;
 
@@ -180,6 +181,10 @@ const completeOrderPayment = async ({
   if (outcome.newlyPaid) {
     const { order } = outcome;
     logger.info(`Order ${order.order_number} paid by ${provider} (${transactionId}).`);
+
+    // "Order confirmed", from order@: once, as only this call moved it to paid. Not awaited and
+    // never throws (orderEmails.service.js).
+    notifyOrderConfirmed(order.id);
 
     // A restored order isn't what's in the cart now, so the cart stays, and its label waits for
     // the team (see its attention note).

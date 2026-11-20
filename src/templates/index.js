@@ -3,5 +3,6 @@ module.exports = {
   ...require("./templates/auth"),
   ...require("./templates/contactUs"),
   ...require("./templates/sourcingRequest"),
+  ...require("./templates/orders"),
   ...require("./templates/settings"),
 };

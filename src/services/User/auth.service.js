@@ -22,6 +22,7 @@ const { PASSWORD_RULES } = require("../../helpers/validatePassword");
 const {
 	sendVerificationEmail,
 	sendPasswordResetEmail,
+	sendPasswordChangedEmail,
 } = require("../Common/email.service");
 const {
 	generateAuthTokens,
@@ -357,7 +358,20 @@ const resetPasswordWithToken = async (body) => {
 		],
 	});
 
+	// A reset, not the first password from an account-setup link: tell the owner it happened.
+	if (record.purpose === accountTokenPurposes.PASSWORD_RESET) {
+		notifyPasswordChanged(user);
+	}
+
 	return "";
+};
+
+// "Your password was changed", from support@. Never awaited and never fails the change: a mail
+// problem is only logged.
+const notifyPasswordChanged = (user) => {
+	Profile.findOne({ where: { user_id: user.id }, attributes: ["name"] })
+		.then((profile) => sendPasswordChangedEmail(user.email, { name: profile?.name }))
+		.catch((error) => logger.error(`Password-changed email for user ${user.id} failed: ${error.message}`));
 };
 
 // Signed-in password change. Other sessions are signed out; this one gets a new token.
@@ -378,6 +392,8 @@ const resetPassword = async (reqBody) => {
 
 	await revokeUserTokens(userDoc.id);
 	const token = await generateAuthTokens(userDoc);
+
+	notifyPasswordChanged(userDoc);
 
 	return {
 		tokens: token,

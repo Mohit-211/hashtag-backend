@@ -2,15 +2,17 @@
 
 const { brandName, greeting, renderEmail } = require("./layout");
 
-// To the customer who filled in the form.
-const contactUsConfirmationTemplate = (name, reason) =>
+// To the customer who filled in the form. `contact` is the address it comes from and replies go
+// to: support@ for support questions, info@ for general inquiries (email.service.js).
+const contactUsConfirmationTemplate = (name, reason, contact) =>
   renderEmail({
     heading: "We've received your message",
     paragraphs: [
       `${greeting(name)} thanks for contacting ${brandName()}.`,
       `We've received your inquiry${reason ? ` about "${reason}"` : ""}. Our team will get back to you soon.`,
     ],
-    note: "Please don't reply to this email; replies to this address may not be read.",
+    note: "To add anything, just reply to this email.",
+    contact,
   });
 
 // To the team inbox.

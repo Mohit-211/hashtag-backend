@@ -27,9 +27,14 @@ const greeting = (name) => (name ? `Hi ${name},` : "Hi,");
  * @param {{text: string, link: string}} [email.button]
  * @param {Array<[string, string]>} [email.details] label/value rows
  * @param {string} [email.quote]                 longer text shown in a box (e.g. a message)
+ * @param {Array<{name: string, detail?: string, quantity?: number, amount?: string}>} [email.items]
+ *                                               order lines
+ * @param {Array<[string, string, boolean?]>} [email.totals] label/amount rows under the lines; true = bold
  * @param {string} [email.note]                  small print at the bottom
+ * @param {string} [email.contact]               the address replies go to, named in the footer
+ *                                               (without it, the team inbox)
  */
-const renderEmail = ({ heading, paragraphs = [], button, details = [], quote, note }) => {
+const renderEmail = ({ heading, paragraphs = [], button, details = [], quote, items = [], totals = [], note, contact }) => {
   const brand = brandName();
   const logoUrl = settings.get("EMAIL_LOGO_URL");
   const color = settings.get("EMAIL_BRAND_COLOR");
@@ -52,6 +57,24 @@ const renderEmail = ({ heading, paragraphs = [], button, details = [], quote, no
 
   const quoteHtml = quote
     ? `<div style="margin:0 0 20px;padding:12px 16px;background:#f5f5f5;border-left:3px solid #111;font-size:14px;line-height:1.5;">${multiline(quote)}</div>`
+    : "";
+
+  const itemsHtml = items.length
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 ${totals.length ? 8 : 20}px;font-size:14px;border-collapse:collapse;">${items
+        .map(
+          (item) =>
+            `<tr><td style="padding:8px 8px 8px 0;border-top:1px solid #eee;vertical-align:top;"><strong>${escapeHtml(item.name)}</strong>${item.detail ? `<br><span style="color:#555;font-size:13px;">${escapeHtml(item.detail)}</span>` : ""}</td><td style="padding:8px;border-top:1px solid #eee;vertical-align:top;white-space:nowrap;color:#555;">${item.quantity ? `× ${escapeHtml(item.quantity)}` : ""}</td><td style="padding:8px 0 8px 8px;border-top:1px solid #eee;vertical-align:top;text-align:right;white-space:nowrap;">${escapeHtml(item.amount || "")}</td></tr>`,
+        )
+        .join("")}</table>`
+    : "";
+
+  const totalsHtml = totals.length
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;font-size:14px;border-collapse:collapse;">${totals
+        .map(
+          ([label, value, bold]) =>
+            `<tr><td style="padding:3px 8px 3px 0;text-align:right;color:${bold ? "#222" : "#555"};${bold ? "font-weight:bold;" : ""}">${escapeHtml(label)}</td><td style="padding:3px 0 3px 8px;text-align:right;white-space:nowrap;width:1%;${bold ? "font-weight:bold;" : ""}">${escapeHtml(value)}</td></tr>`,
+        )
+        .join("")}</table>`
     : "";
 
   const buttonHtml = button
@@ -77,11 +100,11 @@ const renderEmail = ({ heading, paragraphs = [], button, details = [], quote, no
       <tr>
         <td style="padding:24px 32px 32px;">
           <h1 style="margin:0 0 16px;font-size:22px;">${escapeHtml(heading)}</h1>
-          ${paragraphHtml}${detailsHtml}${quoteHtml}${buttonHtml}${noteHtml}
+          ${paragraphHtml}${detailsHtml}${quoteHtml}${itemsHtml}${totalsHtml}${buttonHtml}${noteHtml}
         </td>
       </tr>
     </table>
-    <p style="text-align:center;font-size:12px;color:#888;line-height:1.6;">${escapeHtml(brand)}${site ? ` · <a href="${escapeHtml(site)}" style="color:#888;">${escapeHtml(new URL(site).host)}</a>` : ""}${contactInbox ? `<br>Questions? Write to <a href="mailto:${escapeHtml(contactInbox)}" style="color:#888;">${escapeHtml(contactInbox)}</a>` : ""}</p>
+    <p style="text-align:center;font-size:12px;color:#888;line-height:1.6;">${escapeHtml(brand)}${site ? ` · <a href="${escapeHtml(site)}" style="color:#888;">${escapeHtml(new URL(site).host)}</a>` : ""}${contact ? `<br>Questions? Reply to this email, or write to <a href="mailto:${escapeHtml(contact)}" style="color:#888;">${escapeHtml(contact)}</a>` : contactInbox ? `<br>Questions? Write to <a href="mailto:${escapeHtml(contactInbox)}" style="color:#888;">${escapeHtml(contactInbox)}</a>` : ""}</p>
   </body>
 </html>`;
 };

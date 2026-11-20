@@ -58,6 +58,24 @@ Square and PayPal start in sandbox. To take real money, all of these on the same
 
 Both webhooks read every event back from Square or PayPal before acting, so neither needs a signing key. They're a backup: the order is marked paid when the charge or capture completes.
 
+## Email addresses
+
+Every email goes out through the one mail account on the Settings page (Email sending: Gmail, signed in as patrick@hashtagbillionaire.com). Since 20 November each kind of email to a customer comes from the address the client chose for it, and the customer's reply goes back to that address:
+
+| From | Emails |
+|---|---|
+| order@hashtagbillionaire.com | Order confirmed (when it's paid), order cancelled by the team (paid orders, with the amount to be refunded), order shipped (with the tracking link), order delivered |
+| support@hashtagbillionaire.com | Sign-up verification, forgot password, "your password was changed" (after a reset or a change), account set up by an admin, admin password reset; the contact form's reply for support questions: Order Issue, Customization Help, Shipping & Delivery, Payment Issue |
+| info@hashtagbillionaire.com | The contact form's reply for a General Inquiry |
+| quotes@hashtagbillionaire.com | Sourcing requests ("can't find it"): received, and each status change |
+| The Sender (`EMAIL_FROM`) | The team's copies of contact-form messages and sourcing requests, to the Team inbox, as before; replying answers the customer. A support question's subject now says so: "New support question: Order Issue" |
+
+Each address is a setting under Email sending ("Order emails come from", and so on), so it can be changed without a deploy. Not built yet: mockup approval and reprint emails (neither feature exists), and a new-order email to the team (client question 38).
+
+**Setting it up:** the four addresses must be ones the mail account may send as. In that Gmail account (patrick@), **Settings → Accounts → Send mail as → Add another email address**, once for each of order@, support@, info@ and quotes@. If Gmail asks to confirm an address, its code goes to that address, which as an alias of this account lands in the same inbox. Until an address is added there, Gmail sends that email as patrick@: nothing fails, and replies still go to the right address.
+
+The client's list spelled the quotes address `quotes@hashtagbillioniaire.com`; the code uses `quotes@hashtagbillionaire.com`, like the other three.
+
 ## Upload limits
 
 Customers' graphics can be up to 100 MB each. They're stored in `graphics` in the storage folder, which the app creates at start, and served at `/graphics`. What sits in front of the app allows that (checked 4 November):

@@ -11,6 +11,7 @@ const {
   findLabel,
   shipstationMessage,
 } = require("../../config/shipstation");
+const { notifyOrderShipped, notifyOrderDelivered } = require("./orderEmails.service");
 
 // What happens to an order in ShipStation once it's paid: it's created there, where it shows in
 // the dashboard, and its label is bought for the customer's chosen service. The customer has
@@ -229,11 +230,26 @@ const updateOrderTracking = async (event) => {
     update.shipped_at = order.shipped_at || ship_date || new Date();
   }
 
+  // Only the event that moves the order into SHIPPED or DELIVERED emails the customer, even when
+  // ShipStation sends two at once (each scan is an event).
+  let moved = false;
+  if (update.status && update.status !== order.status) {
+    const [count] = await Order.update(
+      { status: update.status },
+      { where: { id: order.id, status: { [Op.notIn]: [update.status, "DELIVERED", "CANCELLED"] } } },
+    );
+    moved = count === 1;
+  }
+
   await order.update(update);
 
   if (update.status) {
     await OrderItem.update({ shipment_status: "SHIPPED" }, { where: { order_id: order.id } });
   }
+
+  // "Shipped" / "Delivered", from order@. Not awaited and never throws (orderEmails.service.js).
+  if (moved && update.status === "SHIPPED") notifyOrderShipped(order.id);
+  if (moved && update.status === "DELIVERED") notifyOrderDelivered(order.id);
 };
 
 module.exports = {

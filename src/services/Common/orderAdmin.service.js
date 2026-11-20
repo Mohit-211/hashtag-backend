@@ -13,6 +13,7 @@ const { releaseOrderGraphics } = require("./graphic.service");
 const { orderActions, ordersWithPaymentInProgress } = require("./orderActions");
 const { CLAIM_TIMEOUT_MINUTES } = require("./shipment.service");
 const { getAdminOrders } = require("./order.service");
+const { notifyOrderCancelled } = require("./orderEmails.service");
 
 const adminView = async (orderId) => (await getAdminOrders({ order_id: orderId })).data[0] || null;
 
@@ -150,6 +151,10 @@ const adminCancelOrder = async (orderId, { reason, adminId } = {}) => {
   }
 
   logger.info(`Admin ${adminId} cancelled order ${order.order_number}${cleanReason ? `: ${cleanReason}` : ""}`);
+
+  // "Order cancelled", from order@, when it was paid. The reason stays with the team. Not awaited
+  // and never throws (orderEmails.service.js).
+  notifyOrderCancelled(order.id);
 
   return { order: await adminView(order.id), warnings };
 };

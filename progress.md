@@ -102,7 +102,7 @@ Changes the shop and the admin panel need: [docs/frontend-changes.md](docs/front
 |---|---|---|---|---|
 | C1 | Admin API had no authentication | ◐ | `335d27b` | Three payment admin routes still public. Payments |
 | C2 | Admin account takeover | ✅ | `335d27b` | Confirm `JWT_SECRET` was changed at deploy. Server |
-| C3 | Payment webhooks not verified | ❌ | | The ShipStation webhook is signed since `4b5729f`. Square and PayPal: Payments |
+| C3 | Payment webhooks not verified | ✅ | `4b5729f`, `2634b76` | The ShipStation webhook is signed (`4b5729f`); Square's and PayPal's read each payment back with our own keys (`2634b76`) |
 | C4 | Customer-controlled prices | ◐ | `335d27b`, `44141b0`, `4b5729f` | Decoration options not on the price list priced at $0 (the client wants them refused, Q10) |
 | C5 | Image proxy fetched any URL | ✅ | `335d27b` | |
 | C6 | Customer and business data exposed | ◐ | `335d27b`, `aba0065` | Supplier cost now hidden from shoppers. The payment admin list is still public (C1). Payments |
@@ -243,7 +243,7 @@ The client answered on 26 October and answered the follow-ups on 27 October; the
 | 35 | Keep the unpaid-order flow | H8 only | ❌ | | Payments |
 | 36 | Quantities editable in the cart; "−" stops at the minimum | "−" and typed quantities stop at the line's minimum (`lineMinimum`: the variant's minimum, SAGE's first price tier, 12 for screen print) with a 400 instead of removing the line, 0 included; cart lines carry `min_quantity` (C4) | ✅ | `690db9c` | |
 | 37 | Card, Google Pay, Cash App, PayPal and Apple Pay, on current APIs | C11, Apple Pay, upgrades | ❌ | | Payments |
-| 38 | Every order email for customers, a confirmation page, and a new-order email to patrick@hashtagbillionaire.com | Order emails, once payment notices are verified (C3) so a forged one can't send them | ❌ | | Payments |
+| 38 | Every order email for customers, a confirmation page, and a new-order email to patrick@hashtagbillionaire.com | Customer emails from order@ (20 Nov, `orderEmails.service.js`): confirmed when paid, cancelled by the team (paid orders, with the refund), shipped and delivered from ShipStation tracking, each once. Payment notices are read back from Square and PayPal first (C3), so a forged one can't send them. Not built: the new-order email to the team, and mockup approval and reprint emails (neither feature exists). The confirmation page is the shop's | ◐ | | New-order email to the team |
 | 39 | Tracking for signed-in customers; the admin picks ShipStation or manual updates | Tracking mode per order; manual status endpoint | ❌ | | Payments |
 | 40 | Erase unverified accounts completely, past ones too | The 2-hour cleanup erases the account with its profile, photo, tokens, cart, wishlist and addresses, including the accounts the old job only hid | ✅ | `ddb990d` | |
 | 42 | The shop's password rule everywhere | `validatePassword` checks the shop's rule (8 to 128 characters, an uppercase letter, a number, a special character) wherever a customer or admin sets a password; one message for all of them; `password-validator` removed | ✅ | `16cca53` | |

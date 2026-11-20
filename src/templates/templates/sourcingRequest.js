@@ -2,14 +2,17 @@
 
 const { greeting, renderEmail } = require("./layout");
 
-// Sent when the request is submitted. Returns the HTML body.
-const sourcingRequestConfirmationTemplate = (name, requestedName) =>
+// Sent when the request is submitted. Returns the HTML body. `contact` is the address it comes
+// from and replies go to (quotes@, email.service.js).
+const sourcingRequestConfirmationTemplate = (name, requestedName, contact) =>
   renderEmail({
     heading: "We've received your sourcing request",
     paragraphs: [
       `${greeting(name)} thanks for your request${requestedName ? ` for "${requestedName}"` : ""}.`,
       "Our team will look into it and let you know by email when its status changes.",
     ],
+    note: "To add details or pictures, just reply to this email.",
+    contact,
   });
 
 // To the team inbox, when the request is submitted. Returns the HTML body.
@@ -54,7 +57,7 @@ const STATUS_MESSAGES = {
 
 // Sent when an admin changes the status. Returns { subject, html }, or null when the
 // status needs no email.
-const sourcingRequestStatusTemplate = (name, requestedName, status, adminNotes) => {
+const sourcingRequestStatusTemplate = (name, requestedName, status, adminNotes, contact) => {
   const message = STATUS_MESSAGES[String(status || "").toUpperCase()];
   if (!message) return null;
 
@@ -67,6 +70,7 @@ const sourcingRequestStatusTemplate = (name, requestedName, status, adminNotes) 
         message.body,
       ],
       quote: adminNotes ? `Note from our team:\n${adminNotes}` : undefined,
+      contact,
     }),
   };
 };
