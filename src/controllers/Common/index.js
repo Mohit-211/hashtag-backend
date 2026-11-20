@@ -6,6 +6,7 @@ const galleryController = require('./gallery.controller');
 const graphicController = require('./graphic.controller');
 const pricingTemplateController = require('./pricingTemplate.controller');
 const productImportController = require('./productImport.controller');
+const pricingTemplateImportController = require('./pricingTemplateImport.controller');
 const contactUsController = require('./contactUs.controller');
 const countryController = require('./country.controller');
 const stateController = require('./state.controller');
@@ -41,6 +42,7 @@ module.exports = {
     graphicController,
     pricingTemplateController,
     productImportController,
+    pricingTemplateImportController,
     contactUsController,
     countryController,
     stateController,

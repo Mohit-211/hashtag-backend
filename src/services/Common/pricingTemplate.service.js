@@ -161,4 +161,8 @@ module.exports = {
   createPricingTemplate,
   updatePricingTemplate,
   deletePricingTemplate,
+  // For the CSV import (pricingTemplateImport.service.js): the same limits and shape.
+  NAME_MAX_LENGTH,
+  MAX_ROWS,
+  toTemplate,
 };

@@ -137,7 +137,7 @@ const graphicUpload = multer({ storage, limits: graphicLimits, fileFilter }).fie
   { name: "graphic", maxCount: 1 },
 ]);
 
-// POST /product/import and /product/import/preview: one CSV file, read in memory and never
+// POST /product/import, /pricing-template/import and their /preview: one CSV file, read in memory and never
 // written to disk.
 const CSV_FIELD = "file";
 const csvLimits = { fileSize: 2 * 1024 * 1024, files: 1, fields: 20, fieldSize: 1024 * 1024 };
@@ -152,7 +152,7 @@ const csvUpload = multer({
     return cb(
       new ApiError(
         httpStatus.BAD_REQUEST,
-        "Upload the products as a .csv file. In Excel, Google Sheets or Numbers, save or download the sheet as CSV.",
+        "Upload a .csv file. In Excel, Google Sheets or Numbers, save or download the sheet as CSV.",
       ),
     );
   },

@@ -4,6 +4,7 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
+| [2026-11-20: pricing templates from a CSV file](#2026-11-20-template-import) | deploying 20 Nov | Done in Hashtag-Billionaire-Admin, deploying 20 Nov: Pricing Templates › Import from CSV |
 | [2026-11-19: the Dashboard](#2026-11-19-dashboard) | `c1e6f1c`, live since 19 Nov | Done in Hashtag-Billionaire-Admin `5af5d20`, live since 19 Nov: the Dashboard page, and the Orders page takes its filters from the link |
 | [2026-11-18: grand, parent and supplier category names](#2026-11-18-category-names) | `98cddea`, live since 18 Nov | Done in Hashtag-Billionaire-Admin `91fe6df`, live since 18 Nov: every label now says Grand / Parent / Supplier Category |
 | [2026-11-17: products from a CSV file](#2026-11-17-csv-import) | `67d1c9d`, live since 17 Nov | Done in Hashtag-Billionaire-Admin `b28fa57` (the Import from CSV page), live since 17 Nov |
@@ -64,6 +65,64 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 
 1. **`payment_status=ALL`:** coming in the next release: `GET order/admin?payment_status=ALL` lists orders of every payment status. Without the parameter it still lists paid orders only.
 2. **The 2 unpaid orders the panel doesn't show:** when a customer's cart changes, the backend soft-deletes their latest unpaid order (`invalidatePendingOrder` in `cartWishlist.service.js`), and orders are paranoid, so those two are hidden from every list. Nothing is missing on the panel's side; the behaviour itself is on the payments list (audit H8).
+
+<a id="2026-11-20-template-import"></a>
+## 2026-11-20: pricing templates from a CSV file (deploying 20 Nov)
+
+Admins can create or update many pricing templates at once from a CSV file, in either pricing style: Pricing Templates › Import from CSV (`/pricing-templates/import`). The panel's page is part of the same change. There's no migration: it saves into the `pricing_templates` table made on 12 Nov.
+
+| Endpoint | What it does |
+|---|---|
+| `GET pricing-template/import/format` | The columns, each with whether it's per template or per row, which pricing style it's for, and its help text. Also the two styles, the limits, the number of templates that exist, an example file (as CSV and as rows) and an empty template. The page shows these, so the layout is defined in one place. |
+| `POST pricing-template/import/preview` | Multipart: `file` (the CSV) and an optional `replace_existing` (`true`). Checks the whole file and returns a report. Saves nothing. |
+| `POST pricing-template/import` | The same body. Checks the file again, then saves every template in one transaction, or none. Returns 201 with the saved templates, or 422 with the same report when the file has problems. |
+
+The report lists each template with its style, its prices in words and whether it's new or replaces an existing one. It also lists errors and warnings, sorted by spreadsheet row.
+
+All three are admin-only. The file is read in memory: `.csv`, `.txt` or `.tsv`, up to 2 MB and 1,000 rows.
+
+**The file:** one row per price. Rows with the same Template name, ignoring case and accents, make one template.
+
+| Column | Needed | What to put |
+|---|---|---|
+| `Template name` | Yes, every row | Up to 100 characters. |
+| `Pricing style` | Once per template | `Variable ranges` or `Fixed quantities` (also read: variable, ranges, tiered, fixed, quantities, packs). |
+| `From`, `To`, `Price per item` | Variable ranges | One tier per row. Blank `To` on the last tier covers every larger order. The price is per item. |
+| `Quantity`, `Total price` | Fixed quantities | One exact quantity per row, each listed once. The price is for the whole quantity. |
+
+Other rules:
+- **Prices** are in dollars, more than 0, with `$` and thousands separators allowed. Decimals are kept as given, with no rounding, as on the Pricing Templates page. A column called just `Price` is read as Price per item or Total price, whichever the template's style uses.
+- **Tiers** can be listed in any order; they're sorted by From. Only the tier with the largest From can leave To blank, and tiers can't overlap. The same rules as the page apply, through `utils/pricing/pricingRows.js`.
+- **Limits:** at most 50 rows per template.
+- **Wrong-style columns:** filling a column of the other style, such as Quantity on a Variable ranges template, is a problem.
+- **Existing names:** a name that's already a template (not deleted) is a problem. With `replace_existing`, that template gets the file's style and prices and keeps its id, as an edit on the page does. Products that loaded it keep their own copy of its prices.
+- **Warnings don't stop the import.** They cover:
+  - a first tier that starts above 1;
+  - a gap between tiers;
+  - a last tier that has a To.
+
+  In each case the cart refuses quantities no tier covers. Skipped columns and unreadable characters are warned about too.
+- **Reading the file:** commas, semicolons or tabs. Quotes, a UTF-8 byte order mark and UTF-16 are all read.
+
+**What gets saved** is what the Pricing Templates page saves: `name`, `pricing_mode` (`tiered` or `quantity_fixed`), the rows, and `created_by` set to the admin who imported. Two admins saving the same name at the same moment get a 409, and nothing from the file is saved.
+
+**On the panel:**
+- An **Import from CSV** button sits next to Add template.
+- The page follows Import products from CSV:
+  1. **Fill in the spreadsheet:** the example file, the empty template, the two styles side by side with the example's rows, the rules and every column.
+  2. **Upload the file:** a choice for templates that already exist (Stop, or Replace them), and a drop zone. The file is checked as soon as it's chosen.
+  3. **Check and import:** counts, problems by row, warnings, and each template with its prices and what happens to it.
+- The parts both import pages share moved to `src/components/common/ImportBlocks.tsx` and `src/lib/csvFiles.ts`. The products page looks and works as before.
+
+**Tested** on the commit's own code (HEAD plus this change only), against MariaDB 10.11 in strict mode with `pricing_templates` made by the 12 Nov migration. 61 checks passed:
+- the example, the test file, import, a second import refused, and replace;
+- 22 kinds of mistakes, each reported on its row;
+- semicolons, other header names, UTF-16, accents;
+- 950 rows imported in 0.2 s;
+- a failure halfway, and another admin saving a name meanwhile, both leaving nothing behind;
+- the HTTP routes: 401, 201, 422, a `.xlsx` file, no file, and over 2 MB.
+
+The panel page was driven in headless Chrome against that backend: a file with mistakes, the test file, the same file again (refused, then replaced), the example (both styles), the products import page, and phone width. There were no console errors.
 
 <a id="2026-11-19-dashboard"></a>
 ## 2026-11-19: the Dashboard (live since 19 Nov)
