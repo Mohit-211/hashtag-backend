@@ -53,11 +53,16 @@ const DUMMY_HASH = bcrypt.hashSync(crypto.randomBytes(16).toString("hex"), 10);
 
 const normalizeEmail = (email) => String(email || "").trim();
 
-// The verification link stops working when the unverified account is deleted.
-const verificationDeadline = (user) =>
-	new Date(
-		new Date(user.created_at).getTime() + UNVERIFIED_ACCOUNT_HOURS * 60 * 60 * 1000,
+// The verification link stops working when the unverified account is deleted. Right after sign-up
+// the new user's created_at isn't a date yet (the database fills it in and it isn't read back), so
+// the time is counted from now. Without this the date was invalid and the sign-up email was never
+// sent; only Resend worked (since 335d27b).
+const verificationDeadline = (user) => {
+	const created = new Date(user.created_at).getTime();
+	return new Date(
+		(Number.isNaN(created) ? Date.now() : created) + UNVERIFIED_ACCOUNT_HOURS * 60 * 60 * 1000,
 	);
+};
 
 const sendVerificationLink = async (user, name) => {
 	const expiresAt = verificationDeadline(user);
