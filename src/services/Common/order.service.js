@@ -38,8 +38,14 @@ const { paymentStatusTypes } = require("../../config/types");
 const { cartLineTotal } = require("../../utils/pricing/cartLineTotal");
 const { handlingFeeFor } = require("./handlingFee.service");
 const { orderActions, ordersWithPaymentInProgress } = require("./orderActions");
+const { retireUnpaidOrders } = require("./unpaidOrders.service");
 
 const createOrder = async (body) => {
+  // The new order replaces the customer's earlier unpaid ones (going back at checkout, or after a
+  // declined payment), so only the order for the cart as it is now can be paid (audit F10).
+  // Refused while one of them is still being paid.
+  await retireUnpaidOrders(body.user.id, "a new order can't be made yet");
+
   const t = await sequelize.transaction();
 
   try {

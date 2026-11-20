@@ -6,6 +6,7 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
+| [2026-11-20: unpaid orders and one payment at a time](#2026-11-20-paying-order) | deploying 20 Nov | None required: the shop already shows the API's messages. Optional: see the note on 409 from `POST order` |
 | [2026-11-20: graphics are PNG, JPG or SVG only](#2026-11-20-graphic-types) | deploying 20 Nov | Done in hashtag-next, not deployed yet: both graphic pickers limited to PNG, JPG, JPEG and SVG |
 | [2026-11-13: payments go-live](#2026-11-13-go-live) | `2634b76`, live since 16 Nov | Done in hashtag-next `744ba16` and `5d0fcff`, not deployed yet |
 | [2026-11-13: colours and sizes on product cards](#2026-11-13) | `630d20c`, live | Optional: show colour swatches and the size range on cards |
@@ -70,6 +71,43 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 | A35 | 39 | Tracking for signed-in customers; the admin picks ShipStation or manual updates | Show the order's status and tracking from the API, whichever way it's updated. |
 
 **Waiting on the client:** A8, DTG with several locations (Q8, reworded); which font settings besides the font list (Q23). **Later, by the client's choice:** A24 pre-made products from suppliers (Q26), A42 price filter (Q54), A46 Back button (Q57), policy pages editable in the admin (Q61).
+
+---
+
+<a id="2026-11-20-paying-order"></a>
+## 2026-11-20: unpaid orders and one payment at a time (deploying 20 Nov)
+
+Audit points F01 and F10:
+- **F01:** a cart change removed the customer's unpaid order even while its Square payment was still going through. Cash App or Google Pay can take a moment, and a second tab can change the cart at any time. Square then took the money for an order that was gone: never confirmed, never shipped, not in My Orders, and nobody was told.
+- **F10:** any old unpaid order could still be paid, failed ones included, and every "Back" and every declined card left one behind. Square and PayPal also didn't check each other, so an order could be paid twice.
+
+The rules now, in `src/services/Common/unpaidOrders.service.js`:
+- Only the order made from the cart as it is now can be paid.
+- Every cart change, and every new order made at checkout, removes the customer's other unpaid orders: waiting for payment, or declined.
+- An order whose payment is still going through is never removed; the change is refused instead.
+- Only one payment per order can be going through at a time, by Square or PayPal.
+
+**What changed in the API:**
+- **Cart changes** (`POST product/cart`, plus, minus, typed quantity, remove, and now move to wishlist):
+  - They remove all the customer's unpaid orders, including declined ones. Before, only the newest waiting order was removed, and move to wishlist removed none.
+  - Refused with **409** while a payment for one of them is still going through: "Your payment for order HB-… is still going through, so your cart can't change yet. Check My Orders in a minute, then try again."
+- **Square is asked first.** If the payment has already completed, the order is confirmed and the cart emptied as usual, and the change gets 409: "Your order HB-… has just been paid, and your cart was emptied. You'll find the order in My Orders." If the payment failed, the change goes through.
+- **`POST order`** removes the customer's earlier unpaid orders first. While one of them is being paid it answers **409**: "Your payment for order HB-… is still going through, so a new order can't be made yet. …"
+- **Paying an order that was removed.** `POST payment/square/create-payment`, `POST payment/paypal/create-order` and `POST payment/paypal/capture-order` answer **409**: "Your cart changed after this order was made, so it can't be paid. Please go back and check out again." Nothing is charged. Before, this was "Order not found" (404), or a 500 in the split second before a charge.
+- **One payment at a time:**
+  - PayPal create and capture answer 409 "A payment for this order is already being processed. Check My Orders in a minute." while a Square charge is still going through.
+  - A card charge gets the same answer while PayPal is still reviewing a capture.
+  - The capture now locks the order and records the PayPal payment, so the cart and the admin see it as in progress too.
+- **A payment that still arrives for a removed order** brings the order back with its items, paid and confirmed, with an attention note for the team. This covers Square's and PayPal's webhooks; PayPal's ignored such an order before. It doesn't empty the customer's current cart or buy the label automatically.
+- **Declined orders** no longer pile up in My Orders: one goes away with the next cart change or checkout.
+
+**What the shop must do:** nothing. The shop already shows the API's message for every refused request, and checkout and the PayPal pages show it inline.
+
+Optional: `CheckoutLayout.tsx` treats any 409 from `POST order` as "the chosen shipping option has gone" and reloads the rates. With the new "still going through" 409 it shows the message and also reloads the rates. That's harmless, but it could check the message first.
+
+Tested on 20 Nov with the real cart, order, checkout and payment code against a throwaway MariaDB, with Square and PayPal faked. 31 checks passed, twice. The same test against the code before these changes failed 25 of them, including:
+- a charge Square accepted for an order that was gone;
+- PayPal taking a second payment while Cash App was still going through.
 
 ---
 

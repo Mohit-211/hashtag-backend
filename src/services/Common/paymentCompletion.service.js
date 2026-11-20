@@ -44,13 +44,28 @@ const completeOrderPayment = async ({
   let outcome;
 
   await sequelize.transaction(async (transaction) => {
-    const order = await Order.findByPk(orderId, {
-      include: [{ model: OrderItem, as: "items" }],
-      transaction,
-      lock: transaction.LOCK.UPDATE,
-    });
+    const findOrder = () =>
+      Order.findByPk(orderId, {
+        include: [{ model: OrderItem, as: "items" }],
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
 
-    if (!order) throw new ApiError(httpStatus.NOT_FOUND, "Order not found");
+    let order = await findOrder();
+    let restored = false;
+
+    // Removed while it was being paid: the cart changed during the payment (audit F01), or it was
+    // deleted by hand. The money has been taken, so the order and its items come back and the
+    // team is told, instead of the payment failing with "Order not found".
+    if (!order) {
+      const removed = await Order.findByPk(orderId, { paranoid: false, transaction, lock: transaction.LOCK.UPDATE });
+      if (!removed) throw new ApiError(httpStatus.NOT_FOUND, "Order not found");
+
+      await removed.restore({ transaction });
+      await OrderItem.restore({ where: { order_id: removed.id }, transaction });
+      order = await findOrder();
+      restored = true;
+    }
 
     let payment = await Payment.findOne({
       where: { transaction_id: transactionId, payment_provider: provider },
@@ -96,6 +111,12 @@ const completeOrderPayment = async ({
     }
 
     const notes = [];
+
+    if (restored) {
+      notes.push(
+        `This order was removed while it was being paid (the cart changed during the payment) and was brought back when the ${providerName(provider)} payment arrived. Its label wasn't bought automatically: check with the customer before shipping, as they may have ordered again.`,
+      );
+    }
 
     if (Math.abs(Number(amount) - Number(order.total_amount)) > 0.005) {
       notes.push(`${providerName(provider)} took ${money(amount)} but the order total is ${money(order.total_amount)}.`);
@@ -153,16 +174,18 @@ const completeOrderPayment = async ({
 
     if (notes.length) logger.error(`Order ${order.order_number} needs attention: ${notes.join(" ")}`);
 
-    outcome = { order, newlyPaid: true };
+    outcome = { order, newlyPaid: true, restored };
   });
 
   if (outcome.newlyPaid) {
     const { order } = outcome;
     logger.info(`Order ${order.order_number} paid by ${provider} (${transactionId}).`);
 
-    await Cart.destroy({ where: { user_id: order.user_id } });
+    // A restored order isn't what's in the cart now, so the cart stays, and its label waits for
+    // the team (see its attention note).
+    if (!outcome.restored) await Cart.destroy({ where: { user_id: order.user_id } });
     await markGraphicsOrdered(order);
-    shipInBackground(order);
+    if (!outcome.restored) shipInBackground(order);
   }
 
   return outcome;

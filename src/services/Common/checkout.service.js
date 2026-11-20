@@ -76,6 +76,34 @@ const SQUARE_SOURCE_MODES = ["CARD", "GOOGLE_PAY", "APPLE_PAY", "CASH_APP", "AFT
 // checked with Square again (settlePendingSquarePayments) before anything else happens.
 const SQUARE_PENDING_HOURS = 24;
 
+// The order's payments that were sent and haven't completed or failed yet: a Square charge (Cash
+// App and Google Pay can take a moment) or a PayPal capture that PayPal is still reviewing. Only
+// one may be going through at a time, whatever the provider (audit F10), and the cart mustn't
+// remove an order while one is (audit F01, unpaidOrders.service.js).
+const unsettledPayments = (orderId) => ({
+  order_id: orderId,
+  payment_provider: ["SQUARE", "PAYPAL"],
+  payment_status: "PENDING",
+  transaction_id: { [Op.ne]: null },
+  created_at: { [Op.gt]: new Date(Date.now() - SQUARE_PENDING_HOURS * 60 * 60 * 1000) },
+});
+
+const ALREADY_GOING_THROUGH = "A payment for this order is already being processed. Check My Orders in a minute.";
+
+// The order to pay isn't there: removed because the cart changed after it was made (only the
+// order for the cart as it is now can be paid, audit F10), or it isn't this customer's.
+const orderGone = async (user, orderId) => {
+  const removed = await Order.findOne({
+    where: { id: orderId, user_id: user.id },
+    paranoid: false,
+    attributes: ["id"],
+  });
+
+  return removed
+    ? new ApiError(httpStatus.CONFLICT, "Your cart changed after this order was made, so it can't be paid. Please go back and check out again.")
+    : new ApiError(httpStatus.NOT_FOUND, "Order not found.");
+};
+
 const squareErrorOf = (error) => error?.errors?.[0] || error?.body?.errors?.[0] || null;
 
 // What to tell the customer when Square refuses a charge.
@@ -217,7 +245,7 @@ const createPayment = async (body) => {
   }
 
   const found = await Order.findOne({ where: { id: order_id, user_id: user.id } });
-  if (!found) throw new ApiError(httpStatus.NOT_FOUND, "Order not found");
+  if (!found) throw await orderGone(user, order_id);
 
   // An earlier charge that hasn't settled is checked with Square first.
   if (await settlePendingSquarePayments(found)) {
@@ -239,6 +267,12 @@ const createPayment = async (body) => {
       lock: transaction.LOCK.UPDATE,
     });
 
+    // Removed by a cart change (in another tab) while this request waited for the lock: nothing
+    // has been charged.
+    if (!order) {
+      throw await orderGone(user, order_id);
+    }
+
     if (order.payment_status === "SUCCESS") {
       throw new ApiError(httpStatus.CONFLICT, "This order is already paid.");
     }
@@ -252,19 +286,14 @@ const createPayment = async (body) => {
       throw new ApiError(httpStatus.BAD_REQUEST, "This order has nothing to pay.");
     }
 
+    // Any provider: a PayPal capture that's still being reviewed blocks a card charge too.
     const inProgress = await Payment.findOne({
-      where: {
-        order_id: order.id,
-        payment_provider: "SQUARE",
-        payment_status: "PENDING",
-        transaction_id: { [Op.ne]: null },
-        created_at: { [Op.gt]: new Date(Date.now() - SQUARE_PENDING_HOURS * 60 * 60 * 1000) },
-      },
+      where: unsettledPayments(order.id),
       transaction,
     });
 
     if (inProgress) {
-      throw new ApiError(httpStatus.CONFLICT, "A payment for this order is already being processed. Check My Orders in a minute.");
+      throw new ApiError(httpStatus.CONFLICT, ALREADY_GOING_THROUGH);
     }
 
     try {
@@ -418,7 +447,8 @@ const squareWebhook = async (body) => {
 
   let orderId = row?.order_id;
   if (!orderId && payment.referenceId) {
-    const order = await Order.findOne({ where: { order_number: payment.referenceId } });
+    // A removed order too: a completed payment brings it back (paymentCompletion.service.js).
+    const order = await Order.findOne({ where: { order_number: payment.referenceId }, paranoid: false });
     orderId = order?.id;
   }
 
@@ -1066,6 +1096,25 @@ const PAYPAL_MESSAGES = {
 
 const paypalAmount = (money) => Number(money?.value || 0);
 
+// Refuses (409) while another payment for the order is going through. Square is asked first, so a
+// charge that has finished or failed doesn't count; if Square can't be reached, it still does.
+const refuseWhilePaying = async (order) => {
+  if (!(await Payment.findOne({ where: unsettledPayments(order.id), attributes: ["id"] }))) return;
+
+  let paid = false;
+  try {
+    paid = await settlePendingSquarePayments(order);
+  } catch (error) {
+    logger.error(`Square status check for ${order.order_number} failed: ${error.message}`);
+  }
+
+  if (paid) throw new ApiError(httpStatus.CONFLICT, "This order is already paid.");
+
+  if (await Payment.findOne({ where: unsettledPayments(order.id), attributes: ["id"] })) {
+    throw new ApiError(httpStatus.CONFLICT, ALREADY_GOING_THROUGH);
+  }
+};
+
 // Starts a PayPal checkout for the order's total. The website sends the customer to approval_url.
 const createPayPalOrder = async (body) => {
   const { user, order_id } = body;
@@ -1077,7 +1126,7 @@ const createPayPalOrder = async (body) => {
   const order = await Order.findOne({ where: { id: order_id, user_id: user.id } });
 
   if (!order) {
-    throw new ApiError(httpStatus.NOT_FOUND, "Order not found.");
+    throw await orderGone(user, order_id);
   }
 
   if (order.payment_status === paymentStatusTypes.SUCCESS) {
@@ -1093,6 +1142,9 @@ const createPayPalOrder = async (body) => {
   if (!(amount > 0)) {
     throw new ApiError(httpStatus.BAD_REQUEST, "This order has nothing to pay.");
   }
+
+  // One payment at a time (audit F10): not while a Cash App or Google Pay charge is going through.
+  await refuseWhilePaying(order);
 
   const website = settings.getRequired("FRONTEND_URL");
 
@@ -1153,7 +1205,7 @@ const capturePayPalOrder = async (body) => {
   const order = await Order.findOne({ where: { id: order_id, user_id: user.id } });
 
   if (!order) {
-    throw new ApiError(httpStatus.NOT_FOUND, "Order not found.");
+    throw await orderGone(user, order_id);
   }
 
   const result = (status, capture) => ({
@@ -1174,36 +1226,106 @@ const capturePayPalOrder = async (body) => {
     throw new ApiError(httpStatus.CONFLICT, "This order was cancelled, so the PayPal payment wasn't taken.");
   }
 
-  const orders = new OrdersController(getPaypalClient());
-  let paypalOrder;
-
+  // One payment at a time (audit F10): a Cash App or Google Pay charge still going through is
+  // checked with Square first. If it has just paid the order, PayPal takes nothing.
   try {
-    paypalOrder = (await orders.captureOrder({ id: paypal_order_id })).result;
+    await refuseWhilePaying(order);
   } catch (error) {
-    const detail = paypalErrorOf(error);
+    await order.reload();
+    if (order.payment_status === paymentStatusTypes.SUCCESS) return result("COMPLETED", null);
+    throw error;
+  }
 
-    if (detail.issue === "ORDER_ALREADY_CAPTURED") {
-      paypalOrder = (await orders.getOrder({ id: paypal_order_id })).result;
-    } else {
-      logger.error(`PayPal capture for ${order.order_number} failed: ${detail.status} ${detail.issue} ${detail.description}`);
-      throw new ApiError(
-        detail.status && detail.status < 500 ? httpStatus.BAD_REQUEST : httpStatus.BAD_GATEWAY,
-        PAYPAL_MESSAGES[detail.issue] || "PayPal didn't complete the payment. Please try again or use another way to pay.",
+  let paypalOrder;
+  let capture;
+  let paidMeanwhile = false;
+
+  // As for a Square charge: the order row stays locked while PayPal takes the money and the
+  // capture is recorded, so a card charge or a cart change can't happen at the same moment.
+  await sequelize.transaction(async (transaction) => {
+    const locked = await Order.findOne({
+      where: { id: order_id, user_id: user.id },
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+
+    if (!locked) throw await orderGone(user, order_id);
+
+    if (locked.payment_status === paymentStatusTypes.SUCCESS) {
+      paidMeanwhile = true;
+      return;
+    }
+
+    if (locked.status === orderStatusTypes.CANCELLED) {
+      throw new ApiError(httpStatus.CONFLICT, "This order was cancelled, so the PayPal payment wasn't taken.");
+    }
+
+    if (await Payment.findOne({ where: unsettledPayments(locked.id), attributes: ["id"], transaction })) {
+      throw new ApiError(httpStatus.CONFLICT, ALREADY_GOING_THROUGH);
+    }
+
+    const orders = new OrdersController(getPaypalClient());
+
+    try {
+      paypalOrder = (await orders.captureOrder({ id: paypal_order_id })).result;
+    } catch (error) {
+      const detail = paypalErrorOf(error);
+
+      if (detail.issue === "ORDER_ALREADY_CAPTURED") {
+        paypalOrder = (await orders.getOrder({ id: paypal_order_id })).result;
+      } else {
+        logger.error(`PayPal capture for ${locked.order_number} failed: ${detail.status} ${detail.issue} ${detail.description}`);
+        throw new ApiError(
+          detail.status && detail.status < 500 ? httpStatus.BAD_REQUEST : httpStatus.BAD_GATEWAY,
+          PAYPAL_MESSAGES[detail.issue] || "PayPal didn't complete the payment. Please try again or use another way to pay.",
+        );
+      }
+    }
+
+    const unit = paypalOrder?.purchaseUnits?.[0];
+
+    // The PayPal order must be the one made for this order.
+    if (String(unit?.referenceId) !== String(locked.id)) {
+      throw new ApiError(httpStatus.BAD_REQUEST, "This PayPal payment doesn't belong to this order.");
+    }
+
+    capture = unit?.payments?.captures?.[0];
+
+    if (!capture) {
+      throw new ApiError(httpStatus.BAD_REQUEST, "PayPal didn't complete the payment. Please try again.");
+    }
+
+    // Recorded before the lock is released, so the other payment endpoints and the cart see it.
+    // A completed one becomes SUCCESS below; one PayPal is still reviewing stays PENDING until its
+    // webhook arrives.
+    if (["COMPLETED", "PENDING"].includes(capture.status)) {
+      await Payment.findOrCreate({
+        where: { transaction_id: capture.id, payment_provider: "PAYPAL" },
+        defaults: {
+          order_id: locked.id,
+          user_id: locked.user_id,
+          amount: paypalAmount(capture.amount),
+          currency: capture.amount?.currencyCode || locked.currency || "USD",
+          payment_status: paymentStatusTypes.PENDING,
+          payment_mode: paymentModeTypes.PAYPAL,
+          description: `PayPal payment for order ${locked.order_number}`,
+        },
+        transaction,
+      });
+    }
+
+    // Still being reviewed after an earlier failed attempt: the order is unpaid again, not failed.
+    if (capture.status === "PENDING" && locked.payment_status === paymentStatusTypes.REJECTED) {
+      await locked.update(
+        { payment_status: paymentStatusTypes.PENDING, status: orderStatusTypes.PENDING_PAYMENT },
+        { transaction },
       );
     }
-  }
+  });
 
-  const unit = paypalOrder?.purchaseUnits?.[0];
-
-  // The PayPal order must be the one made for this order.
-  if (String(unit?.referenceId) !== String(order.id)) {
-    throw new ApiError(httpStatus.BAD_REQUEST, "This PayPal payment doesn't belong to this order.");
-  }
-
-  const capture = unit?.payments?.captures?.[0];
-
-  if (!capture) {
-    throw new ApiError(httpStatus.BAD_REQUEST, "PayPal didn't complete the payment. Please try again.");
+  if (paidMeanwhile) {
+    await order.reload();
+    return result("COMPLETED", null);
   }
 
   if (capture.status === "COMPLETED") {
@@ -1220,11 +1342,8 @@ const capturePayPalOrder = async (body) => {
   }
 
   if (capture.status === "PENDING") {
-    // PayPal is still reviewing it; its webhook completes the order. After an earlier failed
-    // attempt the order is unpaid again, not failed.
-    if (order.payment_status === paymentStatusTypes.REJECTED) {
-      await order.update({ payment_status: paymentStatusTypes.PENDING, status: orderStatusTypes.PENDING_PAYMENT });
-    }
+    // PayPal is still reviewing it; its webhook completes the order.
+    await order.reload();
     return result("PENDING", capture);
   }
 
@@ -1267,7 +1386,8 @@ const paypalWebhook = async (body) => {
   const orderId = paypalOrder?.purchaseUnits?.[0]?.referenceId;
   if (!orderId) return { ignored: true };
 
-  const order = await Order.findByPk(orderId);
+  // A removed order too: a completed payment brings it back (paymentCompletion.service.js).
+  const order = await Order.findByPk(orderId, { paranoid: false });
   if (!order) return { ignored: true };
 
   if (capture.status === "COMPLETED") {
@@ -1303,4 +1423,8 @@ module.exports = {
   createPayPalOrder,
   capturePayPalOrder,
   paypalWebhook,
+
+  // For unpaidOrders.service.js: an order mustn't be removed while it's being paid.
+  settlePendingSquarePayments,
+  unsettledPayments,
 };

@@ -11,8 +11,6 @@ const {
   Cart,
   Size,
   ProductAttachment,
-  Order,
-  OrderItem,
   ProductCategory,
   ParentCategory,
   GrandCategory,
@@ -41,10 +39,10 @@ const {
   toLineGraphic,
   applyGraphicFees,
 } = require("./graphic.service");
-const { cancelShipstationShipment } = require("../../config/shipstation");
 const settings = require("../../config/settings");
 const { cartLineTotal } = require("../../utils/pricing/cartLineTotal");
 const { handlingFeeFor } = require("./handlingFee.service");
+const { retireUnpaidOrders } = require("./unpaidOrders.service");
 
 // Variant's primary image, else its first image, else the product's first attachment.
 const getVariantImage = (variant) => {
@@ -2970,6 +2968,9 @@ const moveCartToWishlist = async (body) => {
 
     if (!cartItem) throw new ApiError(httpStatus.NOT_FOUND, "Cart item not found");
 
+    // Moving a line out of the cart changes it like any other cart change (audit F10).
+    await invalidatePendingOrder(user.id);
+
     // ✅ ADD TO WISHLIST
     await addToWishlist({
       user,
@@ -2994,57 +2995,9 @@ const moveCartToWishlist = async (body) => {
   }
 };
 
-const invalidatePendingOrder = async (userId) => {
-  try {
-    const order = await Order.findOne({
-      where: {
-        user_id: userId,
-        payment_status: "PENDING",
-        status: "PENDING_PAYMENT",
-      },
-      order: [["created_at", "DESC"]],
-    });
-
-    if (!order) {
-      return;
-    }
-
-    console.log(`🗑 Invalidating Pending Order: ${order.order_number}`);
-    if (order.label_id) {
-      try {
-        await cancelShipstationShipment(order);
-      } catch (err) {
-        console.error("⚠️ Failed to cancel ShipStation shipment:", err.message);
-      }
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | DELETE ORDER ITEMS
-    |--------------------------------------------------------------------------
-    */
-
-    await OrderItem.destroy({
-      where: {
-        order_id: order.id,
-      },
-    });
-
-    /*
-    |--------------------------------------------------------------------------
-    | DELETE ORDER
-    |--------------------------------------------------------------------------
-    */
-
-    await order.destroy();
-
-    console.log(`✅ Pending Order Removed: ${order.order_number}`);
-  } catch (error) {
-    console.error("❌ Invalidate Pending Order Error:", error.message);
-
-    throw error;
-  }
-};
+// Every cart change removes the customer’s unpaid orders, because they no longer match the cart;
+// it’s refused while one of them is being paid (unpaidOrders.service.js, audit F01 and F10).
+const invalidatePendingOrder = (userId) => retireUnpaidOrders(userId);
 
 module.exports = {
   addToWishlist,
