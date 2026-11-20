@@ -6,8 +6,8 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
-| [2026-11-20: unpaid orders and one payment at a time](#2026-11-20-paying-order) | deploying 20 Nov | None required: the shop already shows the API's messages. Optional: see the note on 409 from `POST order` |
-| [2026-11-20: graphics are PNG, JPG or SVG only](#2026-11-20-graphic-types) | deploying 20 Nov | Done in hashtag-next, not deployed yet: both graphic pickers limited to PNG, JPG, JPEG and SVG |
+| [2026-11-20: unpaid orders and one payment at a time](#2026-11-20-paying-order) | `f09c0b4`, live since 20 Nov | None required: the shop already shows the API's messages. Optional: see the note on 409 from `POST order` |
+| [2026-11-20: graphics are PNG, JPG or SVG only](#2026-11-20-graphic-types) | `35ba84e`, live since 20 Nov | Done in hashtag-next, not deployed yet: both graphic pickers limited to PNG, JPG, JPEG and SVG |
 | [2026-11-13: payments go-live](#2026-11-13-go-live) | `2634b76`, live since 16 Nov | Done in hashtag-next `744ba16` and `5d0fcff`, not deployed yet |
 | [2026-11-13: colours and sizes on product cards](#2026-11-13) | `630d20c`, live | Optional: show colour swatches and the size range on cards |
 | [2026-11-12: the category list shows only categories with products](#2026-11-12) | `64c340f`, live | None required: read the notes |
@@ -75,7 +75,7 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 ---
 
 <a id="2026-11-20-paying-order"></a>
-## 2026-11-20: unpaid orders and one payment at a time (deploying 20 Nov)
+## 2026-11-20: unpaid orders and one payment at a time (live since 20 Nov)
 
 Audit points F01 and F10:
 - **F01:** a cart change removed the customer's unpaid order even while its Square payment was still going through. Cash App or Google Pay can take a moment, and a second tab can change the cart at any time. Square then took the money for an order that was gone: never confirmed, never shipped, not in My Orders, and nobody was told.
@@ -112,7 +112,7 @@ Tested on 20 Nov with the real cart, order, checkout and payment code against a 
 ---
 
 <a id="2026-11-20-graphic-types"></a>
-## 2026-11-20: graphics are PNG, JPG or SVG only (deploying 20 Nov)
+## 2026-11-20: graphics are PNG, JPG or SVG only (live since 20 Nov)
 
 Decided 20 Nov: customers' graphics can only be PNG, JPG/JPEG or SVG. ZIP, PDF, AI, EPS, PSD, WebP and every other format are refused. This replaces "any format" from [2026-11-04](#2026-11-04) (Q21). The 100 MB limit stays.
 
