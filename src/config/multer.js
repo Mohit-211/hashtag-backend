@@ -3,7 +3,12 @@ const multer = require("multer");
 const path = require("path");
 const httpStatus = require("http-status");
 const ApiError = require("../utils/ApiError");
-const { isGraphicFile, GRAPHIC_TYPE_MESSAGE } = require("../utils/graphicFileType");
+const {
+  isGraphicFile,
+  isPictureFile,
+  GRAPHIC_TYPE_MESSAGE,
+  PICTURE_TYPE_MESSAGE,
+} = require("../utils/graphicFileType");
 
 const { dirs } = require("./storage");
 
@@ -164,14 +169,56 @@ const csvUpload = multer({
   },
 }).single(CSV_FIELD);
 
+// Order approvals: the team's proofs and the pictures customers add to their notes, in their own
+// folder (served like /graphics, app.js) with 128-bit random names, because the approval page needs
+// no sign-in. A picture is saved again by approvalFiles.js, so its upload is only a working copy.
+const APPROVAL_PROOF_FIELD = "approval_proof";
+const APPROVAL_PICTURE_FIELD = "approval_picture";
+const PROOF_TYPE_MESSAGE = "Artwork previews must be PNG, JPG, JPEG or SVG files.";
+
+const approvalStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, dirs.approvals),
+  filename: (req, file, cb) => {
+    // "artwork", the customers' word: the name shows when they save an image.
+    const kind = file.fieldname === APPROVAL_PROOF_FIELD ? "artwork" : "upload";
+    cb(null, `${kind}-${crypto.randomBytes(16).toString("hex")}.${getGraphicExtension(file)}`);
+  },
+});
+
+// One proof of up to 20 MB per request; up to 5 pictures of 10 MB with a note.
+const approvalProofLimits = { ...limits, files: 1 };
+const approvalPictureLimits = { ...limits, fileSize: 10 * 1024 * 1024, files: 5 };
+
+// POST order/admin/:id/approval/lines/:lineId/proofs
+const approvalProofUpload = multer({
+  storage: approvalStorage,
+  limits: approvalProofLimits,
+  fileFilter: (req, file, cb) =>
+    isGraphicFile(file) ? cb(null, true) : cb(new ApiError(httpStatus.BAD_REQUEST, PROOF_TYPE_MESSAGE)),
+}).fields([{ name: APPROVAL_PROOF_FIELD, maxCount: 1 }]);
+
+// POST approval/lines/:lineId/notes
+const approvalPictureUpload = multer({
+  storage: approvalStorage,
+  limits: approvalPictureLimits,
+  fileFilter: (req, file, cb) =>
+    isPictureFile(file) ? cb(null, true) : cb(new ApiError(httpStatus.BAD_REQUEST, PICTURE_TYPE_MESSAGE)),
+}).fields([{ name: APPROVAL_PICTURE_FIELD, maxCount: 5 }]);
+
 module.exports = {
   upload,
   cartUpload,
   graphicUpload,
   csvUpload,
+  approvalProofUpload,
+  approvalPictureUpload,
   limits,
   graphicLimits,
   csvLimits,
+  approvalPictureLimits,
   GRAPHIC_FIELDS,
   CSV_FIELD,
+  APPROVAL_PROOF_FIELD,
+  APPROVAL_PICTURE_FIELD,
+  PROOF_TYPE_MESSAGE,
 };

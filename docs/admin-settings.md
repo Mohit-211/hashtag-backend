@@ -178,10 +178,10 @@ For orientation only: render the page from the API, since the list will grow.
 
 | Group | Settings |
 |---|---|
-| Website and links | Website address, Admin panel address, API address |
+| Website and links | Website address, Admin panel address, API address, Artwork approval page address ([deployment.md](deployment.md#artwork-approval)) |
 | Email sending | Mail server, port, username, password (secret), Sender, Team inbox; who each kind of email comes from: Order emails, Account and support emails, General inquiry emails, Quote emails (type `sender`, each with a default such as `HashtagBillionaire <order@hashtagbillionaire.com>`; which email is which: [deployment.md](deployment.md#email-addresses)) |
 | How emails look | Name in emails, Logo, Button colour, Button text colour |
-| Shipping | Sender name, phone, street address, city, state, ZIP code, country; Default weight per item; ShipStation API key (secret); Buy shipping labels automatically (on/off) |
+| Shipping | Sender name, phone, street address, city, state, ZIP code, country; Default weight per item; ShipStation API key (secret); Buy shipping labels automatically (on/off); Hold customized orders for an artwork approval decision (on/off, off by default) |
 | Order fees | Handling fee: amount, name, categories and suppliers it applies to (type `handling_fee`, edited with pickers; once per order) |
 | Payments | Square mode, application ID, location ID, access token (secret); PayPal mode, client ID, client secret (secret) |
 | Suppliers | SAGE account number, login ID, API key (secret); S&S Activewear account number, API key (secret); OttoCap image hosts |

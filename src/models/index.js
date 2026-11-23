@@ -42,6 +42,10 @@ const Wishlist = require("./wishlist.model");
 const Address = require("./address.model");
 const Order = require("./order.model");
 const OrderItem = require("./orderItem.model");
+const OrderApproval = require("./orderApproval.model");
+const OrderApprovalLine = require("./orderApprovalLine.model");
+const OrderApprovalFile = require("./orderApprovalFile.model");
+const OrderApprovalEvent = require("./orderApprovalEvent.model");
 const Carrier = require("./carrier.model");
 const CarrierService = require("./carrierService.model");
 
@@ -119,6 +123,10 @@ module.exports = {
   Address,
   Order,
   OrderItem,
+  OrderApproval,
+  OrderApprovalLine,
+  OrderApprovalFile,
+  OrderApprovalEvent,
   UserGraphic,
   PricingTemplate,
 
@@ -345,6 +353,13 @@ async function initTableRelation() {
     foreignKey: "variant_id",
     as: "variant",
   });
+
+  // Order ↔ its proof approval, with the approval's lines, files and history
+  Order.hasOne(OrderApproval, { foreignKey: "order_id", as: "approval" });
+  OrderApproval.belongsTo(Order, { foreignKey: "order_id", as: "order" });
+  OrderApproval.hasMany(OrderApprovalLine, { foreignKey: "approval_id", as: "lines" });
+  OrderApproval.hasMany(OrderApprovalFile, { foreignKey: "approval_id", as: "files" });
+  OrderApproval.hasMany(OrderApprovalEvent, { foreignKey: "approval_id", as: "events" });
 
   Carrier.hasMany(CarrierService, {
     foreignKey: "carrier_id",

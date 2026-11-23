@@ -136,9 +136,13 @@ const createShipmentLabel = catchAsync(async (req, res) => {
   );
 });
 
-// The admin's Buy label: automatic labels are off, or buying the label failed.
+// The admin's Buy label: automatic labels are off, or buying the label failed. Body (optional):
+// { confirm: true } to buy it while the customer is still looking at the proof.
 const retryOrderShipment = catchAsync(async (req, res) => {
-  const data = await shipmentService.retryOrderShipment(req.params.id);
+  const data = await shipmentService.retryOrderShipment(req.params.id, {
+    confirm: req.body?.confirm === true,
+    adminId: req.admin?.id,
+  });
   return responseWrapper(res, data, "Label created", httpStatus.OK);
 });
 

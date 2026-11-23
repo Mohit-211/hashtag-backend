@@ -94,6 +94,18 @@ Found after the audit: N1 to N4 (bottom of this file).
 
 Changes the shop and the admin panel need: [docs/frontend-changes.md](docs/frontend-changes.md), [docs/admin-panel-changes.md](docs/admin-panel-changes.md).
 
+### Deploying artwork approval (not live)
+
+**Status (23 Nov):** committed in the backend, the admin panel and the new `Hashtag_approval` site; not pushed. Tested on a local copy of the database: the end-to-end check passed 721 checks, and a full run through all three passed 226. The shop needs no change. The steps, in order, are in [docs/deployment.md](docs/deployment.md#artwork-approval):
+
+1. Back up the database, then run `migrations/2026-11-23_order_approvals_before_deploy.sql`.
+2. Push the backend, and start the Deploy workflow with "migrations done" ticked.
+3. Push the admin panel.
+4. Set up `/approval` on the server (Apache), then deploy the approval site.
+5. Check the address in the Artwork approval page address setting, and do one real run.
+
+N1 should be fixed soon after: until then, customers behind the same Cloudflare server share the approval page's rate limit.
+
 ---
 
 ## Critical
@@ -243,7 +255,7 @@ The client answered on 26 October and answered the follow-ups on 27 October; the
 | 35 | Keep the unpaid-order flow | H8 only | ❌ | | Payments |
 | 36 | Quantities editable in the cart; "−" stops at the minimum | "−" and typed quantities stop at the line's minimum (`lineMinimum`: the variant's minimum, SAGE's first price tier, 12 for screen print) with a 400 instead of removing the line, 0 included; cart lines carry `min_quantity` (C4) | ✅ | `690db9c` | |
 | 37 | Card, Google Pay, Cash App, PayPal and Apple Pay, on current APIs | C11, Apple Pay, upgrades | ❌ | | Payments |
-| 38 | Every order email for customers, a confirmation page, and a new-order email to patrick@hashtagbillionaire.com | Customer emails from order@ (20 Nov, `orderEmails.service.js`): confirmed when paid, cancelled by the team (paid orders, with the refund), shipped and delivered from ShipStation tracking, each once. Payment notices are read back from Square and PayPal first (C3), so a forged one can't send them. Not built: the new-order email to the team, and mockup approval and reprint emails (neither feature exists). The confirmation page is the shop's | ◐ | `efff561` | New-order email to the team |
+| 38 | Every order email for customers, a confirmation page, and a new-order email to patrick@hashtagbillionaire.com | Customer emails from order@ (20 Nov, `orderEmails.service.js`): confirmed when paid, cancelled by the team (paid orders, with the refund), shipped and delivered from ShipStation tracking, each once. Payment notices are read back from Square and PayPal first (C3), so a forged one can't send them. Artwork approval emails from order@ were built on 23 Nov, not live yet ([deployment.md](docs/deployment.md#artwork-approval)). Not built: the new-order email to the team, and reprint emails (the feature doesn't exist). The confirmation page is the shop's | ◐ | `efff561` | New-order email to the team |
 | 39 | Tracking for signed-in customers; the admin picks ShipStation or manual updates | Tracking mode per order; manual status endpoint | ❌ | | Payments |
 | 40 | Erase unverified accounts completely, past ones too | The 2-hour cleanup erases the account with its profile, photo, tokens, cart, wishlist and addresses, including the accounts the old job only hid | ✅ | `ddb990d` | |
 | 42 | The shop's password rule everywhere | `validatePassword` checks the shop's rule (8 to 128 characters, an uppercase letter, a number, a special character) wherever a customer or admin sets a password; one message for all of them; `password-validator` removed | ✅ | `16cca53` | |

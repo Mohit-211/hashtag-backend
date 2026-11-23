@@ -685,19 +685,47 @@ const getCustomers = async (query) => {
 
 const UNPAID_DAYS = 7;
 
+// The same rule as the Buy label button (orderActions.js): paid, not cancelled, no label yet.
+const NO_LABEL = `${SALE} AND o.label_id IS NULL AND o.shipment_status IN ('PENDING', 'FAILED')`;
+
+// Orders whose label waits for a decision or for the customer's approval (Approval page). They're
+// counted on their own, not as orders to ship.
+const HELD_FOR_APPROVAL = `EXISTS (SELECT 1 FROM order_approvals a
+                                     WHERE a.order_id = o.id AND a.locked_at IS NULL
+                                       AND a.hold_state IN ('PENDING_DECISION', 'HOLD'))`;
+
+// Artwork approvals still open, by the rule that makes the customer's page read-only
+// (approvalReadOnlyReason in orderActions.js): not locked for production, and the order isn't
+// cancelled or with the carrier.
+const OPEN_APPROVAL = `a.locked_at IS NULL AND ${SALE} AND o.status NOT IN ('SHIPPED', 'DELIVERED')
+                       AND COALESCE(o.shipment_status, '')
+                           NOT IN ('IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'RETURNED', 'EXCEPTION')`;
+
 // GET admin/dashboard/activity
 const getActivity = async (query = {}) => {
   const limit = Math.min(Math.max(parseInt(query.limit, 10) || 8, 1), 25);
   const unpaidSince = new Date(Date.now() - UNPAID_DAYS * DAY_MS);
 
-  const [[ship], [attention], [unpaid], sourcing, [messages], [stock], recent] = await Promise.all([
-    // The same rule as the Buy label button (orderActions.js): paid, not cancelled, no label yet.
+  const [[ship], [held], [approvals], [attention], [unpaid], sourcing, [messages], [stock], recent] = await Promise.all([
     select(
       `SELECT COUNT(*) AS orders,
               SUM(o.shipment_status = 'FAILED') AS label_failed,
               MIN(o.created_at) AS oldest_at
          FROM orders o
-        WHERE ${SALE} AND o.label_id IS NULL AND o.shipment_status IN ('PENDING', 'FAILED')`,
+        WHERE ${NO_LABEL} AND NOT ${HELD_FOR_APPROVAL}`,
+    ),
+    select(
+      `SELECT COUNT(*) AS orders, MIN(o.created_at) AS oldest_at
+         FROM orders o
+        WHERE ${NO_LABEL} AND ${HELD_FOR_APPROVAL}`,
+    ),
+    // Open approvals where it's the team's turn: the customer asked for changes (upload a new
+    // version), or approved everything (lock for production).
+    select(
+      `SELECT SUM(a.status = 'CHANGES_REQUESTED') AS changes, SUM(a.status = 'APPROVED') AS approved
+         FROM order_approvals a
+         JOIN orders o ON o.id = a.order_id
+        WHERE ${OPEN_APPROVAL}`,
     ),
     select(
       `SELECT COUNT(*) AS orders FROM orders o
@@ -744,6 +772,9 @@ const getActivity = async (query = {}) => {
     generated_at: new Date().toISOString(),
     timezone: STORE_TIMEZONE,
     to_ship: { orders: num(ship.orders), label_failed: num(ship.label_failed), oldest_at: ship.oldest_at || null },
+    waiting_for_approval: { count: num(held.orders), oldest_at: held.oldest_at || null },
+    approval_changes: { count: num(approvals.changes) },
+    approval_ready: { count: num(approvals.approved) },
     needs_attention: { orders: num(attention.orders) },
     unpaid_checkouts: { orders: num(unpaid.orders), amount: money(unpaid.amount), days: UNPAID_DAYS },
     sourcing_requests: { new: sourcingCount("PENDING"), in_review: sourcingCount("IN_REVIEW") },

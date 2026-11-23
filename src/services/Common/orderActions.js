@@ -30,11 +30,14 @@ const ordersWithPaymentInProgress = async (orderIds) => {
   return new Set(rows.map((row) => Number(row.order_id)));
 };
 
-const orderActions = (order, { paymentInProgress = false } = {}) => {
+const isWithCarrier = (order) =>
+  WITH_CARRIER_STATUS.includes(order.status) || WITH_CARRIER_SHIPMENT.includes(order.shipment_status);
+
+// hasApproval: the order has a proof approval (approvalStore.js approvalSummaries).
+const orderActions = (order, { paymentInProgress = false, hasApproval = false } = {}) => {
   const paid = order.payment_status === "SUCCESS";
   const cancelled = order.status === "CANCELLED";
-  const withCarrier =
-    WITH_CARRIER_STATUS.includes(order.status) || WITH_CARRIER_SHIPMENT.includes(order.shipment_status);
+  const withCarrier = isWithCarrier(order);
   const busy = labelBeingBought(order);
 
   return {
@@ -48,7 +51,20 @@ const orderActions = (order, { paymentInProgress = false } = {}) => {
     // Unpaid orders (no payment still processing, no label), or cancelled ones. A paid order has
     // to be cancelled first, so it can't disappear by mistake.
     can_delete: cancelled || (!paid && !paymentInProgress && !order.label_id),
+
+    // The Approval page: a paid order that isn't cancelled, or one whose approval exists already.
+    can_open_approval: (paid && !cancelled) || hasApproval,
   };
 };
 
-module.exports = { orderActions, ordersWithPaymentInProgress };
+// Why the customer's approval page is read-only, or null while they can still act on it: the
+// order was cancelled (CANCELLED), the carrier has it (SHIPPED), or the team locked it for
+// production (LOCKED).
+const approvalReadOnlyReason = (order, approval) => {
+  if (order.status === "CANCELLED") return "CANCELLED";
+  if (isWithCarrier(order)) return "SHIPPED";
+  if (approval?.locked_at) return "LOCKED";
+  return null;
+};
+
+module.exports = { orderActions, ordersWithPaymentInProgress, approvalReadOnlyReason };

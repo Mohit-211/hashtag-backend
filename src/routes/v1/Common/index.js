@@ -27,6 +27,7 @@ const customizationRoute = require('./customization.route')
 const galleryRoute = require("./gallery.route");
 const graphicRoute = require("./graphic.route");
 const pricingTemplateRoute = require("./pricingTemplate.route");
+const approvalRoute = require("./approval.route");
 
 const commonRoutes = [
   {
@@ -137,6 +138,11 @@ const commonRoutes = [
   {
     path: "/pricing-template",
     route: pricingTemplateRoute,
+  },
+  // The customer's approval page (the order approval's link).
+  {
+    path: "/approval",
+    route: approvalRoute,
   },
 ];
 

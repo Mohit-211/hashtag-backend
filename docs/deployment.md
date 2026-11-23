@@ -64,17 +64,59 @@ Every email goes out through the one mail account on the Settings page (Email se
 
 | From | Emails |
 |---|---|
-| order@hashtagbillionaire.com | Order confirmed (when it's paid), order cancelled by the team (paid orders, with the amount to be refunded), order shipped (with the tracking link), order delivered |
+| order@hashtagbillionaire.com | Order confirmed (when it's paid), order cancelled by the team (paid orders, with the amount to be refunded), order shipped (with the tracking link), order delivered; artwork approval: artwork ready to review, updated artwork, reminders ([below](#artwork-approval)) |
 | support@hashtagbillionaire.com | Sign-up verification, forgot password, "your password was changed" (after a reset or a change), account set up by an admin, admin password reset; the contact form's reply for support questions: Order Issue, Customization Help, Shipping & Delivery, Payment Issue |
 | info@hashtagbillionaire.com | The contact form's reply for a General Inquiry |
 | quotes@hashtagbillionaire.com | Sourcing requests ("can't find it"): received, and each status change |
 | The Sender (`EMAIL_FROM`) | The team's copies of contact-form messages and sourcing requests, to the Team inbox, as before; replying answers the customer. A support question's subject now says so: "New support question: Order Issue" |
 
-Each address is a setting under Email sending ("Order emails come from", and so on), so it can be changed without a deploy. Not built yet: mockup approval and reprint emails (neither feature exists), and a new-order email to the team (client question 38).
+Each address is a setting under Email sending ("Order emails come from", and so on), so it can be changed without a deploy. Not built yet: reprint emails (the feature doesn't exist), and a new-order email to the team (client question 38).
 
 **Setting it up:** the four addresses must be ones the mail account may send as. In that Gmail account (patrick@), **Settings → Accounts → Send mail as → Add another email address**, once for each of order@, support@, info@ and quotes@. If Gmail asks to confirm an address, its code goes to that address, which as an alias of this account lands in the same inbox. Until an address is added there, Gmail sends that email as patrick@: nothing fails, and replies still go to the right address. To check one, press **Send test email** beside it on the Settings page: the test comes from that address once Gmail allows it, and from patrick@ until then.
 
 The client's list spelled the quotes address `quotes@hashtagbillioniaire.com`; the code uses `quotes@hashtagbillionaire.com`, like the other three.
+
+## Artwork approval
+
+Built on 23 November; **not live yet**. Before a customized order is made, the team shows the customer how each item will look:
+
+1. **The team uploads previews.** On the order's **Artwork approval** page in the admin panel (Orders, the stamp button), they add an artwork preview of each item.
+2. **order@ emails the customer a private link.**
+3. **The customer reviews.** On that page they approve each item, or all at once, or ask for changes with a note and photos. They can undo until the team presses **Lock for production**.
+
+Both sides see the history.
+
+- **The customer's page:** a separate static site, the `Hashtag_approval` repository, served at `https://hashtagbillionaire.com/approval/` by Apache, not by the shop's Next server. It needs no sign-in, has no links back to the shop, and tells search engines not to index it.
+- **The link:** `<Artwork approval page address>#<key>`.
+  - **The key:** 64 random characters. The database keeps only its hash and an encrypted copy, so the panel can show the link again.
+  - **How it's sent:** the page passes the key in the `X-Approval-Token` header, so it doesn't reach web server logs.
+  - **How long it works:** until the order ships or is cancelled, or the team locks it; then the page is read-only. The team can replace the link or switch it off.
+- **Files:** previews and customers' photos go in `approvals` in the storage folder, with random names, served at `/approvals` as downloads (like `/graphics`).
+  - Previews: PNG, JPG, JPEG or SVG, up to 20 MB each.
+  - Customers' photos: up to 5 per note, 10 MB each.
+- **Tables:** `order_approvals`, `order_approval_lines`, `order_approval_files` and `order_approval_events`. The last one is the history: rows are only ever added.
+- **Settings:**
+  - **Artwork approval page address** (Website and links). Default: the website address + `/approval`.
+  - **Hold customized orders for an artwork approval decision** (Shipping). Off by default. When on, a paid customized order's label waits until the team decides on its approval page.
+- **Rate limits:** 300 requests per 15 minutes on the customer's page, 30 notes an hour, and 20 artwork emails an hour from the panel.
+
+### Going live, in this order
+
+1. **Back up** the database ([migrations/README.md](../migrations/README.md); `--max-allowed-packet=1G`).
+2. **Migration:** run `migrations/2026-11-23_order_approvals_before_deploy.sql`. It only creates the four tables; its `.rollback.sql` renames them away.
+3. **Backend:** push. The deploy stops at the migration check: then **Actions → Deploy → Run workflow** with **migrations done** ticked ([above](#when-a-deploy-stops)).
+4. **Admin panel:** push its `main`.
+5. **Server, once:** follow "One-time server setup" in the `Hashtag_approval` README:
+   - a deploy user of its own, and `/var/www/approval`;
+   - the Apache lines in the shop's site, with `ProxyPass /approval !` above its `ProxyPass /`;
+   - then `apache2ctl configtest` before `systemctl reload apache2`.
+
+   Read the shop's Apache site first: a mistake there takes the shop down.
+6. **The approval site:** add its GitHub secrets and run its Deploy workflow. `https://hashtagbillionaire.com/approval/` should then say "This link isn't complete".
+7. **Settings page:** check that **Artwork approval page address** is `https://hashtagbillionaire.com/approval`.
+8. **One real run:** on a paid test order, start the approval, upload a preview, send it to yourself, approve it on a phone, and lock it.
+
+Until N1 is fixed ([progress.md](../progress.md#found-after-the-audit)), everyone who reaches the page through the same Cloudflare server shares its rate limit, and the history records Cloudflare's address instead of the customer's.
 
 ## Upload limits
 

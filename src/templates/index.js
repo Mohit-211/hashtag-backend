@@ -4,5 +4,6 @@ module.exports = {
   ...require("./templates/contactUs"),
   ...require("./templates/sourcingRequest"),
   ...require("./templates/orders"),
+  ...require("./templates/approvals"),
   ...require("./templates/settings"),
 };

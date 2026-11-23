@@ -48,6 +48,15 @@ const SETTINGS = [
     required: true,
     description: "This server's public address, e.g. https://node.hashtagbillionaire.com. Uploaded images are linked from it.",
   },
+  {
+    key: "APPROVAL_SITE_URL",
+    group: "website",
+    label: "Artwork approval page address",
+    type: "url",
+    default: (get) => (get("FRONTEND_URL") ? `${get("FRONTEND_URL")}/approval` : null),
+    description:
+      "Where customers review and approve their artwork, e.g. https://hashtagbillionaire.com/approval. The emailed link adds the customer's key after a #. Default: the website address + /approval.",
+  },
 
   // Email sending
   { key: "SMTP_HOST", group: "email", label: "Mail server", type: "string", required: true, description: "e.g. smtp.gmail.com" },
@@ -90,7 +99,12 @@ const SETTINGS = [
   // go back to the same address. Each must be an address the mail server may send from: an alias
   // of its account works once that mailbox allows sending as the alias.
   ...[
-    ["EMAIL_FROM_ORDERS", "Order emails come from", "order", "Order confirmed, cancelled, shipped and delivered."],
+    [
+      "EMAIL_FROM_ORDERS",
+      "Order emails come from",
+      "order",
+      "Order confirmed, cancelled, shipped and delivered, and artwork approval emails (artwork ready to review, updated artwork, reminders).",
+    ],
     [
       "EMAIL_FROM_SUPPORT",
       "Account and support emails come from",
@@ -166,6 +180,15 @@ const SETTINGS = [
     default: true,
     description:
       "On: each paid order is sent to ShipStation and its label is bought straight away. Off: nothing goes to ShipStation until an admin presses Buy label on the order. Turn it off while payments are in sandbox, because ShipStation labels are always real.",
+  },
+  {
+    key: "APPROVAL_HOLD_CUSTOMIZED",
+    group: "shipping",
+    label: "Hold customized orders for an artwork approval decision",
+    type: "boolean",
+    default: false,
+    description:
+      "On: a paid order with a customized item (a print method or location, the customer's uploaded artwork, or custom text) doesn't get its label straight away. Its Artwork approval page (Orders) asks \"Should the shipping label wait for the artwork approval?\" Yes, wait for approval: the label waits until Lock for production. No, don't wait: it goes now. Either way it's bought only while automatic labels are on (otherwise use Buy label on the order). Off: labels go as set above.",
   },
 
   // Order fees

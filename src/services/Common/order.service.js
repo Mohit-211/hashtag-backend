@@ -39,6 +39,7 @@ const { cartLineTotal } = require("../../utils/pricing/cartLineTotal");
 const { handlingFeeFor } = require("./handlingFee.service");
 const { orderActions, ordersWithPaymentInProgress } = require("./orderActions");
 const { retireUnpaidOrders } = require("./unpaidOrders.service");
+const { approvalSummaries } = require("./approvalStore");
 
 const createOrder = async (body) => {
   // The new order replaces the customer's earlier unpaid ones (going back at checkout, or after a
@@ -1136,6 +1137,8 @@ const getAdminOrders = async ({
 
   const paymentInProgress = await ordersWithPaymentInProgress(ids.map(Number));
 
+  const approvals = await approvalSummaries(ids.map(Number));
+
   const formatted = rows.map((order) => {
     const data = order.toJSON();
 
@@ -1186,7 +1189,14 @@ const getAdminOrders = async ({
       cancel_reason: data.cancel_reason || null,
 
       // The buttons the admin panel shows; the endpoints behind them check the same rules.
-      actions: orderActions(data, { paymentInProgress: paymentInProgress.has(Number(data.id)) }),
+      actions: orderActions(data, {
+        paymentInProgress: paymentInProgress.has(Number(data.id)),
+        hasApproval: approvals.has(Number(data.id)),
+      }),
+
+      // The order's proof approval (the Approval page), or null: { status, hold_state, locked,
+      // unseen, sent }.
+      approval: approvals.get(Number(data.id)) || null,
 
       payment_method: data.payment_method,
 

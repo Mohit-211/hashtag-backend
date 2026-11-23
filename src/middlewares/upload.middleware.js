@@ -7,22 +7,31 @@ const {
   cartUpload,
   graphicUpload,
   csvUpload,
+  approvalProofUpload,
+  approvalPictureUpload,
   limits,
   graphicLimits,
   csvLimits,
+  approvalPictureLimits,
   GRAPHIC_FIELDS,
   CSV_FIELD,
+  APPROVAL_PROOF_FIELD,
+  APPROVAL_PICTURE_FIELD,
+  PROOF_TYPE_MESSAGE,
 } = require("../config/multer");
 const { requireAdmin } = require("./adminAuth.middleware");
 const { verifyAuthJWTToken } = require("./userAuth.middleware");
+const { approvalUploadGate } = require("./approvalGate.middleware");
 const { emailLimiter, publicFormLimiter } = require("./rateLimiter");
 const ApiError = require("../utils/ApiError");
-const { checkGraphicContents } = require("../utils/graphicFileType");
+const { checkGraphicContents, checkPictureContents } = require("../utils/graphicFileType");
 
 // Routes that accept file uploads (paths relative to /api/v1). Admin and customer
 // routes are authenticated before any file is written to disk. The two public routes
 // are rate-limited here, before the upload (not in their route files), and files from
-// a request that's refused are deleted.
+// a request that's refused are deleted. So are those of the order approval routes
+// (discardRefused); the customer's approval page has no sign-in, so its gate checks the
+// link's key and counts the request first.
 const FILE_ROUTES = [
   { method: "POST", path: /^\/user\/auth\/register\/?$/, limit: emailLimiter },
   { method: "POST", path: /^\/sourcing-requests\/create\/?$/, limit: publicFormLimiter },
@@ -46,6 +55,10 @@ const FILE_ROUTES = [
   { method: "PUT", path: /^\/add-on\/addon-product\/[^/]+\/?$/, auth: requireAdmin },
   { method: "POST", path: /^\/gallery\/?$/, auth: requireAdmin },
   { method: "PUT", path: /^\/gallery\/[^/]+\/?$/, auth: requireAdmin },
+
+  // Order approval: the team's proofs, and the pictures on a customer's note.
+  { method: "POST", path: /^\/order\/admin\/[^/]+\/approval\/lines\/[^/]+\/proofs\/?$/, auth: requireAdmin, upload: approvalProofUpload, discardRefused: true },
+  { method: "POST", path: /^\/approval\/lines\/[^/]+\/notes\/?$/, auth: approvalUploadGate, upload: approvalPictureUpload, discardRefused: true },
 ];
 
 // Everywhere else multipart forms are still parsed, but files are refused.
@@ -58,18 +71,41 @@ const removeUploadedFiles = (req) => {
   }
 };
 
-// Runs the upload, then checks that every saved graphic really is a PNG, JPEG or SVG. A request
-// with one that isn't is refused (400) before the route sees it, and all its files are deleted.
+// A refused request (400-499) has no use for its files.
+const discardWhenRefused = (req, res) => {
+  res.on("finish", () => {
+    if (res.statusCode >= 400 && res.statusCode < 500) removeUploadedFiles(req);
+  });
+};
+
+// How the saved files of each field are checked for what they really are.
+const CONTENT_CHECKS = [
+  // Customers' graphics: PNG, JPEG or SVG.
+  { fields: GRAPHIC_FIELDS, check: checkGraphicContents },
+  // Order approval proofs: the same formats.
+  { fields: [APPROVAL_PROOF_FIELD], check: (files) => checkGraphicContents(files, PROOF_TYPE_MESSAGE) },
+  // Pictures on the approval page: PNG or JPEG only.
+  { fields: [APPROVAL_PICTURE_FIELD], check: checkPictureContents },
+];
+
+const checkContents = async (files) => {
+  for (const { fields, check } of CONTENT_CHECKS) {
+    const matching = files.filter((file) => fields.includes(file.fieldname));
+    if (matching.length) await check(matching);
+  }
+};
+
+// Runs the upload, then checks that every saved graphic really is a PNG, JPEG or SVG (and every
+// approval picture a PNG or JPEG). A request with one that isn't is refused (400) before the route
+// sees it, and all its files are deleted.
 const runUpload = (uploader, req, res, next) =>
   uploader(req, res, (error) => {
     if (error) return next(error);
 
-    const graphics = Object.values(req.files || {})
-      .flat()
-      .filter((file) => GRAPHIC_FIELDS.includes(file.fieldname));
-    if (!graphics.length) return next();
+    const files = Object.values(req.files || {}).flat();
+    if (!files.length) return next();
 
-    return checkGraphicContents(graphics).then(
+    return checkContents(files).then(
       () => next(),
       (refusal) => {
         removeUploadedFiles(req);
@@ -90,10 +126,7 @@ const uploadMiddleware = (req, res, next) => {
   if (route.limit) {
     return route.limit(req, res, (error) => {
       if (error) return next(error);
-      // A refused request (400-499) has no use for its files.
-      res.on("finish", () => {
-        if (res.statusCode >= 400 && res.statusCode < 500) removeUploadedFiles(req);
-      });
+      discardWhenRefused(req, res);
       return runUpload(upload, req, res, next);
     });
   }
@@ -103,9 +136,11 @@ const uploadMiddleware = (req, res, next) => {
   }
 
   // The route's own auth middleware runs again after the upload (multer replaces
-  // req.body); requireAdmin reuses req.admin, so the admin isn't looked up twice.
+  // req.body); requireAdmin reuses req.admin, so the admin isn't looked up twice, and the
+  // approval gate reuses req.approval.
   return route.auth(req, res, (error) => {
     if (error) return next(error);
+    if (route.discardRefused) discardWhenRefused(req, res);
     return runUpload(route.upload || upload, req, res, next);
   });
 };
@@ -122,7 +157,9 @@ const uploadErrorMessage = (error) => {
       ? graphicLimits
       : error.field === CSV_FIELD
         ? csvLimits
-        : limits;
+        : error.field === APPROVAL_PICTURE_FIELD
+          ? approvalPictureLimits
+          : limits;
     return new ApiError(httpStatus.BAD_REQUEST, `Each file must be ${fileSize / (1024 * 1024)} MB or smaller.`);
   }
   return new ApiError(httpStatus.BAD_REQUEST, `Upload rejected: ${error.message}`);

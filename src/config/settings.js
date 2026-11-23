@@ -28,8 +28,10 @@ const warnOnce = (key, message) => {
 
 // ---------------------------------------------------------------- the settings key
 
-const deriveKey = (masterKey) =>
-  Buffer.from(crypto.hkdfSync("sha256", masterKey, "hashtag-backend", "app_settings v1", 32));
+// label: what the key is for. Other data encrypted with the settings key gets a label of its own
+// (order approval links: approvalStore.js), so each key reads only its own data.
+const deriveKey = (masterKey, label = "app_settings v1") =>
+  Buffer.from(crypto.hkdfSync("sha256", masterKey, "hashtag-backend", label, 32));
 
 let encryptionKey = null;
 const currentKey = () => {

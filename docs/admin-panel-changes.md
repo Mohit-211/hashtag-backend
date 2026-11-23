@@ -66,6 +66,33 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 1. **`payment_status=ALL`:** coming in the next release: `GET order/admin?payment_status=ALL` lists orders of every payment status. Without the parameter it still lists paid orders only.
 2. **The 2 unpaid orders the panel doesn't show:** when a customer's cart changes, the backend soft-deletes their latest unpaid order (`invalidatePendingOrder` in `cartWishlist.service.js`), and orders are paranoid, so those two are hidden from every list. Nothing is missing on the panel's side; the behaviour itself is on the payments list (audit H8).
 
+<a id="2026-11-23-artwork-approval"></a>
+## 2026-11-23: artwork approval (not live yet)
+
+The panel's side is built in the same change: the **Artwork approval** page (`/orders/:id/approval`), the stamp button and badge on the Orders list, and two Dashboard counts. What the feature does and how it goes live: [deployment.md](deployment.md#artwork-approval).
+
+**API** (all `requireAdmin`, under `order/admin/:id/approval`):
+
+| Call | What it does |
+|---|---|
+| `GET` | The order, its approval (or `null` before it starts), its items to approve and the history. Before the start, the items are what the start will make: one per product and colour, with all its sizes together |
+| `POST` | Start the approval |
+| `POST lines/:lineId/proofs` | Add a preview: one file in `approval_proof`, PNG, JPG, JPEG or SVG, up to 20 MB |
+| `DELETE files/:fileId` | Remove a preview that isn't sent yet |
+| `POST lines/:lineId/copy` | Start a new version from an earlier version's images |
+| `POST lines/:lineId/no-proof` | `{ no_proof: true/false }`: "No preview needed" |
+| `POST send` | Email the customer from order@: the first email, an update or a reminder (20 an hour) |
+| `POST hold` | The label question when the hold setting is on |
+| `POST lock`, `POST unlock` | Lock for production, and undo that |
+| `POST link` | Replace the customer's link, or switch it off or on |
+| `POST seen` | Mark the customer's latest answers as seen |
+
+**Elsewhere:**
+
+- **Orders list:** each row of `GET order/admin` has `approval` (`{ status, hold_state, locked, unseen, sent }` or `null`), plus `actions.can_open_approval`.
+- **Dashboard:** `GET admin/dashboard/activity` adds `approval_changes.count` (the customer asked for changes) and `approval_ready.count` (approved, waiting for the lock). Orders whose label waits for an approval are counted in `waiting_for_approval` and no longer in orders to ship.
+- **Buy label:** on an order the customer is still reviewing, it needs `confirm: true`, which locks the approval.
+
 <a id="2026-11-20-template-import"></a>
 ## 2026-11-20: pricing templates from a CSV file (live since 20 Nov)
 

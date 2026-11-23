@@ -12,6 +12,7 @@ const {
   shipstationMessage,
 } = require("../../config/shipstation");
 const { notifyOrderShipped, notifyOrderDelivered } = require("./orderEmails.service");
+const { holdForApprovalDecision, confirmLabelPurchase } = require("./approvalStore");
 
 // What happens to an order in ShipStation once it's paid: it's created there, where it shows in
 // the dashboard, and its label is bought for the customer's chosen service. The customer has
@@ -94,7 +95,13 @@ const saveLabel = async (order, label) => {
 // After a payment it runs only while "Buy shipping labels automatically" is on (Settings page,
 // Shipping). Off, the paid order waits with shipment_status PENDING, nothing goes to ShipStation,
 // and an admin buys the label with Buy label (manual: true), which works either way.
+//
+// With "Hold customized orders for an approval decision" on (also Shipping), a paid order with a
+// customized item waits first, until an admin decides on its Approval page; Don't hold and Lock
+// for production run this step again (approvalStore.js holdForApprovalDecision).
 const shipPaidOrder = async (orderId, { manual = false } = {}) => {
+  if (!manual && (await holdForApprovalDecision(orderId))) return false;
+
   if (!manual && settings.get("SHIPSTATION_AUTO_LABELS") === false) {
     logger.info(`Label for order ${orderId} not bought: automatic labels are off.`);
     return false;
@@ -156,8 +163,10 @@ const shipPaidOrder = async (orderId, { manual = false } = {}) => {
 };
 
 // The admin's Buy label: for a paid order with no label yet, because automatic labels are off
-// (shipment PENDING) or because buying it failed (FAILED, "Try again").
-const retryOrderShipment = async (orderId) => {
+// (shipment PENDING) or because buying it failed (FAILED, "Try again"). An order whose proof the
+// customer is still looking at needs confirm: true, which locks its approval (approvalStore.js
+// confirmLabelPurchase).
+const retryOrderShipment = async (orderId, { confirm = false, adminId = null } = {}) => {
   const order = await Order.findByPk(orderId);
 
   if (!order) throw new ApiError(httpStatus.NOT_FOUND, "Order not found");
@@ -177,6 +186,8 @@ const retryOrderShipment = async (orderId) => {
   if (!["PENDING", "FAILED"].includes(order.shipment_status)) {
     throw new ApiError(httpStatus.BAD_REQUEST, `A label can't be bought while the shipment is ${order.shipment_status}`);
   }
+
+  await confirmLabelPurchase(order.id, { confirm, adminId });
 
   if (!(await shipPaidOrder(order.id, { manual: true }))) {
     throw new ApiError(httpStatus.CONFLICT, "A label is already being bought for this order");

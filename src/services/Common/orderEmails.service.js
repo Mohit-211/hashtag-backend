@@ -1,7 +1,9 @@
 // Order emails to the customer, from the order address (order@, email.service.js): confirmed
 // when paid, cancelled, shipped and delivered. Each is sent after the change is saved and is never
 // awaited by it: a mail problem is logged, and never fails or undoes a payment, a cancellation or
-// a tracking update. Mockup approval and reprints have no emails yet: those features aren't built.
+// a tracking update. Artwork approval emails are sent from the admin panel's Artwork approval
+// page instead (orderApproval.service.js), which shows whether they went. Reprints have no emails
+// yet.
 
 const settings = require("../../config/settings");
 const logger = require("../../config/logger");

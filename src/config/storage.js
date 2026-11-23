@@ -19,6 +19,9 @@ const dirs = {
   // /uploads serves as they are;
   // /graphics only serves them as downloads (see app.js).
   graphics: path.join(STORAGE_DIR, "graphics"),
+  // Order approvals: the team's proofs (PNG, JPG or SVG) with their previews, and customers'
+  // pictures. Served at /approvals the way /graphics is (see app.js).
+  approvals: path.join(STORAGE_DIR, "approvals"),
   // Images downloaded from suppliers. Served at /uploads/suppliers.
   suppliers: path.join(STORAGE_DIR, "uploads", "suppliers"),
   // Spreadsheets for the OttoCap import (otto_inventory.xlsx, otto_catalog.xlsx). Not served.

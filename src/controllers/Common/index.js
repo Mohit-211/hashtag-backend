@@ -19,7 +19,9 @@ const productCategoryController = require('./productCategory.controller');
 const cartWishlistController = require('./cartWishlist.controller');
 const addressController = require('./address.controller');
 const orderController = require('./order.controller');
-const CarrierController = require('./carrier.controller');  
+const orderApprovalController = require('./orderApproval.controller');
+const approvalController = require('./approval.controller');
+const CarrierController = require('./carrier.controller');
 const sageController = require("./sage.controller");
 const sanmarController = require("./sanmar.controller");
 const ottocapController = require("./ottocap.controller");
@@ -55,6 +57,8 @@ module.exports = {
     cartWishlistController,
     addressController,
     orderController,
+    orderApprovalController,
+    approvalController,
     CarrierController,
     sageController,
     sanmarController,

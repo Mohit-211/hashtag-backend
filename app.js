@@ -148,6 +148,24 @@ app.use(
   }),
 );
 
+// Order approval files (/approvals/x.png): the team's proofs with their WebP previews, and the
+// pictures customers add to their notes. Proofs can be SVG, so they're served like /graphics.
+app.use(
+  "/approvals",
+  express.static(dirs.approvals, {
+    setHeaders: (res, filePath) => {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+      res.setHeader("Content-Disposition", "attachment");
+      res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
+
+      if (filePath.endsWith(".webp")) {
+        res.setHeader("Content-Type", "image/webp");
+      }
+    },
+  }),
+);
+
 // API CORS: only the origins in ACCESSDOMAINS (see corsConfigs). This is the only CORS layer.
 app.use(cors(corsConfigs));
 

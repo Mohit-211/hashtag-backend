@@ -256,6 +256,7 @@ const removeGraphicFiles = (graphics) => {
 };
 
 module.exports = {
+  hashFile,
   saveGraphic,
   uploadGraphic,
   getGraphics,

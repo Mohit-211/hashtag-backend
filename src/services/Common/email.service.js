@@ -17,6 +17,7 @@ const {
     orderCancelledEmail,
     orderShippedEmail,
     orderDeliveredEmail,
+    approvalEmail,
     settingsTestEmail,
 } = require('../../templates');
 
@@ -56,7 +57,7 @@ settings.onChange((keys) => {
 
 // Who each kind of email to customers comes from (the client's addresses, 20 Nov 2026; Settings
 // page, Email sending):
-//   order    order confirmed, cancelled, shipped, delivered
+//   order    order confirmed, cancelled, shipped, delivered; artwork to approve
 //   support  sign-up, password and account emails; support questions (order, shipping, payment,
 //            customization)
 //   info     general inquiries from the contact form
@@ -163,6 +164,10 @@ const sendOrderCancelledEmail = (to, order, options) => sendAs('order', to, orde
 const sendOrderShippedEmail = (to, order) => sendAs('order', to, orderShippedEmail(withOrderContact(order)));
 const sendOrderDeliveredEmail = (to, order) => sendAs('order', to, orderDeliveredEmail(withOrderContact(order)));
 
+// Artwork for the customer to review and approve (templates/approvals.js), sent from the admin
+// panel's Artwork approval page. Awaited: the page shows whether it went.
+const sendApprovalEmail = (to, approval) => sendAs('order', to, approvalEmail(withOrderContact(approval)));
+
 
 // From the Settings page: proves the mail server settings work. With `key` (a sender setting
 // such as EMAIL_FROM_ORDERS, `label` its name on the page) it's sent from that sender, to check
@@ -193,4 +198,5 @@ module.exports = {
     sendOrderCancelledEmail,
     sendOrderShippedEmail,
     sendOrderDeliveredEmail,
+    sendApprovalEmail,
 };

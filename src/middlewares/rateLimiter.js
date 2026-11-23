@@ -28,6 +28,15 @@ const testEmailLimiter = limiter(60, 20, 'Too many test emails. Please try again
 // Submitting a token from an emailed link.
 const tokenLimiter = limiter(15, 20, 'Too many attempts. Please try again in 15 minutes.');
 
+// The customer's approval page (no sign-in): every request, which also caps guessing at links.
+const approvalLimiter = limiter(15, 300, 'Too many requests. Please try again in a few minutes.');
+
+// Notes (with pictures) from the approval page, counted before anything is saved.
+const approvalUploadLimiter = limiter(60, 30, 'Too many notes. Please try again later.');
+
+// Artwork approval emails from the admin panel, their own count like testEmailLimiter.
+const approvalSendLimiter = limiter(60, 20, 'Too many artwork emails. Please try again later.');
+
 // Public forms (contact us, sourcing requests).
 const publicFormLimiter = limiter(60, 10, 'Too many submissions. Please try again later.');
 
@@ -46,6 +55,9 @@ module.exports = {
   emailLimiter,
   testEmailLimiter,
   tokenLimiter,
+  approvalLimiter,
+  approvalUploadLimiter,
+  approvalSendLimiter,
   publicFormLimiter,
   settingsKeyLimiter,
   webhookLimiter,

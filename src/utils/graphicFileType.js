@@ -92,20 +92,22 @@ const detectGraphicType = (sample) => {
 
 const CANONICAL_MIME = { png: "image/png", jpeg: "image/jpeg", svg: "image/svg+xml" };
 
+// multer reads the name as latin1; browsers send UTF-8.
+const shownName = (file) => Buffer.from(file.originalname || "", "latin1").toString("utf8").slice(0, 100);
+
 // After saving: every graphic in the request must really be a PNG, a JPEG or an SVG, and an .svg
 // name must hold an SVG (a .png or .jpg name may hold either picture format). The saved type is
-// set to the real one. Throws a 400 for the first file that fails.
-const checkGraphicContents = async (files) => {
+// set to the real one. Throws a 400 for the first file that fails. typeMessage: what's allowed,
+// for files that aren't customers' graphics (order approval proofs).
+const checkGraphicContents = async (files, typeMessage = GRAPHIC_TYPE_MESSAGE) => {
   for (const file of files) {
     const type = detectGraphicType(await readSample(file.path));
     const isSvgName = extensionOf(file) === "svg";
 
     if (!type || (type === "svg") !== isSvgName) {
-      // multer reads the name as latin1; browsers send UTF-8.
-      const name = Buffer.from(file.originalname || "", "latin1").toString("utf8").slice(0, 100);
       throw new ApiError(
         httpStatus.BAD_REQUEST,
-        `"${name}" isn't a real ${isSvgName ? "SVG" : "PNG or JPG"} file. ${GRAPHIC_TYPE_MESSAGE}`,
+        `"${shownName(file)}" isn't a real ${isSvgName ? "SVG" : "PNG or JPG"} file. ${typeMessage}`,
       );
     }
 
@@ -113,10 +115,31 @@ const checkGraphicContents = async (files) => {
   }
 };
 
+// Pictures customers add to their notes on the approval page: PNG or JPEG only, no SVG, because
+// anyone with the page's link can upload them.
+const PICTURE_EXTENSIONS = ["png", "jpg", "jpeg"];
+const PICTURE_TYPE_MESSAGE = "Pictures must be PNG or JPG files.";
+
+const isPictureFile = (file) => PICTURE_EXTENSIONS.includes(extensionOf(file)) && isGraphicFile(file);
+
+// After saving, like checkGraphicContents: each picture must really be a PNG or a JPEG.
+const checkPictureContents = async (files) => {
+  for (const file of files) {
+    const type = detectGraphicType(await readSample(file.path));
+    if (type !== "png" && type !== "jpeg") {
+      throw new ApiError(httpStatus.BAD_REQUEST, `"${shownName(file)}" isn't a real PNG or JPG file. ${PICTURE_TYPE_MESSAGE}`);
+    }
+    file.mimetype = CANONICAL_MIME[type];
+  }
+};
+
 module.exports = {
   GRAPHIC_EXTENSIONS,
   GRAPHIC_TYPE_MESSAGE,
+  PICTURE_TYPE_MESSAGE,
   isGraphicFile,
+  isPictureFile,
   detectGraphicType,
   checkGraphicContents,
+  checkPictureContents,
 };
