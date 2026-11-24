@@ -36,6 +36,7 @@ const {
 } = require("../../utils/orderFormat");
 const { paymentStatusTypes } = require("../../config/types");
 const { cartLineTotal } = require("../../utils/pricing/cartLineTotal");
+const { SHIP_TO_COLUMNS, shipToFromAddress, shipToColumns, orderShipTo } = require("../../utils/orderShipTo");
 const { handlingFeeFor } = require("./handlingFee.service");
 const { orderActions, ordersWithPaymentInProgress } = require("./orderActions");
 const { retireUnpaidOrders } = require("./unpaidOrders.service");
@@ -79,6 +80,11 @@ const createOrder = async (body) => {
     if (!(await canShipTo(address))) {
       throw new ApiError(httpStatus.BAD_REQUEST, `${NOT_SHIPPED_MESSAGE} Please choose another address.`);
     }
+
+    // The address the order ships to: the saved address as it is now. The quote below, the
+    // label and the order's pages all use this copy, so editing or deleting the saved address
+    // later changes nothing for this order (audit F02).
+    const shipTo = shipToFromAddress(address);
 
     /*
      |--------------------------------------------------------------------------
@@ -185,8 +191,9 @@ const createOrder = async (body) => {
      |--------------------------------------------------------------------------
      */
 
-    // Priced here from ShipStation: an amount sent by the browser could be anything.
-    const rates = await getShippingRates({ address, items: cartItems });
+    // Priced here from ShipStation: an amount sent by the browser could be anything. Priced for
+    // the copy the order keeps, so the label goes where the quote was for.
+    const rates = await getShippingRates({ address: shipTo, items: cartItems });
 
     const rate = rates.find((option) => option.service_code === selected_service_code);
 
@@ -221,6 +228,8 @@ const createOrder = async (body) => {
         user_id: user.id,
 
         address_id,
+
+        ...shipToColumns(shipTo),
 
         currency: "USD",
 
@@ -404,7 +413,8 @@ const createOrder = async (body) => {
      |--------------------------------------------------------------------------
      */
 
-    const updatedOrder = await Order.findByPk(order.id);
+    // The answer is as it was before the order kept its own address: that shows in GET order/:id.
+    const updatedOrder = await Order.findByPk(order.id, { attributes: { exclude: SHIP_TO_COLUMNS } });
 
     // What the customer pays, for the payment step: subtotal + handling + tax + shipping.
     return { ...updatedOrder.toJSON(), pricing_breakdown: buildOrderTotals(updatedOrder) };
@@ -681,9 +691,12 @@ const getOrderById = async (body, order_id) => {
           ],
         },
 
+        // Only for an order without its own copy of the address (utils/orderShipTo.js).
         {
           model: Address,
           as: "address",
+
+          paranoid: false,
 
           required: false,
         },
@@ -760,23 +773,8 @@ const getOrderById = async (body, order_id) => {
       |--------------------------------------------------------------------------
       */
 
-      address: data.address
-        ? {
-            name: data.address.name,
-
-            phone: data.address.phone,
-
-            address_line1: data.address.address_line1,
-
-            city: data.address.city,
-
-            state: data.address.state,
-
-            postal_code: data.address.postal_code,
-
-            country: data.address.country,
-          }
-        : null,
+      // Where it ships: the address its shipping was priced for, kept on the order (audit F02).
+      address: orderShipTo(data),
 
       /*
       |--------------------------------------------------------------------------

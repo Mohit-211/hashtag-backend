@@ -13,6 +13,7 @@ const sequelize = require("../../config/central.db");
 const { OrderApproval, OrderApprovalFile } = require("../../models");
 const ApiError = require("../../utils/ApiError");
 const { parseJson } = require("../../utils/orderFormat");
+const { orderShipTo } = require("../../utils/orderShipTo");
 const {
   EVENT,
   ACTOR,
@@ -47,7 +48,7 @@ const byPosition = (first, second) => first.position - second.position || idOf(f
 // ---------------------------------------------------------------- the page
 
 const firstNameOf = (order) => {
-  const name = order.user?.user_profile?.name || order.address?.name;
+  const name = order.user?.user_profile?.name || orderShipTo(order)?.name;
   return name ? String(name).trim().split(/\s+/)[0] || null : null;
 };
 

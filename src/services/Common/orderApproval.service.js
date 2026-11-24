@@ -13,6 +13,7 @@ const validateEmail = require("../../helpers/validateEmail");
 const { Admin, Order, OrderApproval, OrderApprovalLine, OrderApprovalFile } = require("../../models");
 const ApiError = require("../../utils/ApiError");
 const { parseJson } = require("../../utils/orderFormat");
+const { orderShipTo } = require("../../utils/orderShipTo");
 const { EVENT, ACTOR, LINE, HOLD, approvalState, isUndone, eventKind, idOf, wholeOf } = require("../../utils/approvalState");
 const store = require("./approvalStore");
 const { fileUrl, artworkLinks, saveProof, removeStoredFiles } = require("./approvalFiles");
@@ -87,7 +88,7 @@ const orderView = (order) => ({
   payment_status: order.payment_status,
   shipment_status: order.shipment_status,
   created_at: order.created_at,
-  customer_name: order.user?.user_profile?.name || order.address?.name || null,
+  customer_name: order.user?.user_profile?.name || orderShipTo(order)?.name || null,
   customer_email: accountEmail(order),
   has_label: Boolean(order.label_id),
 });
@@ -556,7 +557,7 @@ const sendApproval = async (orderId, admin, body = {}) => {
   try {
     await sendApprovalEmail(to, {
       kind: email.kind,
-      name: order.user?.user_profile?.name || order.address?.name || null,
+      name: order.user?.user_profile?.name || orderShipTo(order)?.name || null,
       orderNumber: order.order_number,
       items: email.items,
       message: text,

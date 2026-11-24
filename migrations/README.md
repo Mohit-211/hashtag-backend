@@ -29,3 +29,4 @@ There is no `npm run migrate`. It used `sequelize.sync({ alter: true })`, which 
 | `2026-11-12_pricing_templates_before_deploy.sql` | before deploying `adeb71f` | run 12 Nov |
 | `2026-11-13_payments_go_live_before_deploy.sql` | before deploying `2634b76` | run 16 Nov |
 | `2026-11-23_order_approvals_before_deploy.sql` | before deploying artwork approval | run 24 Nov |
+| `2026-11-24_order_ship_to_before_deploy.sql` | before deploying the order's own shipping address (audit F02), and again once it's live | run 24 Nov (before the deploy; run again after it) |

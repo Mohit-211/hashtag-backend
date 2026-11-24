@@ -46,6 +46,32 @@ Step 4 loads that account's carriers, registers the tracking webhook and prints 
 
 **When a label fails:** the payment stands and the order stays paid. The reason is on the order in the admin panel, and the panel can try again.
 
+## An order's shipping address
+
+Built on 24 November (audit F02); **not live yet**. `POST order` copies the saved address it prices the shipping for onto the order (`orders.ship_to_*`). The label, the order's pages and its emails use that copy, so editing or deleting a saved address on the Account page changes only later orders.
+
+**Going live, in this order:**
+
+1. **Back up** the database ([migrations/README.md](../migrations/README.md); `--max-allowed-packet=1G`).
+2. **Migration, first run,** right before the push: `migrations/2026-11-24_order_ship_to_before_deploy.sql`. It adds the columns and gives each existing order a copy of its saved address. From now until step 4 is done, nobody presses Buy label: the old code still sends labels to the saved address.
+3. **Push.** The deploy stops at the migration check: then **Actions → Deploy → Run workflow** with **migrations done** ticked ([above](#when-a-deploy-stops)).
+4. **Migration, second run,** as soon as the run is green: the same file again. It copies the addresses of the orders the old code made in the meantime. `without_ship_to` should then be 0, unless an order's saved address row is gone.
+5. **Labels:** only if the second run prints `labelled_address_changed` above 0, compare those orders with their labels in ShipStation (the query is in the file's header) and correct `ship_to_*` where they differ.
+
+**Changing the address of a paid order.** The website's Shipping & Returns page tells customers to contact support to change their address before the order ships. The admin panel can't change an order's address yet: that's waiting on a decision. Until then, a developer changes it on the server, only for an order with no label that isn't cancelled:
+
+```sql
+UPDATE orders SET ship_to_name = ?, ship_to_phone = ?, ship_to_address_line1 = ?,
+  ship_to_address_line2 = ?, ship_to_city = ?, ship_to_state = ?, ship_to_postal_code = ?,
+  ship_to_country = 'US'
+WHERE id = ? AND label_id IS NULL AND shipment_id IS NULL AND status <> 'CANCELLED';
+```
+
+- `ship_to_state` is the two-letter code of one of the 48 contiguous states or DC: the shop ships nowhere else.
+- The customer paid for shipping to the old address. If the new one costs more, the shop pays the difference.
+- If the order has a `shipment_id`, an earlier label attempt failed and the order is already in ShipStation, where **Try again** buys its label, to the address there. Change the address in ShipStation too, then run the UPDATE without `AND shipment_id IS NULL`.
+- An unpaid order needs none of this: the customer checks out again with the other address.
+
 ## Taking real payments
 
 Square and PayPal start in sandbox. To take real money, all of these on the same day:

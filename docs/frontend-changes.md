@@ -6,6 +6,7 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
+| [2026-11-24: an order keeps the address it was priced for](#2026-11-24-ship-to) | not deployed yet | None required |
 | [2026-11-20: unpaid orders and one payment at a time](#2026-11-20-paying-order) | `f09c0b4`, live since 20 Nov | None required: the shop already shows the API's messages. Optional: see the note on 409 from `POST order` |
 | [2026-11-20: graphics are PNG, JPG or SVG only](#2026-11-20-graphic-types) | `35ba84e`, live since 20 Nov | Done in hashtag-next, not deployed yet: both graphic pickers limited to PNG, JPG, JPEG and SVG |
 | [2026-11-13: payments go-live](#2026-11-13-go-live) | `2634b76`, live since 16 Nov | Done in hashtag-next `744ba16` and `5d0fcff`, not deployed yet |
@@ -71,6 +72,15 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 | A35 | 39 | Tracking for signed-in customers; the admin picks ShipStation or manual updates | Show the order's status and tracking from the API, whichever way it's updated. |
 
 **Waiting on the client:** A8, DTG with several locations (Q8, reworded); which font settings besides the font list (Q23). **Later, by the client's choice:** A24 pre-made products from suppliers (Q26), A42 price filter (Q54), A46 Back button (Q57), policy pages editable in the admin (Q61).
+
+---
+
+<a id="2026-11-24-ship-to"></a>
+## 2026-11-24: an order keeps the address it was priced for (not deployed yet)
+
+Audit point F02. **What `GET order/:id` returns:** `address` is now the order's own copy of the address its shipping was priced for, which is also where its label goes. Editing or deleting that saved address on the Account page no longer changes it. The fields are the same as before (`name`, `phone`, `address_line1`, `city`, `state`, `postal_code`, `country`), plus `address_line2`, which is `""` or `null` when there's none. It's still `null` for an order without an address. Nothing else changes in `GET order/:id` or in `GET order` (the list).
+
+**What the shop must do:** nothing.
 
 ---
 

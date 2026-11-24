@@ -3,6 +3,7 @@ const { Op } = require("sequelize");
 
 const { Address, Carrier, Order, OrderItem, Product, ProductVariant } = require("../../models");
 const ApiError = require("../../utils/ApiError");
+const { orderShipTo } = require("../../utils/orderShipTo");
 const logger = require("../../config/logger");
 const settings = require("../../config/settings");
 const {
@@ -20,6 +21,11 @@ const { holdForApprovalDecision, confirmLabelPurchase } = require("./approvalSto
 
 // A claim older than this was left by a crash, so the label can be tried again.
 const CLAIM_TIMEOUT_MINUTES = 10;
+
+// Shown on the order (shipment_error) and by Buy label, for an order with neither its own copy of
+// the address nor the saved address it was made from.
+const NO_SHIPPING_ADDRESS =
+  "This order has no shipping address, so its label can't be bought here. Buy it in ShipStation, or ask a developer to add the address to the order.";
 
 // ShipStation's tracking status codes, as order statuses. The others (NY: not yet in the
 // system, UN: unknown) say nothing new.
@@ -109,7 +115,10 @@ const shipPaidOrder = async (orderId, { manual = false } = {}) => {
 
   if (!(await claimLabel(orderId))) return false;
 
-  const order = await Order.findByPk(orderId);
+  // The saved address comes too, for an order without its own copy (utils/orderShipTo.js).
+  const order = await Order.findByPk(orderId, {
+    include: [{ model: Address, as: "address", paranoid: false, required: false }],
+  });
 
   try {
     const orderItems = await OrderItem.findAll({
@@ -120,13 +129,17 @@ const shipPaidOrder = async (orderId, { manual = false } = {}) => {
       ],
     });
 
-    // Kept even if the customer has since deleted the address.
-    const address = await Address.findByPk(order.address_id, { paranoid: false });
+    // The address the shipping was priced for, copied onto the order when it was made (audit
+    // F02). Editing or deleting the saved address since then changes nothing here.
+    const address = orderShipTo(order);
 
     const carrierId = await carrierIdFor(order);
     const isRetry = Boolean(order.shipment_id);
 
+    // A retry buys the label for the shipment already in ShipStation, which has its address.
     if (!isRetry) {
+      if (!address) throw new Error(NO_SHIPPING_ADDRESS);
+
       const shipment = await createShipment({ order, orderItems, address, carrierId });
 
       await order.update({

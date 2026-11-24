@@ -9,6 +9,7 @@ const settings = require("../../config/settings");
 const logger = require("../../config/logger");
 const { Order, OrderItem, Product, ProductVariant, Size, Address, User, Profile } = require("../../models");
 const { parseJson } = require("../../utils/orderFormat");
+const { orderShipTo } = require("../../utils/orderShipTo");
 const {
   sendOrderConfirmedEmail,
   sendOrderCancelledEmail,
@@ -52,6 +53,7 @@ const loadOrder = (orderId) =>
           },
         ],
       },
+      // The saved address, only for an order without its own copy (utils/orderShipTo.js).
       { model: Address, as: "address", paranoid: false, required: false },
       {
         model: User,
@@ -92,6 +94,8 @@ const shipToOf = (address) =>
 
 // What the order templates need (templates/templates/orders.js), and who to send it to.
 const describeOrder = (order) => {
+  // Where it ships: the address its shipping was priced for, kept on the order (audit F02).
+  const shipTo = orderShipTo(order);
   const site = settings.get("FRONTEND_URL");
   const paid = PAYMENT_LABELS[order.payment_method] || null;
   const totals = [
@@ -105,7 +109,7 @@ const describeOrder = (order) => {
   return {
     to: order.user?.email || null,
     order: {
-      name: order.user?.user_profile?.name || order.address?.name || null,
+      name: order.user?.user_profile?.name || shipTo?.name || null,
       orderNumber: order.order_number,
       orderDate: new Date(order.created_at).toLocaleDateString("en-US", {
         timeZone: STORE_TIMEZONE,
@@ -115,7 +119,7 @@ const describeOrder = (order) => {
       }),
       paidWith: paid ? paid.charAt(0).toUpperCase() + paid.slice(1) : null,
       paidWithLower: paid,
-      shipTo: shipToOf(order.address),
+      shipTo: shipToOf(shipTo),
       total: money(order.total_amount),
       items: (order.items || []).map((item) => ({
         name: item.product?.name || item.name,

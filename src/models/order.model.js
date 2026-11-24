@@ -30,6 +30,49 @@ Order.init(
       allowNull: false,
     },
 
+    // Where the order ships: a copy of the saved address its shipping was priced for, made by
+    // POST order (audit F02). The label, the order's pages and its emails use it, so editing or
+    // deleting the saved address later changes nothing here. See utils/orderShipTo.js.
+    ship_to_name: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+    },
+
+    ship_to_phone: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+    },
+
+    ship_to_address_line1: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+    },
+
+    ship_to_address_line2: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+    },
+
+    ship_to_city: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+    },
+
+    ship_to_state: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+    },
+
+    ship_to_postal_code: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+    },
+
+    ship_to_country: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+    },
+
     total_amount: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false,
