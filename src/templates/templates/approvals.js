@@ -1,8 +1,7 @@
 // Artwork approval emails to the customer: a link to the page where they check how each item will
-// look, then approve it or request changes (orderApproval.service.js sends them from the admin
-// panel's Artwork approval page). They say "artwork", as the customer's page does, never "proof".
-// From the order address (order@, email.service.js); replies go back to it. Returns
-// { subject, text, html }.
+// look, then approve it or reject it (orderApproval.service.js sends them from the admin panel's
+// Artwork approval page). They say "artwork", as the customer's page does, never "proof". From the
+// order address (order@, email.service.js); replies go back to it. Returns { subject, text, html }.
 //
 //   kind         "first" (the first email), "updated" (new versions) or "reminder"
 //   items        [{ name, detail }]: the order's lines, each with where it stands and its options,
@@ -20,19 +19,19 @@ const WORDING = {
     subject: (number) => `Your artwork for order ${number} is ready to review`,
     heading: "Your artwork is ready to review",
     intro: (number) => `you can now see how the items in your order ${number} will look with your artwork.`,
-    ask: "Please check each item, then approve it or request changes.",
+    ask: "Please check each item, then approve it or reject it and tell us what to change.",
   },
   updated: {
     subject: (number) => `Updated artwork for order ${number} is ready to review`,
     heading: "We've updated your artwork",
     intro: (number) => `your order ${number} has new artwork previews to check.`,
-    ask: "Please take another look, then approve each item or request changes.",
+    ask: "Please take another look, then approve each item or reject it and tell us what to change.",
   },
   reminder: {
     subject: (number) => `Reminder: your artwork for order ${number} is waiting for your approval`,
     heading: "Your artwork is waiting for your approval",
     intro: (number) => `just a reminder about the artwork for your order ${number}.`,
-    ask: "Please check the items still waiting, then approve each one or request changes.",
+    ask: "Please check the items still waiting, then approve each one or reject it and tell us what to change.",
   },
 };
 

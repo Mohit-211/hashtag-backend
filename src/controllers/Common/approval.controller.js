@@ -27,20 +27,14 @@ const approveAll = answer((req) => approvalPublicService.approveAll(req.approval
 
 const undo = answer((req) => approvalPublicService.undo(req.approval, visitor(req), req.body));
 
-const addNote = answer((req) =>
-  approvalPublicService.addNote(req.approval, visitor(req), req.params.lineId, req.body, req.files),
+const reject = answer((req) =>
+  approvalPublicService.reject(req.approval, visitor(req), req.params.lineId, req.body, req.files),
 );
-
-const removeNote = answer((req) => approvalPublicService.removeNote(req.approval, visitor(req), req.params.eventId));
-
-const restoreNote = answer((req) => approvalPublicService.restoreNote(req.approval, visitor(req), req.params.eventId));
 
 module.exports = {
   getView,
   approveLine,
   approveAll,
   undo,
-  addNote,
-  removeNote,
-  restoreNote,
+  reject,
 };

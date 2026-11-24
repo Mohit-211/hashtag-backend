@@ -13,7 +13,7 @@ const validateEmail = require("../../helpers/validateEmail");
 const { Admin, Order, OrderApproval, OrderApprovalLine, OrderApprovalFile } = require("../../models");
 const ApiError = require("../../utils/ApiError");
 const { parseJson } = require("../../utils/orderFormat");
-const { EVENT, ACTOR, LINE, HOLD, approvalState, isUndone, idOf, wholeOf } = require("../../utils/approvalState");
+const { EVENT, ACTOR, LINE, HOLD, approvalState, isUndone, eventKind, idOf, wholeOf } = require("../../utils/approvalState");
 const store = require("./approvalStore");
 const { fileUrl, artworkLinks, saveProof, removeStoredFiles } = require("./approvalFiles");
 const { approvalReadOnlyReason } = require("./orderActions");
@@ -92,6 +92,7 @@ const orderView = (order) => ({
   has_label: Boolean(order.label_id),
 });
 
+// A customer's note: their rejection of a version. removed: taken back with Undo.
 const noteView = (event, bundle, state) => {
   const note = state.notes.get(idOf(event.id));
   return {
@@ -99,10 +100,8 @@ const noteView = (event, bundle, state) => {
     body: event.body,
     created_at: event.created_at,
     version: event.version,
-    file_id: idOf(event.file_id),
     removed: note.removed,
     removed_at: note.removed_at,
-    after_approval: note.after_approval,
     pictures: bundle.files
       .filter((file) => file.kind === "PICTURE" && idOf(file.note_event_id) === idOf(event.id))
       .sort(byPosition)
@@ -113,6 +112,7 @@ const noteView = (event, bundle, state) => {
 const lineView = (line, bundle, state) => {
   const lineState = state.lines.get(idOf(line.id));
   const proofs = bundle.files.filter((file) => file.kind === "PROOF" && onLine(file, line)).sort(byPosition);
+  const noteOf = (eventId) => noteView(bundle.events.find((event) => idOf(event.id) === eventId), bundle, state);
 
   return {
     id: idOf(line.id),
@@ -132,10 +132,16 @@ const lineView = (line, bundle, state) => {
       sent_at: version.sent_at,
       message: version.message,
       files: proofs.filter((file) => Number(file.version) === version.version).map(fileView),
+      status: version.status,
+      decided_at: version.decided_at,
+      went_back_to: version.went_back_to,
+      note: version.note_event_id ? noteOf(version.note_event_id) : null,
     })),
+    // Every note is a rejection.
     notes: bundle.events
       .filter((event) => event.type === EVENT.NOTE_ADDED && onLine(event, line))
       .map((event) => noteView(event, bundle, state)),
+    last_choice: lineState.last_choice,
   };
 };
 
@@ -155,25 +161,35 @@ const proposedLineView = (line) => ({
   drafts: [],
   versions: [],
   notes: [],
+  last_choice: null,
 });
 
-const eventView = (event, state, admins, titles) => ({
-  id: idOf(event.id),
-  type: event.type,
-  actor: event.actor,
-  admin: adminOf(admins, event.admin_id),
-  line_id: idOf(event.line_id),
-  line_title: titles.get(idOf(event.line_id)) || null,
-  version: event.version,
-  target_event_id: idOf(event.target_event_id),
-  batch_id: event.batch_id,
-  body: event.body,
-  meta: parseJson(event.meta) || null,
-  created_at: event.created_at,
-  ip: event.ip,
-  user_agent: event.user_agent,
-  undone: isUndone(state, event),
-});
+// kind: what the event means (approvalState.js eventKind). newest_version: the line's newest
+// version when the customer made the choice. An Undo carries both, and the version, of the choice
+// it took back (undos before 24 Nov didn't store the version).
+const eventView = (event, state, admins, titles) => {
+  const undid = event.type === EVENT.APPROVAL_UNDONE || event.type === EVENT.NOTE_REMOVED;
+  const choice = state.choices.get(idOf(undid ? event.target_event_id : event.id));
+  return {
+    id: idOf(event.id),
+    type: event.type,
+    kind: eventKind(state, event),
+    actor: event.actor,
+    admin: adminOf(admins, event.admin_id),
+    line_id: idOf(event.line_id),
+    line_title: titles.get(idOf(event.line_id)) || null,
+    version: undid && choice ? choice.version : event.version,
+    newest_version: choice?.newest_version ?? null,
+    target_event_id: idOf(event.target_event_id),
+    batch_id: event.batch_id,
+    body: event.body,
+    meta: parseJson(event.meta) || null,
+    created_at: event.created_at,
+    ip: event.ip,
+    user_agent: event.user_agent,
+    undone: isUndone(state, event),
+  };
+};
 
 // GET order/admin/:id/approval: the whole Approval page. Before the approval starts, approval is
 // null and lines are the ones it would have (no ids, no files).
@@ -410,7 +426,8 @@ const setNoProof = async (orderId, lineId, admin, body = {}) => {
 // ---------------------------------------------------------------- sending
 
 // Where a line stands, as the email says it before the line's options, in the customer page's
-// words. A line waiting for the customer says nothing, unless this send gave it a new version.
+// words. A line waiting for the customer says nothing, unless this send gave it a new version. An
+// approved line names its version when the customer went back to an earlier one.
 const emailStatus = (lineState, updated) => {
   switch (lineState.status) {
     case LINE.NO_PROOF_NEEDED:
@@ -418,9 +435,11 @@ const emailStatus = (lineState, updated) => {
     case LINE.NOT_SENT:
       return "Artwork preview coming soon";
     case LINE.APPROVED:
-      return "Already approved";
+      return lineState.approved_version < lineState.current_version
+        ? `Already approved (Version ${lineState.approved_version})`
+        : "Already approved";
     case LINE.CHANGES_REQUESTED:
-      return "Changes requested";
+      return "Rejected: we're making a new version";
     default:
       return updated && lineState.current_version > 1 ? `Updated: Version ${lineState.current_version}` : null;
   }

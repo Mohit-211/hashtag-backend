@@ -19,13 +19,12 @@ const {
   LINE,
   approvalState,
   isUndone,
+  eventKind,
   idOf,
-  wholeOf,
   planApprove,
+  planReject,
   planApproveAll,
   planUndo,
-  planUndoLine,
-  planNoteChange,
 } = require("../../utils/approvalState");
 const store = require("./approvalStore");
 const { fileUrl, artworkLinks, savePictures, removeStoredFiles } = require("./approvalFiles");
@@ -52,13 +51,36 @@ const firstNameOf = (order) => {
   return name ? String(name).trim().split(/\s+/)[0] || null : null;
 };
 
-const lineView = (line, bundle, state) => {
+// A customer's note: their rejection of a version. removed: taken back with Undo.
+const noteView = (event, bundle, state) => ({
+  event_id: idOf(event.id),
+  body: event.body,
+  created_at: event.created_at,
+  version: event.version,
+  removed: Boolean(state.notes.get(idOf(event.id))?.removed),
+  pictures: bundle.files
+    .filter((file) => file.kind === "PICTURE" && idOf(file.note_event_id) === idOf(event.id))
+    .sort(byPosition)
+    .map((file) => ({ id: idOf(file.id), url: fileUrl(file.stored_name) })),
+});
+
+// An Undo names the version of the choice it took back (undos before 24 Nov didn't store it).
+const historyVersion = (state, event) =>
+  event.type === EVENT.APPROVAL_UNDONE || event.type === EVENT.NOTE_REMOVED
+    ? (state.choices.get(idOf(event.target_event_id))?.version ?? event.version)
+    : event.version;
+
+// Nothing can be chosen or undone on a read-only page.
+const NOTHING_TO_DO = { approve: false, reject: false, go_back_to: [], undo: false };
+
+const lineView = (line, bundle, state, readOnly) => {
   const lineState = state.lines.get(idOf(line.id));
   const detail = parseJson(line.detail) || {};
   const proofs = bundle.files
     .filter((file) => file.kind === "PROOF" && onLine(file, line) && file.version !== null && !file.removed_at)
     .sort(byPosition);
   const events = bundle.events.filter((event) => onLine(event, line));
+  const noteOf = (eventId) => noteView(events.find((event) => idOf(event.id) === eventId), bundle, state);
 
   return {
     id: idOf(line.id),
@@ -88,39 +110,37 @@ const lineView = (line, bundle, state) => {
           name: file.original_name,
           mime: file.mime,
         })),
+      status: version.status,
+      decided_at: version.decided_at,
+      went_back_to: version.went_back_to,
+      note: version.note_event_id ? noteOf(version.note_event_id) : null,
     })),
+    // Every note is a rejection.
     notes: events
       .filter((event) => event.type === EVENT.NOTE_ADDED && event.actor === ACTOR.CUSTOMER)
-      .map((event) => ({
-        event_id: idOf(event.id),
-        body: event.body,
-        created_at: event.created_at,
-        version: event.version,
-        file_id: idOf(event.file_id),
-        removed: Boolean(state.notes.get(idOf(event.id))?.removed),
-        pictures: bundle.files
-          .filter((file) => file.kind === "PICTURE" && idOf(file.note_event_id) === idOf(event.id))
-          .sort(byPosition)
-          .map((file) => ({ id: idOf(file.id), url: fileUrl(file.stored_name) })),
-      })),
-    // The customer's own actions and the versions sent.
+      .map((event) => noteView(event, bundle, state)),
+    // The versions sent, the customer's choices and their Undos.
     history: events
-      .filter((event) => event.actor === ACTOR.CUSTOMER || event.type === EVENT.VERSION_SENT)
-      .map((event) => ({
+      .map((event) => ({ event, kind: eventKind(state, event) }))
+      .filter(({ kind }) => kind)
+      .map(({ event, kind }) => ({
         event_id: idOf(event.id),
         type: event.type,
-        version: event.version,
+        kind,
+        version: historyVersion(state, event),
         created_at: event.created_at,
         batch_id: event.batch_id,
         undone: isUndone(state, event),
       })),
-    undo_event_id: lineState.newest_live?.id ?? null,
+    last_choice: lineState.last_choice,
+    actions: readOnly ? NOTHING_TO_DO : lineState.actions,
+    undo_event_id: lineState.last_choice?.event_id ?? null,
   };
 };
 
 const publicView = (order, approval, bundle, state) => {
   const reason = approvalReadOnlyReason(order, approval);
-  const lines = bundle.lines.map((line) => lineView(line, bundle, state));
+  const lines = bundle.lines.map((line) => lineView(line, bundle, state, Boolean(reason)));
 
   return {
     order: { number: order.order_number, placed_at: order.created_at, first_name: firstNameOf(order) },
@@ -192,9 +212,12 @@ const act = (ref, who, decide) =>
     return publicView(order, approval, bundle, await store.recompute(approval, bundle, transaction));
   });
 
-// POST approval/lines/:lineId/approve { version, latest }
+// POST approval/lines/:lineId/approve { version, latest, last_choice_id }: Approve (the newest
+// version) or Go back (an older one).
 const approveLine = (ref, who, lineId, body = {}) =>
-  act(ref, who, ({ state }) => planApprove(state, { lineId, version: body.version, latest: body.latest }));
+  act(ref, who, ({ state }) =>
+    planApprove(state, { lineId, version: body.version, latest: body.latest, lastChoiceId: body.last_choice_id }),
+  );
 
 // POST approval/approve-all { lines: [{ id, latest }] }
 const approveAll = (ref, who, body = {}) =>
@@ -202,81 +225,54 @@ const approveAll = (ref, who, body = {}) =>
 
 // POST approval/undo { event_id } or { batch_id }
 const undo = (ref, who, body = {}) =>
-  act(ref, who, ({ state, bundle }) => planUndo(state, bundle.events, { eventId: body.event_id, batchId: body.batch_id }));
+  act(ref, who, ({ state }) => planUndo(state, { eventId: body.event_id, batchId: body.batch_id }));
 
-// POST approval/notes/:eventId/remove and .../restore
-const removeNote = (ref, who, eventId) =>
-  act(ref, who, ({ state, bundle }) => planNoteChange(state, bundle.events, eventId, "remove"));
-
-const restoreNote = (ref, who, eventId) =>
-  act(ref, who, ({ state, bundle }) => planNoteChange(state, bundle.events, eventId, "restore"));
-
-// POST approval/lines/:lineId/notes, multipart: body (up to 2,000 characters), version (the one
-// the customer was looking at), file_id (a proof image of that version, when the note is about
-// it), undo_approval ("true": take back the line's approval too, to ask for changes) and up to 5
-// pictures in approval_picture. Text or a picture is needed.
-const addNote = async (ref, who, lineId, body = {}, files = {}) => {
+// POST approval/lines/:lineId/reject, multipart: body (the note, up to 2,000 characters), version
+// and last_choice_id (what the page showed when its Reject box opened) and up to 5 pictures in
+// approval_picture. A note or a picture is needed. Pictures count toward the order's 40 even after
+// their rejection is undone: files are never deleted.
+const reject = async (ref, who, lineId, body = {}, files = {}) => {
   const text = typeof body.body === "string" ? body.body.replace(/\r\n?/g, "\n").trim() : "";
   if ([...text].length > NOTE_LIMIT) {
-    throw new ApiError(httpStatus.BAD_REQUEST, `A note can be at most ${NOTE_LIMIT} characters.`);
+    throw new ApiError(httpStatus.BAD_REQUEST, `Your note can be at most ${NOTE_LIMIT} characters.`);
   }
   const uploads = files.approval_picture || [];
-  if (!text && !uploads.length) throw new ApiError(httpStatus.BAD_REQUEST, "Write a note or add a picture.");
+  if (!text && !uploads.length) throw new ApiError(httpStatus.BAD_REQUEST, "Tell us what to change, or add a picture.");
 
   let pictures = [];
   try {
     pictures = await savePictures(uploads);
 
     return await act(ref, who, async ({ approval, bundle, state, transaction }) => {
-      const line = bundle.lines.find((candidate) => idOf(candidate.id) === wholeOf(lineId));
-      if (!line) return { error: { status: httpStatus.NOT_FOUND, message: "That item isn't part of this order." } };
-
-      const lineState = state.lines.get(idOf(line.id));
-      const version = wholeOf(body.version);
-      const sent = lineState.current_version;
-      if (Number.isNaN(version) || version < (sent ? 1 : 0) || version > sent) {
-        return { error: { status: httpStatus.BAD_REQUEST, message: "Send the version the note is about." } };
-      }
-
-      let fileId = null;
-      if (body.file_id !== undefined && body.file_id !== null && body.file_id !== "") {
-        const proof = bundle.files.find(
-          (file) =>
-            idOf(file.id) === wholeOf(body.file_id) &&
-            file.kind === "PROOF" &&
-            onLine(file, line) &&
-            file.version !== null &&
-            Number(file.version) === version,
-        );
-        if (!proof) return { error: { status: httpStatus.BAD_REQUEST, message: "That image isn't part of this version." } };
-        fileId = idOf(proof.id);
-      }
+      const plan = planReject(state, {
+        lineId,
+        version: body.version,
+        lastChoiceId: body.last_choice_id,
+        body: store.clip(text, NOTE_LIMIT) || null,
+      });
+      if (plan.error) return plan;
 
       const stored = bundle.files.filter((file) => file.kind === "PICTURE").length;
       if (stored + pictures.length > PICTURES_PER_APPROVAL) {
         return {
           error: {
             status: httpStatus.BAD_REQUEST,
-            message: `This order can take ${PICTURES_PER_APPROVAL} pictures in all, and has ${stored}. Write a note instead, or email us the pictures.`,
+            message: `This order can take ${PICTURES_PER_APPROVAL} pictures in all, and has ${stored}. Tell us in words instead, or email us the pictures.`,
           },
         };
       }
 
-      const writer = { transaction, actor: ACTOR.CUSTOMER, ip: who.ip, userAgent: who.userAgent };
-      if (body.undo_approval === "true" || body.undo_approval === true) {
-        await store.addEvents(approval, bundle, planUndoLine(state, line.id).events, writer);
-      }
-      const [note] = await store.addEvents(
-        approval,
-        bundle,
-        [{ type: EVENT.NOTE_ADDED, line_id: line.id, version, file_id: fileId, body: store.clip(text, NOTE_LIMIT) || null }],
-        writer,
-      );
+      const [note] = await store.addEvents(approval, bundle, plan.events, {
+        transaction,
+        actor: ACTOR.CUSTOMER,
+        ip: who.ip,
+        userAgent: who.userAgent,
+      });
       for (const [index, picture] of pictures.entries()) {
         const file = await OrderApprovalFile.create(
           {
             approval_id: approval.id,
-            line_id: line.id,
+            line_id: note.line_id,
             kind: "PICTURE",
             note_event_id: note.id,
             position: index + 1,
@@ -299,7 +295,5 @@ module.exports = {
   approveLine,
   approveAll,
   undo,
-  addNote,
-  removeNote,
-  restoreNote,
+  reject,
 };

@@ -719,7 +719,7 @@ const getActivity = async (query = {}) => {
          FROM orders o
         WHERE ${NO_LABEL} AND ${HELD_FOR_APPROVAL}`,
     ),
-    // Open approvals where it's the team's turn: the customer asked for changes (upload a new
+    // Open approvals where it's the team's turn: the customer rejected an item (upload a new
     // version), or approved everything (lock for production).
     select(
       `SELECT SUM(a.status = 'CHANGES_REQUESTED') AS changes, SUM(a.status = 'APPROVED') AS approved

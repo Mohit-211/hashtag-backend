@@ -56,9 +56,10 @@ const FILE_ROUTES = [
   { method: "POST", path: /^\/gallery\/?$/, auth: requireAdmin },
   { method: "PUT", path: /^\/gallery\/[^/]+\/?$/, auth: requireAdmin },
 
-  // Order approval: the team's proofs, and the pictures on a customer's note.
+  // Order approval: the team's proofs, and the pictures with a customer's rejection (tooMany: the
+  // customer's words when they send more than the route takes).
   { method: "POST", path: /^\/order\/admin\/[^/]+\/approval\/lines\/[^/]+\/proofs\/?$/, auth: requireAdmin, upload: approvalProofUpload, discardRefused: true },
-  { method: "POST", path: /^\/approval\/lines\/[^/]+\/notes\/?$/, auth: approvalUploadGate, upload: approvalPictureUpload, discardRefused: true },
+  { method: "POST", path: /^\/approval\/lines\/[^/]+\/reject\/?$/, auth: approvalUploadGate, upload: approvalPictureUpload, discardRefused: true, tooMany: "You can add up to 5 pictures." },
 ];
 
 // Everywhere else multipart forms are still parsed, but files are refused.
@@ -95,11 +96,19 @@ const checkContents = async (files) => {
   }
 };
 
+// Too many files for a route with its own words for that: over the request's file limit
+// (busboy's, which names no field), or over the pictures field's count.
+const isTooMany = (route, error) =>
+  Boolean(route.tooMany) &&
+  error instanceof multer.MulterError &&
+  (error.code === "LIMIT_FILE_COUNT" || (error.code === "LIMIT_UNEXPECTED_FILE" && error.field === APPROVAL_PICTURE_FIELD));
+
 // Runs the upload, then checks that every saved graphic really is a PNG, JPEG or SVG (and every
 // approval picture a PNG or JPEG). A request with one that isn't is refused (400) before the route
 // sees it, and all its files are deleted.
-const runUpload = (uploader, req, res, next) =>
+const runUpload = (route, uploader, req, res, next) =>
   uploader(req, res, (error) => {
+    if (isTooMany(route, error)) return next(new ApiError(httpStatus.BAD_REQUEST, route.tooMany));
     if (error) return next(error);
 
     const files = Object.values(req.files || {}).flat();
@@ -127,12 +136,12 @@ const uploadMiddleware = (req, res, next) => {
     return route.limit(req, res, (error) => {
       if (error) return next(error);
       discardWhenRefused(req, res);
-      return runUpload(upload, req, res, next);
+      return runUpload(route, upload, req, res, next);
     });
   }
 
   if (!route.auth) {
-    return runUpload(upload, req, res, next);
+    return runUpload(route, upload, req, res, next);
   }
 
   // The route's own auth middleware runs again after the upload (multer replaces
@@ -141,7 +150,7 @@ const uploadMiddleware = (req, res, next) => {
   return route.auth(req, res, (error) => {
     if (error) return next(error);
     if (route.discardRefused) discardWhenRefused(req, res);
-    return runUpload(route.upload || upload, req, res, next);
+    return runUpload(route, route.upload || upload, req, res, next);
   });
 };
 

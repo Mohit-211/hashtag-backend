@@ -31,8 +31,8 @@ const tokenLimiter = limiter(15, 20, 'Too many attempts. Please try again in 15 
 // The customer's approval page (no sign-in): every request, which also caps guessing at links.
 const approvalLimiter = limiter(15, 300, 'Too many requests. Please try again in a few minutes.');
 
-// Notes (with pictures) from the approval page, counted before anything is saved.
-const approvalUploadLimiter = limiter(60, 30, 'Too many notes. Please try again later.');
+// Rejections (with pictures) from the approval page, counted before anything is saved.
+const approvalUploadLimiter = limiter(60, 30, 'Too many rejections in a short time. Please try again later.');
 
 // Artwork approval emails from the admin panel, their own count like testEmailLimiter.
 const approvalSendLimiter = limiter(60, 20, 'Too many artwork emails. Please try again later.');

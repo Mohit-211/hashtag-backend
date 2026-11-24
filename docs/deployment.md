@@ -82,7 +82,7 @@ Built on 23 November; **not live yet**. Before a customized order is made, the t
 
 1. **The team uploads previews.** On the order's **Artwork approval** page in the admin panel (Orders, the stamp button), they add an artwork preview of each item.
 2. **order@ emails the customer a private link.**
-3. **The customer reviews.** On that page they approve each item, or all at once, or ask for changes with a note and photos. They can undo until the team presses **Lock for production**.
+3. **The customer reviews.** On that page they approve each item, or all at once, or reject it with a note and pictures, or go back to an earlier version. They can undo their last choice until the team presses **Lock for production**.
 
 Both sides see the history.
 
@@ -91,14 +91,14 @@ Both sides see the history.
   - **The key:** 64 random characters. The database keeps only its hash and an encrypted copy, so the panel can show the link again.
   - **How it's sent:** the page passes the key in the `X-Approval-Token` header, so it doesn't reach web server logs.
   - **How long it works:** until the order ships or is cancelled, or the team locks it; then the page is read-only. The team can replace the link or switch it off.
-- **Files:** previews and customers' photos go in `approvals` in the storage folder, with random names, served at `/approvals` as downloads (like `/graphics`).
+- **Files:** previews and customers' pictures go in `approvals` in the storage folder, with random names, served at `/approvals` as downloads (like `/graphics`).
   - Previews: PNG, JPG, JPEG or SVG, up to 20 MB each.
-  - Customers' photos: up to 5 per note, 10 MB each.
+  - Customers' pictures: up to 5 per rejection, 10 MB each, 40 per order (pictures of rejections undone with Undo count too).
 - **Tables:** `order_approvals`, `order_approval_lines`, `order_approval_files` and `order_approval_events`. The last one is the history: rows are only ever added.
 - **Settings:**
   - **Artwork approval page address** (Website and links). Default: the website address + `/approval`.
   - **Hold customized orders for an artwork approval decision** (Shipping). Off by default. When on, a paid customized order's label waits until the team decides on its approval page.
-- **Rate limits:** 300 requests per 15 minutes on the customer's page, 30 notes an hour, and 20 artwork emails an hour from the panel.
+- **Rate limits:** 300 requests per 15 minutes on the customer's page, 30 rejections an hour, and 20 artwork emails an hour from the panel.
 
 ### Going live, in this order
 

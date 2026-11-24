@@ -169,9 +169,10 @@ const csvUpload = multer({
   },
 }).single(CSV_FIELD);
 
-// Order approvals: the team's proofs and the pictures customers add to their notes, in their own
-// folder (served like /graphics, app.js) with 128-bit random names, because the approval page needs
-// no sign-in. A picture is saved again by approvalFiles.js, so its upload is only a working copy.
+// Order approvals: the team's proofs and the pictures customers add to their rejections, in their
+// own folder (served like /graphics, app.js) with 128-bit random names, because the approval page
+// needs no sign-in. A picture is saved again by approvalFiles.js, so its upload is only a working
+// copy.
 const APPROVAL_PROOF_FIELD = "approval_proof";
 const APPROVAL_PICTURE_FIELD = "approval_picture";
 const PROOF_TYPE_MESSAGE = "Artwork previews must be PNG, JPG, JPEG or SVG files.";
@@ -185,7 +186,7 @@ const approvalStorage = multer.diskStorage({
   },
 });
 
-// One proof of up to 20 MB per request; up to 5 pictures of 10 MB with a note.
+// One proof of up to 20 MB per request; up to 5 pictures of 10 MB with a rejection.
 const approvalProofLimits = { ...limits, files: 1 };
 const approvalPictureLimits = { ...limits, fileSize: 10 * 1024 * 1024, files: 5 };
 
@@ -197,7 +198,7 @@ const approvalProofUpload = multer({
     isGraphicFile(file) ? cb(null, true) : cb(new ApiError(httpStatus.BAD_REQUEST, PROOF_TYPE_MESSAGE)),
 }).fields([{ name: APPROVAL_PROOF_FIELD, maxCount: 1 }]);
 
-// POST approval/lines/:lineId/notes
+// POST approval/lines/:lineId/reject
 const approvalPictureUpload = multer({
   storage: approvalStorage,
   limits: approvalPictureLimits,

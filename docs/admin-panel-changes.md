@@ -90,8 +90,10 @@ The panel's side is built in the same change: the **Artwork approval** page (`/o
 **Elsewhere:**
 
 - **Orders list:** each row of `GET order/admin` has `approval` (`{ status, hold_state, locked, unseen, sent }` or `null`), plus `actions.can_open_approval`.
-- **Dashboard:** `GET admin/dashboard/activity` adds `approval_changes.count` (the customer asked for changes) and `approval_ready.count` (approved, waiting for the lock). Orders whose label waits for an approval are counted in `waiting_for_approval` and no longer in orders to ship.
+- **Dashboard:** `GET admin/dashboard/activity` adds `approval_changes.count` (the customer rejected an item) and `approval_ready.count` (approved, waiting for the lock). Orders whose label waits for an approval are counted in `waiting_for_approval` and no longer in orders to ship.
 - **Buy label:** on an order the customer is still reviewing, it needs `confirm: true`, which locks the approval.
+
+24 Nov: the customer approves, rejects (note and pictures) or goes back to an earlier version, and can undo the last choice. The admin view's versions carry `status` (WAITING, APPROVED, REJECTED, REPLACED), `decided_at`, `went_back_to` and `note`; lines carry `last_choice`; history events carry `kind` and `newest_version`. Notes are rejections only (no `file_id`, no `after_approval`).
 
 <a id="2026-11-20-template-import"></a>
 ## 2026-11-20: pricing templates from a CSV file (live since 20 Nov)
