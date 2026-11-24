@@ -4,6 +4,7 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
+| [2026-11-24: print options must be on the price list](#2026-11-24-print-options) | `<commit>`, not deployed yet | None required |
 | [2026-11-20: pricing templates from a CSV file](#2026-11-20-template-import) | `898c128`, live since 20 Nov | Done in Hashtag-Billionaire-Admin `c597d0d`, live since 20 Nov: Pricing Templates › Import from CSV |
 | [2026-11-19: the Dashboard](#2026-11-19-dashboard) | `c1e6f1c`, live since 19 Nov | Done in Hashtag-Billionaire-Admin `5af5d20`, live since 19 Nov: the Dashboard page, and the Orders page takes its filters from the link |
 | [2026-11-18: grand, parent and supplier category names](#2026-11-18-category-names) | `98cddea`, live since 18 Nov | Done in Hashtag-Billionaire-Admin `91fe6df`, live since 18 Nov: every label now says Grand / Parent / Supplier Category |
@@ -65,6 +66,21 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 
 1. **`payment_status=ALL`:** coming in the next release: `GET order/admin?payment_status=ALL` lists orders of every payment status. Without the parameter it still lists paid orders only.
 2. **The 2 unpaid orders the panel doesn't show:** when a customer's cart changes, the backend soft-deletes their latest unpaid order (`invalidatePendingOrder` in `cartWishlist.service.js`), and orders are paranoid, so those two are hidden from every list. Nothing is missing on the panel's side; the behaviour itself is on the payments list (audit H8).
+
+<a id="2026-11-24-print-options"></a>
+## 2026-11-24: print options must be on the price list (not deployed yet)
+
+Audit points F05 and F04. The cart now refuses (400) print options that aren't on the price list instead of charging $0 for them, and charges drinkware's $8 second location on every supplier. What it means for the shop, with every message: [frontend-changes.md](frontend-changes.md#2026-11-24-print-options). For the order screens (`GET order/admin`, payments):
+- Old orders are never repriced: their items show as before.
+- New items never have `pricing_snapshot.inquiry_only: true` any more (embroidery on the oversized back, the one "request a quote" location, is refused before it reaches a cart), so the "Inquiry-only product" caution can only show on older orders.
+- New items' `pricing_snapshot` has `print_options_checked: true`. The panel can ignore it.
+- `customization_config` holds the print method, locations, colours and DTG print area as they were priced: in capitals, with `colors` only for screen print and `dtg_style` only for DTG. The shop already sends them that way.
+- SAGE drinkware keeps its `pricing_table` row as it is (`type: "SAGE_DRINKWARE"`, no `price_per_item`), so the panel's "$0.00, confirm" caution and the "Decoration per item" mismatch on that row show as before.
+- A drinkware product from another supplier gets a `type: "DRINKWARE"` row with the same fields plus `price_per_item` (8 with front and back, 0 with one location). The Orders page's checks add up on it, and the Payments page shows "5 × $8" for 5 pieces. The panel shows `print_method` for both rows.
+- Embroidery on `SLEEVE_LEFT` and `SLEEVE_RIGHT` (the shop sends `SLEEVE` today) gets a row each at the sleeve price.
+- A SAGE product filed under "Apparel & Uniforms" (none today) gets the clothing rows (`EMBROIDERY`, `DTF`, `SCREEN_PRINT`, `DTG`) after its `SAGE` row.
+
+**What the panel must do:** nothing.
 
 <a id="2026-11-23-artwork-approval"></a>
 ## 2026-11-23: artwork approval (not live yet)

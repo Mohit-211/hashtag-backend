@@ -11,9 +11,6 @@ const {
   Cart,
   Size,
   ProductAttachment,
-  ProductCategory,
-  ParentCategory,
-  GrandCategory,
   ProductCustomization,
   ProductCustomizationValue,
   CustomizationOption,
@@ -28,7 +25,11 @@ const {
   buildPricingSnapshot,
   buildSagePricingSnapshot,
   lineMinimum,
+  readPrintOptions,
+  checkPrintOptions,
+  CART_LINE_OPTIONS_GONE,
 } = require("../../utils/pricing/buildPricingSnapshot");
+const { getProductCategories } = require("./productCategories");
 const decodeHtmlEntities = require("../../utils/decodeHtmlEntities");
 // A stored value that doesn't parse comes back as null instead of failing the whole cart.
 const { parseJson, getLineGraphics } = require("../../utils/orderFormat");
@@ -239,48 +240,6 @@ const moveWishlistToCart = async (body) => {
       error.message,
     );
   }
-};
-
-const getProductCategories = async (productId) => {
-  return await ProductCategory.findAll({
-    attributes: ["id", "title", "supplier"],
-
-    include: [
-      {
-        model: Product,
-        as: "products",
-        where: {
-          id: productId,
-        },
-        attributes: [],
-        through: {
-          attributes: [],
-        },
-      },
-
-      {
-        model: ParentCategory,
-        as: "parent_categories",
-        attributes: ["id", "title"],
-        through: {
-          attributes: [],
-        },
-        required: false,
-
-        include: [
-          {
-            model: GrandCategory,
-            as: "grand_categories",
-            attributes: ["id", "title"],
-            through: {
-              attributes: [],
-            },
-            required: false,
-          },
-        ],
-      },
-    ],
-  });
 };
 
 const buildManualPricingSnapshot = async ({
@@ -1851,17 +1810,17 @@ const addToCart = async (body, files) => {
 
     /*
      * =========================================================
-     * EXISTING SUPPLIER CART LOGIC
+     * SUPPLIER CART LOGIC
      * =========================================================
-     *
-     * DO NOT CHANGE THIS SECTION.
      *
      * SS
      * SANMAR
      * OTTOCAP
      * SAGE
      *
-     * All existing supplier behavior remains exactly the same.
+     * Each line's print options are checked against the product's
+     * categories and the price tables before it's priced, and
+     * refused (400) when it can't be sold (audit F04, F05).
      */
 
     if (
@@ -1958,8 +1917,10 @@ const addToCart = async (body, files) => {
           );
         }
 
+        // The print method, locations, colours and DTG style as the price tables write them;
+        // refused with 400 when the product doesn't offer them or they aren't on the price list.
         const customizationForRow = {
-          ...customizationItem,
+          ...checkPrintOptions(customizationItem, categories),
           size: sizeItem,
           graphics,
         };
@@ -2611,17 +2572,26 @@ const repriceManualCartItem = async (cart, variant, customization, quantity) => 
   return toCartItemResponse(cart, true);
 };
 
-// Pricing snapshot of a supplier cart line at a new quantity. Lines without a
-// customization have none.
+// Pricing snapshot of a supplier cart line at a new quantity, and its customization_config with
+// the print options written as they're priced. Lines without a customization have no snapshot.
+// A line whose print options today's rules refuse (added before them, or the product has moved to
+// other categories since: audit F04, F05) can't be repriced: the customer removes it and adds it
+// again.
 const buildSupplierPricingSnapshot = async (variant, customization, quantity) => {
   const categories = await getProductCategories(variant.product_id);
 
   if (!customization) {
-    return null;
+    return { pricing_snapshot: null, customization_config: customization };
+  }
+
+  const { customization: checked, problem } = readPrintOptions(customization, categories);
+
+  if (problem) {
+    throw new ApiError(httpStatus.BAD_REQUEST, CART_LINE_OPTIONS_GONE);
   }
 
   if (variant.supplier === "SAGE") {
-    return buildSagePricingSnapshot({
+    const pricing_snapshot = await buildSagePricingSnapshot({
       variant,
 
       product: {
@@ -2631,17 +2601,23 @@ const buildSupplierPricingSnapshot = async (variant, customization, quantity) =>
 
       quantity,
 
-      customization,
+      customization: checked,
     });
+
+    return { pricing_snapshot, customization_config: checked };
   }
 
-  return buildPricingSnapshot({
+  const pricing_snapshot = await buildPricingSnapshot({
     variant,
 
     quantity,
 
-    customization,
+    customization: checked,
+
+    categories,
   });
+
+  return { pricing_snapshot, customization_config: checked };
 };
 
 const incrementCart = async (body) => {
@@ -2722,7 +2698,7 @@ const incrementCart = async (body) => {
       customization.size.quantity = newQty;
     }
 
-    const pricing_snapshot = await buildSupplierPricingSnapshot(
+    const { pricing_snapshot, customization_config } = await buildSupplierPricingSnapshot(
       variant,
       customization,
       newQty,
@@ -2731,7 +2707,7 @@ const incrementCart = async (body) => {
     await cart.update({
       quantity: newQty,
 
-      customization_config: customization,
+      customization_config,
 
       pricing_snapshot,
     });
@@ -2809,7 +2785,7 @@ const decrementCart = async (body) => {
       customization.size.quantity = newQty;
     }
 
-    const pricing_snapshot = await buildSupplierPricingSnapshot(
+    const { pricing_snapshot, customization_config } = await buildSupplierPricingSnapshot(
       variant,
       customization,
       newQty,
@@ -2818,7 +2794,7 @@ const decrementCart = async (body) => {
     await cart.update({
       quantity: newQty,
 
-      customization_config: customization,
+      customization_config,
 
       pricing_snapshot,
     });
@@ -2909,16 +2885,18 @@ const updateCartQuantity = async (body) => {
       return await repriceManualCartItem(cart, variant, customization, finalQty);
     }
 
-    const pricing_snapshot = await buildSupplierPricingSnapshot(
+    const { pricing_snapshot, customization_config } = await buildSupplierPricingSnapshot(
       variant,
       customization,
       finalQty,
     );
 
-    // Unlike increment/decrement, this leaves customization_config (and its
-    // size.quantity) as stored.
+    // Unlike increment/decrement, this leaves the saved size.quantity as it was. The print
+    // options are saved as they're priced.
     await cart.update({
       quantity: finalQty,
+
+      customization_config,
 
       pricing_snapshot,
     });

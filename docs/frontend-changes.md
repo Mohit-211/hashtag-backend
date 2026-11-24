@@ -6,7 +6,8 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
-| [2026-11-24: an order keeps the address it was priced for](#2026-11-24-ship-to) | not deployed yet | None required |
+| [2026-11-24: an order keeps the address it was priced for](#2026-11-24-ship-to) | `6c6ec41`, live since 24 Nov | None required |
+| [2026-11-24: print options must be on the price list; one drinkware rule](#2026-11-24-print-options) | `<commit>`, not deployed yet | None required. Recommended: decide drinkware from `is_drinkware` |
 | [2026-11-20: unpaid orders and one payment at a time](#2026-11-20-paying-order) | `f09c0b4`, live since 20 Nov | None required: the shop already shows the API's messages. Optional: see the note on 409 from `POST order` |
 | [2026-11-20: graphics are PNG, JPG or SVG only](#2026-11-20-graphic-types) | `35ba84e`, live since 20 Nov | Done in hashtag-next, not deployed yet: both graphic pickers limited to PNG, JPG, JPEG and SVG |
 | [2026-11-13: payments go-live](#2026-11-13-go-live) | `2634b76`, live since 16 Nov | Done in hashtag-next `744ba16` and `5d0fcff`, not deployed yet |
@@ -33,7 +34,7 @@ The client answered the questions in `client-questions.md` on 26 October and the
 |---|---|---|---|
 | A11 | 11, 18 | SAGE's markup is 49.25%, applied by the backend; shoppers mustn't see cost | Switch SAGE pricing to `price_tiers` ([2026-10-16](#2026-10-16)) and drop `SAGE_PRICE_MARKUP`. |
 | A12 | 12 | No SAGE product has a setup charge | Remove the "Setup fee" line in `Sagequantitypricing.tsx`; the backend never sends one. |
-| A5, A6 | 5, 6 | Hoodie Full Front and Full Back embroidery, and Full Front on T-shirts and polos, are "contact us", as before | Hoodies: show "Contact us" for Full Front and Full Back embroidery instead of adding them at $0, as for the oversized back. T-shirts and polos: keep Full Front off. The backend will refuse the hoodie ones once choices outside the price list are refused (Q10). |
+| A5, A6 | 5, 6 | Hoodie Full Front and Full Back embroidery, and Full Front on T-shirts and polos, are "contact us", as before | Hoodies: show "Contact us" for Full Front and Full Back embroidery instead of adding them at $0, as for the oversized back. T-shirts and polos: keep Full Front off. The backend refuses Full Front, Full Back and oversized-back embroidery since [2026-11-24](#2026-11-24-print-options). |
 | A22 | 24 | Size and colour must always be chosen; no "required" flag in the admin | On pre-made products, make the customer choose size and colour before adding to the cart: no "(optional)" on them and no preselected first variant. The API already needs a variant on every line, so it needs no change. |
 | A23 | 25 | The customer chooses the add-on quantity | Let the customer set it; today it copies the product quantity. The API already takes any quantity. |
 | A44 | 49 | Never show shoppers a stock number | Remove "Only N left in stock" (`ProductDetail.tsx`) and "(stock: N)" in the size list (`Productcustomizationpage.tsx`). The quantity can still stop at the stock without showing the number. |
@@ -76,11 +77,84 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 ---
 
 <a id="2026-11-24-ship-to"></a>
-## 2026-11-24: an order keeps the address it was priced for (not deployed yet)
+## 2026-11-24: an order keeps the address it was priced for (live since 24 Nov)
 
 Audit point F02. **What `GET order/:id` returns:** `address` is now the order's own copy of the address its shipping was priced for, which is also where its label goes. Editing or deleting that saved address on the Account page no longer changes it. The fields are the same as before (`name`, `phone`, `address_line1`, `city`, `state`, `postal_code`, `country`), plus `address_line2`, which is `""` or `null` when there's none. It's still `null` for an order without an address. Nothing else changes in `GET order/:id` or in `GET order` (the list).
 
 **What the shop must do:** nothing.
+
+<a id="2026-11-24-print-options"></a>
+## 2026-11-24: print options must be on the price list; one drinkware rule (not deployed yet)
+
+Audit points F05 and F04. `POST product/cart` charged $0 for any decoration it had no price for: a print method it didn't know (even `embroidery` in small letters), 7 screen-print colours, DTG without a print area, embroidery on a location with no price (hoodie Full Front and Full Back, the oversized back), or a decorated line with no location. The garment was charged, the printing was free, the $35 graphic fee was skipped, and production still got the instructions. Drinkware's $8 for the second location was charged only on SAGE products under a parent category named exactly "Drinkware", and only for Color Imprint and Laser Engraving.
+
+The shop never sends any of these, so nothing changes for it.
+
+**Which print methods a product takes.** The API decides from the product's categories, the way the shop does:
+- Apparel (a grand category "Apparel & Uniforms"): `EMBROIDERY`, `DTF`, `SCREEN_PRINT`, `DTG`, on every supplier.
+- Drinkware (a parent category whose title contains "drinkware", on every supplier): `COLOR_IMPRINT`, `LASER_ENGRAVING`.
+- Every other product (pre-made and other promo products): none.
+- A product filed under both takes the methods of each, whatever order its categories come in.
+- A line with no `print_method` and no `locations` is accepted on every product, as before: plain and pre-made adds, promo products with a logo (`graphic_id`), wishlist to cart.
+
+**Refused now, with 400** (the API's `message`):
+
+| The request has | Message |
+|---|---|
+| A print method the product doesn't take, or an unknown one such as `PUFF` | Apparel: "This print method isn't available for this product. Please choose embroidery, DTF, screen print or DTG."<br>Drinkware: "This print method isn't available for this product. Please choose Color Imprint or Laser Engraving."<br>A product that takes both: "This print method isn't available for this product. Please choose another one."<br>Other products: "Print methods can't be chosen for this product. Please add it without one." |
+| A print method with no location, or a location that isn't `{ "location": "…" }` | "Please choose at least one print location." |
+| Locations without a print method | "Please choose a print method for your print locations." |
+| Screen print without `colors`, or `colors` that isn't a whole number from 1 to 6 | "Please choose between 1 and 6 colors for screen printing." |
+| DTG without `dtg_style`, or one other than `FRONT_REGULAR`, `OVERSIZED`, `FRONT_AND_BACK_REGULAR`, `FRONT_AND_BACK_OVERSIZED` | "Please choose a print area for DTG printing." |
+| Embroidery on `FULL_FRONT`, `FULL_BACK` or `OVERSIZED_BACK` | "Full Front embroidery is by quote only. Please remove it, choose another print method, or contact us for a quote." (Full Back and Oversized Back the same) |
+| Embroidery on any other location without an embroidery price | "This print location isn't available for embroidery. Please choose another one." |
+| Drinkware on a location other than `FRONT` or `BACK` (`"FRONT AND BACK"` included) | "This product can only be printed on the front, the back, or both. Please choose one of those." |
+
+"This print option isn't available. Please choose another one." is the last line of defence, for a price the tables don't have; the checks above come first.
+
+As with the other refusals there (stock, minimums), the elements of the same request before the refused one have already been added, and the customer's unpaid orders have already been removed ([2026-11-20](#2026-11-20-paying-order)). Making a request all or nothing is a separate audit point (F07).
+
+**Accepted and priced now** (they were $0):
+- A print method or DTG print area in small letters (`"embroidery"`, `"front_regular"`). The line is saved in capitals.
+- `SLEEVE_LEFT` and `SLEEVE_RIGHT` under embroidery, at the sleeve price. They're saved as sent.
+- Embroidery on a location written with a space, such as `"left chest"`. It's saved as `LEFT_CHEST`.
+
+**Saved in the price tables' spelling, at the same price as before:** location codes such as `"left-chest"` (saved as `LEFT_CHEST`), and `colors` sent as text (`"3"`, saved as `3`). The saved line keeps `colors` only for screen print and `dtg_style` only for DTG.
+
+**Still accepted until the client answers about the sleeves (audit F08):** `SLEEVE` twice; Full Front under DTF, screen print and DTG; both back sizes together, and a location twice; hat locations on T-shirts; any location code under DTF, screen print and DTG, `OVERSIZED_BACK` included (only embroidery on it is refused).
+
+**Drinkware:**
+- The second location (front and back) adds $8 a piece on every supplier, not only SAGE, and under any parent category whose title contains "drinkware".
+- SAGE lines keep the `pricing_table` row they have today: `type: "SAGE_DRINKWARE"`, with no `price_per_item`, so the cart's breakdown still shows "+$0.00" on it.
+- A drinkware product from another supplier gets a row with `type: "DRINKWARE"` and `price_per_item` (8 with front and back, 0 with one location), so the cart shows "Drinkware +$8.00".
+- On both, the $8 is in `customization_price.total_customization_price` and `final_price_per_item`.
+
+**Clothing on SAGE.** A SAGE product filed under "Apparel & Uniforms" takes the four clothing methods at the same table prices, added to the SAGE price (none is filed there today). The $35 graphic fee still skips SAGE lines.
+
+**New snapshot key** `print_options_checked: true` on every line priced from now on (new lines and quantity changes). The shop can ignore it.
+
+**Lines already in a cart** show as before. A line whose print options are refused now was made with an edited request before this release, or is on a product that has since moved to other categories. For such a line:
+- a quantity change (+, −, typed) answers 400 "This item's print options aren't available any more. Please remove it from your cart and add it again."
+- `POST order` answers 400 "The print options on {product} aren't available any more. Please remove it from your cart and add it again." With several such lines it names them all ("A and B", "A, B and C") and says "them". It answers the same for a "request a quote" line, and for a line priced before this release whose decoration was saved for less than it costs now. Nothing is created or charged, and checkout shows the message.
+
+**New fields `is_drinkware` and `drinkware_second_location_price`** on the product: in `data` for `GET product/:id` and `GET product/guest/:id`, and in `data.product` for `GET product/variant/:id`. `is_drinkware` is true when one of the product's parent categories has "drinkware" in its title, whatever the supplier: the rule the cart charges the $8 by. `drinkware_second_location_price` is that fee a piece (8), or `null` when the product isn't drinkware.
+
+**What the shop must do:** nothing required. Recommended, so the page and the cart decide drinkware the same way: in `Productcustomizationpage.tsx` (`isDrinkware`, line 824 at `11c00f8`), use the flag instead of matching the first parent category's title, and show the API's fee instead of `DRINKWARE_SECOND_LOCATION_FEE` (`pricing.ts`):
+
+```ts
+const isDrinkware = isPromo && (product?.product?.is_drinkware ?? parentCategory.includes("drinkware"));
+```
+
+Add `is_drinkware?: boolean` and `drinkware_second_location_price?: number | null` to the page's product type, and keep the fallback until this release is live. With the flag, a product whose drinkware category isn't its first one also gets the drinkware options: today that's the Campfire Kit (product 105868).
+
+Tested on 24 Nov on a throwaway MariaDB 10.11 built from production's schema, with real products from the public catalog, the code before this change (`91017fa`) and after it side by side, and Square, PayPal, ShipStation and email faked. 156 cases and 632 checks passed, twice:
+- Every request the shop sends gave the same answer, prices and saved lines before and after: clothing with each print method, drinkware, promo and pre-made products, wishlist to cart, +, − and typed quantities, and checkout. That includes 44 more real products, one or two per parent category and supplier. The only addition is `print_options_checked`.
+- Every request in the table above was refused with its message. The code before this change accepted each one, most of them at $0.
+- Lines already in carts: refused ones get the messages above, and checkout stops before shipping is priced; the others order as before.
+
+The shop's own request-building code at both `7590672` and `11c00f8` was also run for every decoration the customization page can produce, at each price-tier boundary from 1 to 1,000 pieces: 47,410 priced combinations. Each was accepted at the price the page shows, and clothing and SAGE drinkware at the same price as before.
+
+The shop's rule and the API's were also compared over all 1,290 listed products, in every order their categories can come back in: the API never refuses a print method the shop offers. They differ on two products, and on both the shop offers no printing: the 50L Utility Duffel Bag (381, also under Workwear) and the Campfire Kit (105868, also under Drinkware).
 
 ---
 
@@ -169,7 +243,7 @@ The client answered: once per order. An order pays the fee once if any product i
 - `POST order` stores it in `handling_amount`.
 
 ### Decoration in `POST product/cart`
-- Each `customization` element carries its own `print_method`, `locations`, `colors` (screen print, 1–6) and `dtg_style` (`FRONT_REGULAR`, `OVERSIZED`, `FRONT_AND_BACK_REGULAR`, `FRONT_AND_BACK_OVERSIZED`). Colours set up with different decorations go in separate elements.
+- Each `customization` element carries its own `print_method`, `locations`, `colors` (screen print, 1–6) and `dtg_style` (`FRONT_REGULAR`, `OVERSIZED`, `FRONT_AND_BACK_REGULAR`, `FRONT_AND_BACK_OVERSIZED`). Colours set up with different decorations go in separate elements. Checked since [2026-11-24](#2026-11-24-print-options).
 - DTG is charged per location: style price × locations × quantity (client's answer to question 8).
 - Before this, the shop never sent the DTG style (DTG was charged $0) or the colour count (screen print was charged as 1 colour), and sent the last-chosen method for every colour.
 

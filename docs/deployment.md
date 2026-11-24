@@ -151,6 +151,71 @@ Customers' graphics can be up to 100 MB each. They're stored in `graphics` in th
 - **Apache:** `node.hashtagbillionaire.com.conf` passes everything to the app with `ProxyPass /`, `/graphics` included, and sets no `LimitRequestBody`.
 - **Cloudflare:** a 95 MB request reaches the app and a 105 MB one is refused with `413`. The limit depends on the plan, so check again if the plan changes.
 
+## Print options checked (audit F04, F05)
+
+From this release the cart and checkout refuse print options that aren't on the price list ([frontend-changes.md](frontend-changes.md#2026-11-24-print-options)). It has no migration, so a push deploys it as usual. Lines already in carts stay, but one the new rules refuse can't be ordered: checkout answers 400 and names it. **Before pushing**, run these two read-only queries on the production database:
+
+1. **Open cart lines.** Every row must say `ok`. A row that says `CHECK BY HAND` passes only if it's exactly what checkout accepts: no print method and no locations; or a print method of the product's family (Apparel & Uniforms: embroidery, DTF, screen print, DTG; a parent category containing "Drinkware": Color Imprint, Laser Engraving), with priced locations (embroidery: not Full Front, Full Back or Oversized Back; drinkware: only Front and Back), screen print with 1 to 6 colours, DTG with one of the four print areas, `inquiry_only` not true, and `decoration_per_piece` at least the table price at the line's quantity. On 24 Nov the 7 open lines were 6 embroidery lines on Left or Right Chest and 1 without a print method, which should all say `ok`.
+
+   ```sql
+   SELECT c.id AS cart_id, c.user_id, c.product_id, p.supplier, p.name, c.quantity,
+          JSON_VALUE(c.customization_config, '$.print_method') AS print_method,
+          JSON_EXTRACT(c.customization_config, '$.locations') AS locations,
+          JSON_EXTRACT(c.customization_config, '$.colors') AS colors,
+          JSON_VALUE(c.customization_config, '$.dtg_style') AS dtg_style,
+          JSON_VALUE(c.pricing_snapshot, '$.customization_price.total_customization_price') AS decoration_per_piece,
+          JSON_VALUE(c.pricing_snapshot, '$.inquiry_only') AS inquiry_only,
+          GROUP_CONCAT(DISTINCT pc.title ORDER BY pc.title SEPARATOR ', ') AS parent_categories,
+          GROUP_CONCAT(DISTINCT gc.title ORDER BY gc.title SEPARATOR ', ') AS grand_categories,
+          CASE
+            WHEN COALESCE(TRIM(JSON_VALUE(c.customization_config, '$.print_method')), '') = ''
+                 AND COALESCE(JSON_LENGTH(c.customization_config, '$.locations'), 0) = 0
+              THEN 'ok: no print options'
+            WHEN UPPER(TRIM(JSON_VALUE(c.customization_config, '$.print_method'))) = 'EMBROIDERY'
+                 AND JSON_LENGTH(c.customization_config, '$.locations') = 1
+                 AND UPPER(TRIM(JSON_VALUE(c.customization_config, '$.locations[0].location'))) IN ('LEFT_CHEST', 'RIGHT_CHEST')
+                 AND SUM(LOWER(TRIM(gc.title)) = 'apparel & uniforms') > 0
+                 AND COALESCE(JSON_VALUE(c.pricing_snapshot, '$.inquiry_only'), 'false') <> 'true'
+                 AND CAST(JSON_VALUE(c.pricing_snapshot, '$.customization_price.total_customization_price') AS DECIMAL(10,2)) + 0.005 >=
+                     CASE WHEN c.quantity <= 11 THEN 12 WHEN c.quantity <= 23 THEN 11 WHEN c.quantity <= 35 THEN 10
+                          WHEN c.quantity <= 71 THEN 9 WHEN c.quantity <= 95 THEN 8 WHEN c.quantity <= 143 THEN 7 ELSE 6 END
+              THEN 'ok: chest embroidery at the table price'
+            ELSE 'CHECK BY HAND'
+          END AS verdict
+   FROM cart c
+   JOIN products p ON p.id = c.product_id
+   LEFT JOIN product_category_mapping pcm ON pcm.product_id = c.product_id AND pcm.deleted_at IS NULL
+   LEFT JOIN product_categories cat ON cat.id = pcm.product_category_id AND cat.deleted_at IS NULL
+   LEFT JOIN parent_category_mapping pam ON pam.product_category_id = cat.id AND pam.deleted_at IS NULL
+   LEFT JOIN parent_categories pc ON pc.id = pam.parent_category_id AND pc.deleted_at IS NULL
+   LEFT JOIN grand_category_mapping gm ON gm.parent_category_id = pc.id AND gm.deleted_at IS NULL
+   LEFT JOIN grand_categories gc ON gc.id = gm.grand_category_id AND gc.deleted_at IS NULL
+   WHERE c.is_active = 1 AND c.deleted_at IS NULL
+     AND COALESCE(JSON_VALUE(c.customization_config, '$.type'), '') <> 'MANUAL'
+   GROUP BY c.id
+   ORDER BY c.id;
+   ```
+
+2. **Unpaid orders with free printing.** Orders made before this release are paid at their own totals; this release doesn't change them. This lists the ones still waiting for payment that have a decorated item whose printing cost $0, or that is "request a quote". It should be empty. If it isn't, the team decides whether to cancel them. A drinkware item with one location is rightly $0: only a second location costs extra.
+
+   ```sql
+   SELECT o.id, o.order_number, o.user_id, o.status, o.total_amount, i.id AS item_id, i.product_id,
+          JSON_VALUE(i.customization_config, '$.print_method') AS print_method,
+          JSON_EXTRACT(i.customization_config, '$.locations') AS locations,
+          JSON_VALUE(i.pricing_snapshot, '$.customization_price.total_customization_price') AS decoration_per_piece,
+          JSON_VALUE(i.pricing_snapshot, '$.inquiry_only') AS inquiry_only
+   FROM orders o
+   JOIN order_items i ON i.order_id = o.id AND i.deleted_at IS NULL
+   WHERE o.deleted_at IS NULL
+     AND o.payment_status IN ('PENDING', 'REJECTED') AND o.status IN ('PENDING', 'PENDING_PAYMENT', 'FAILED')
+     AND COALESCE(TRIM(JSON_VALUE(i.customization_config, '$.print_method')), '') <> ''
+     AND (COALESCE(CAST(JSON_VALUE(i.pricing_snapshot, '$.customization_price.total_customization_price') AS DECIMAL(10,2)), 0) = 0
+          OR JSON_VALUE(i.pricing_snapshot, '$.inquiry_only') = 'true')
+   ORDER BY o.id, i.id;
+   ```
+
+If the first query shows a line that fails, stop and ask before pushing: that customer would be stopped at checkout with "The print options on … aren't available any more. Please remove it from your cart and add it again."
+
 ## Undoing a release
 
 `git revert <commit>` and push. The server only moves forward along `main`: don't force-push it, the deploy refuses a commit that doesn't build on the one running.

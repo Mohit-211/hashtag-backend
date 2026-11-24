@@ -2,11 +2,13 @@ const { calculatePricing } = require("../../config/pricing");
 const httpStatus = require("http-status");
 const ApiError = require("../ApiError");
 const { netPriceTiers } = require("./pricing.util");
+const { APPAREL_PRINT_METHODS, DRINKWARE_PRINT_METHODS, printMethodsFor } = require("../productFamily");
 
 // The tumblers' $35 handling charge used to be added to each SAGE cart line here. It is now an
 // order fee, charged once per order and set on the Settings page (handlingFee.service.js).
 
-const SAGE_DRINKWARE_SECOND_LOCATION_PRICE = 8;
+// Drinkware's second print location (front and back), a piece, on every supplier (audit F04).
+const DRINKWARE_SECOND_LOCATION_PRICE = 8;
 
 /*
 |--------------------------------------------------------------------------
@@ -93,10 +95,6 @@ const EMBROIDERY_PRICING = {
     "72-95": 15,
     "96-143": 14,
     "144+": 12,
-  },
-
-  OVERSIZED_BACK: {
-    inquiry_only: true,
   },
 };
 
@@ -216,16 +214,61 @@ const DTG_PRICING = {
 
 /*
 |--------------------------------------------------------------------------
+| WHAT CAN BE SOLD (audit F04, F05)
+|--------------------------------------------------------------------------
+*/
+
+const DRINKWARE_LOCATIONS = ["FRONT", "BACK"];
+
+// Embroidery prices each sleeve at the sleeve rate. The shop sends both as SLEEVE today; keeping
+// them apart waits for the client (audit F08, question A10).
+const EMBROIDERY_PRICE_ROW = { SLEEVE_LEFT: "SLEEVE", SLEEVE_RIGHT: "SLEEVE" };
+
+// Embroidery quoted by the team, never added to a cart (client decisions Q5 and Q6, audit DEC-04
+// and DEC-06). Under DTF, screen print and DTG these are priced like any other location until each
+// garment's own locations are decided (audit F08).
+const EMBROIDERY_QUOTE_ONLY = { FULL_FRONT: "Full Front", FULL_BACK: "Full Back", OVERSIZED_BACK: "Oversized Back" };
+
+// What the customer reads when a decoration can't be sold (400). The shop never sends these
+// requests; an old page or an edited request can.
+const MESSAGES = {
+  notAvailable: "This print option isn't available. Please choose another one.",
+  methodApparel: "This print method isn't available for this product. Please choose embroidery, DTF, screen print or DTG.",
+  methodDrinkware: "This print method isn't available for this product. Please choose Color Imprint or Laser Engraving.",
+  methodOther: "This print method isn't available for this product. Please choose another one.",
+  noPrinting: "Print methods can't be chosen for this product. Please add it without one.",
+  noLocation: "Please choose at least one print location.",
+  noMethod: "Please choose a print method for your print locations.",
+  screenPrintColors: "Please choose between 1 and 6 colors for screen printing.",
+  dtgStyle: "Please choose a print area for DTG printing.",
+  embroideryQuote: (label) =>
+    `${label} embroidery is by quote only. Please remove it, choose another print method, or contact us for a quote.`,
+  embroideryLocation: "This print location isn't available for embroidery. Please choose another one.",
+  drinkwareLocation: "This product can only be printed on the front, the back, or both. Please choose one of those.",
+};
+
+// Lines already in a cart that today's rules refuse (added before them, or the product has moved
+// to other categories since).
+const CART_LINE_OPTIONS_GONE =
+  "This item's print options aren't available any more. Please remove it from your cart and add it again.";
+
+// The same at checkout, naming the products: "A", "A and B", "A, B and C".
+const orderLinesOptionsGone = (names, lineCount) => {
+  const list = names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0];
+  const them = lineCount > 1 ? "them" : "it";
+  return `The print options on ${list} aren't available any more. Please remove ${them} from your cart and add ${them} again.`;
+};
+
+/*
+|--------------------------------------------------------------------------
 | HELPERS
 |--------------------------------------------------------------------------
 */
 
+// The print options are checked first (readPrintOptions), so a lookup never misses; if one ever
+// does, it's refused instead of priced at $0.
 const getEmbroideryPrice = (table, qty) => {
-  if (!table) return 0;
-
-  if (table.inquiry_only) {
-    return "INQUIRY_ONLY";
-  }
+  if (!table) throw new ApiError(httpStatus.BAD_REQUEST, MESSAGES.notAvailable);
 
   if (qty >= 1 && qty <= 11) return table["1-11"];
   if (qty >= 12 && qty <= 23) return table["12-23"];
@@ -251,7 +294,7 @@ const getDTFPrice = (qty) => {
 const getScreenPrintPrice = (colors, qty) => {
   const table = SCREEN_PRINT_PRICING[colors];
 
-  if (!table) return 0;
+  if (!table) throw new ApiError(httpStatus.BAD_REQUEST, MESSAGES.notAvailable);
 
   if (qty >= 12 && qty <= 23) {
     return table["12-23"];
@@ -283,13 +326,259 @@ const getScreenPrintPrice = (colors, qty) => {
 const getDTGPrice = (style, qty) => {
   const table = DTG_PRICING[style];
 
-  if (!table) return 0;
+  if (!table) throw new ApiError(httpStatus.BAD_REQUEST, MESSAGES.notAvailable);
 
   if (qty >= 1 && qty <= 23) return table["1-23"];
   if (qty >= 24 && qty <= 47) return table["24-47"];
   if (qty >= 48 && qty <= 99) return table["48-99"];
 
   return table["100+"];
+};
+
+// "embroidery " → "EMBROIDERY"; "" for none. A value that isn't text is kept as it is, so it's refused.
+const printMethodOf = (customization) => {
+  const method = customization?.print_method;
+  if (method === undefined || method === null) return "";
+  return typeof method === "string" ? method.trim().toUpperCase() : method;
+};
+
+// "left-chest" → "LEFT_CHEST"; "" when it isn't text.
+const locationCodeOf = (value) =>
+  typeof value === "string" ? value.trim().toUpperCase().replace(/[\s-]+/g, "_") : "";
+
+const sentLocations = (locations) =>
+  Array.isArray(locations) ? locations.length > 0 : locations !== undefined && locations !== null && locations !== "";
+
+const methodProblem = (allowed) => {
+  const apparel = allowed.some((method) => APPAREL_PRINT_METHODS.includes(method));
+  const drinkware = allowed.some((method) => DRINKWARE_PRINT_METHODS.includes(method));
+  if (apparel && drinkware) return MESSAGES.methodOther;
+  if (apparel) return MESSAGES.methodApparel;
+  if (drinkware) return MESSAGES.methodDrinkware;
+  return MESSAGES.noPrinting;
+};
+
+// A cart line's decoration read the way it's priced (audit F04, F05): { customization }, a copy with
+// print_method, the location codes, colors and dtg_style written as the price tables write them
+// (colors only for screen print, dtg_style only for DTG), or { problem }: why it can't be sold. A
+// line without a print method or locations is undecorated and taken as it is.
+const readPrintOptions = (customization, categories) => {
+  if (!customization || typeof customization !== "object" || Array.isArray(customization)) {
+    return { customization };
+  }
+
+  const method = printMethodOf(customization);
+
+  if (method === "") {
+    return sentLocations(customization.locations)
+      ? { problem: MESSAGES.noMethod }
+      : { customization: { ...customization } };
+  }
+
+  const allowed = printMethodsFor(categories);
+  if (!allowed.includes(method)) return { problem: methodProblem(allowed) };
+
+  const entries = Array.isArray(customization.locations) ? customization.locations : [];
+  const codes = entries.map((entry) =>
+    entry && typeof entry === "object" ? locationCodeOf(entry.location) : "",
+  );
+  if (!codes.length || codes.includes("")) return { problem: MESSAGES.noLocation };
+
+  const checked = {
+    ...customization,
+    print_method: method,
+    locations: entries.map((entry, index) => ({ ...entry, location: codes[index] })),
+  };
+  if (method !== "SCREEN_PRINT") delete checked.colors;
+  if (method !== "DTG") delete checked.dtg_style;
+
+  if (DRINKWARE_PRINT_METHODS.includes(method)) {
+    return codes.every((code) => DRINKWARE_LOCATIONS.includes(code))
+      ? { customization: checked }
+      : { problem: MESSAGES.drinkwareLocation };
+  }
+
+  if (method === "EMBROIDERY") {
+    for (const code of codes) {
+      if (Object.hasOwn(EMBROIDERY_PRICING, EMBROIDERY_PRICE_ROW[code] || code)) continue;
+      return {
+        problem: EMBROIDERY_QUOTE_ONLY[code]
+          ? MESSAGES.embroideryQuote(EMBROIDERY_QUOTE_ONLY[code])
+          : MESSAGES.embroideryLocation,
+      };
+    }
+  }
+
+  if (method === "SCREEN_PRINT") {
+    const sent = customization.colors;
+    const colors = typeof sent === "string" && sent.trim() !== "" ? Number(sent) : sent;
+    if (typeof colors !== "number" || !Number.isInteger(colors) || !Object.hasOwn(SCREEN_PRINT_PRICING, colors)) {
+      return { problem: MESSAGES.screenPrintColors };
+    }
+    checked.colors = colors;
+  }
+
+  if (method === "DTG") {
+    const style = typeof customization.dtg_style === "string" ? customization.dtg_style.trim().toUpperCase() : "";
+    if (!Object.hasOwn(DTG_PRICING, style)) return { problem: MESSAGES.dtgStyle };
+    checked.dtg_style = style;
+  }
+
+  return { customization: checked };
+};
+
+// The same, refused with 400. Returns the checked copy (or the input when it isn't an object).
+const checkPrintOptions = (customization, categories) => {
+  const { customization: checked, problem } = readPrintOptions(customization, categories);
+  if (problem) throw new ApiError(httpStatus.BAD_REQUEST, problem);
+  return checked;
+};
+
+// A checked line's decoration at this quantity: its price a piece and its pricing_table rows (the
+// rows the cart, the shop and the admin panel already read).
+const decorationOf = (checked, quantity, supplier) => {
+  const method = printMethodOf(checked);
+
+  if (!method) {
+    return { perPiece: 0, rows: [] };
+  }
+
+  const locations = checked.locations.map((entry) => entry.location);
+
+  if (method === "EMBROIDERY") {
+    const rows = locations.map((location) => {
+      const price = getEmbroideryPrice(EMBROIDERY_PRICING[EMBROIDERY_PRICE_ROW[location] || location], quantity);
+
+      return {
+        type: "EMBROIDERY",
+        location,
+
+        quantity,
+
+        price_per_item: price,
+
+        total: price * quantity,
+      };
+    });
+
+    return { perPiece: rows.reduce((sum, row) => sum + row.price_per_item, 0), rows };
+  }
+
+  if (method === "DTF") {
+    const price = getDTFPrice(quantity);
+
+    return {
+      perPiece: price * locations.length,
+      rows: [
+        {
+          type: "DTF",
+
+          quantity,
+
+          locations: locations.length,
+
+          price_per_item: price,
+
+          total: price * locations.length * quantity,
+        },
+      ],
+    };
+  }
+
+  if (method === "SCREEN_PRINT") {
+    const price = getScreenPrintPrice(checked.colors, quantity);
+
+    if (price === "MINIMUM_12_REQUIRED") {
+      throw new ApiError(httpStatus.BAD_REQUEST, "Screen print requires minimum quantity of 12");
+    }
+
+    return {
+      perPiece: price * locations.length,
+      rows: [
+        {
+          type: "SCREEN_PRINT",
+
+          colors: checked.colors,
+
+          quantity,
+
+          price_per_item: price,
+
+          total: price * locations.length * quantity,
+        },
+      ],
+    };
+  }
+
+  if (method === "DTG") {
+    const price = getDTGPrice(checked.dtg_style, quantity);
+
+    return {
+      perPiece: price * locations.length,
+      rows: [
+        {
+          type: "DTG",
+
+          dtg_style: checked.dtg_style,
+
+          quantity,
+
+          price_per_item: price,
+
+          total: price * locations.length * quantity,
+        },
+      ],
+    };
+  }
+
+  if (!DRINKWARE_PRINT_METHODS.includes(method)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, MESSAGES.notAvailable);
+  }
+
+  // Color Imprint and Laser Engraving: the first location is free, a second one (front and back)
+  // adds $8 a piece (client decision Q14), on every supplier (audit F04). SAGE's row keeps the
+  // shape and name it has always had. The other suppliers' row also has price_per_item, which the
+  // cart's breakdown and the admin panel's checks read.
+  const fee = locations.length >= 2 ? DRINKWARE_SECOND_LOCATION_PRICE : 0;
+
+  return {
+    perPiece: fee,
+    rows: [
+      {
+        type: supplier === "SAGE" ? "SAGE_DRINKWARE" : "DRINKWARE",
+        print_method: method,
+        locations,
+        quantity,
+        ...(supplier === "SAGE" ? {} : { price_per_item: fee }),
+        second_location_price: fee,
+        total: fee * quantity,
+      },
+    ],
+  };
+};
+
+// Whether a line already in a cart can be ordered as it was saved (audit F04, F05): its print
+// options pass today's rules with the product's categories now, it isn't a "request a quote" line,
+// and, if it was priced before these rules (no print_options_checked), its decoration wasn't
+// saved for less than it costs now.
+const canOrderCartLine = ({ customization, snapshot, categories, quantity }) => {
+  if (snapshot?.inquiry_only) return false;
+
+  const { customization: checked, problem } = readPrintOptions(customization, categories);
+  if (problem) return false;
+  if (!printMethodOf(checked)) return true;
+  if (snapshot?.print_options_checked) return true;
+
+  let today;
+  try {
+    today = decorationOf(checked, Number(quantity)).perPiece;
+  } catch (error) {
+    if (error instanceof ApiError) return false;
+    throw error;
+  }
+
+  const saved = Number(snapshot?.customization_price?.total_customization_price) || 0;
+  return saved + 0.005 >= today;
 };
 
 /*
@@ -302,7 +591,11 @@ const buildPricingSnapshot = async ({
   variant,
   quantity = 1,
   customization = null,
+  categories = [],
 }) => {
+  // Refused (400) when the product doesn't offer the decoration or it isn't on the price list.
+  const checked = checkPrintOptions(customization, categories);
+
   /*
    |--------------------------------------------------------------------------
    | PRODUCT PRICE
@@ -330,144 +623,11 @@ const buildPricingSnapshot = async ({
    |--------------------------------------------------------------------------
    */
 
-  let customization_total = 0;
+  const decoration = decorationOf(checked, quantity, variant.supplier);
 
-  let inquiry_only = false;
+  const customization_total = decoration.perPiece;
 
-  const pricing_table = [];
-
-  if (customization) {
-    const printMethod = customization.print_method;
-
-    const locations = customization.locations || [];
-
-    /*
-     |--------------------------------------------------------------------------
-     | EMBROIDERY
-     |--------------------------------------------------------------------------
-     */
-
-    if (printMethod === "EMBROIDERY") {
-      for (const location of locations) {
-        const locationKey = location.location?.toUpperCase().replace(/-/g, "_");
-
-        const table = EMBROIDERY_PRICING[locationKey];
-
-        let locationPrice = getEmbroideryPrice(table, quantity);
-
-        if (locationPrice === "INQUIRY_ONLY") {
-          inquiry_only = true;
-
-          pricing_table.push({
-            type: "EMBROIDERY",
-            location: location.location,
-            message: "Request Quote",
-          });
-
-          continue;
-        }
-
-        customization_total += locationPrice;
-
-        pricing_table.push({
-          type: "EMBROIDERY",
-          location: location.location,
-
-          quantity,
-
-          price_per_item: locationPrice,
-
-          total: locationPrice * quantity,
-        });
-      }
-    }
-
-    /*
-     |--------------------------------------------------------------------------
-     | DTF
-     |--------------------------------------------------------------------------
-     */
-
-    if (printMethod === "DTF") {
-      const dtfPrice = getDTFPrice(quantity);
-
-      const locationCount = Math.max(locations.length, 1);
-
-      customization_total += dtfPrice * locationCount;
-
-      pricing_table.push({
-        type: "DTF",
-
-        quantity,
-
-        locations: locationCount,
-
-        price_per_item: dtfPrice,
-
-        total: dtfPrice * locationCount * quantity,
-      });
-    }
-
-    /*
-     |--------------------------------------------------------------------------
-     | SCREEN PRINT
-     |--------------------------------------------------------------------------
-     */
-
-    if (printMethod === "SCREEN_PRINT") {
-      const colors = Number(customization.colors) || 1;
-
-      const screenPrice = getScreenPrintPrice(colors, quantity);
-
-      if (screenPrice === "MINIMUM_12_REQUIRED") {
-        throw new ApiError(httpStatus.BAD_REQUEST, "Screen print requires minimum quantity of 12");
-      }
-
-      const locationCount = Math.max(locations.length, 1);
-
-      customization_total += screenPrice * locationCount;
-
-      pricing_table.push({
-        type: "SCREEN_PRINT",
-
-        colors,
-
-        quantity,
-
-        price_per_item: screenPrice,
-
-        total: screenPrice * locationCount * quantity,
-      });
-    }
-
-    /*
-     |--------------------------------------------------------------------------
-     | DTG
-     |--------------------------------------------------------------------------
-     */
-
-    if (printMethod === "DTG") {
-      const dtgStyle = customization.dtg_style;
-
-      const dtgPrice = getDTGPrice(dtgStyle, quantity);
-
-      const locationCount = Math.max(locations.length, 1);
-
-      customization_total += dtgPrice * locationCount;
-
-      pricing_table.push({
-        type: "DTG",
-
-        dtg_style: dtgStyle,
-
-        quantity,
-
-        price_per_item: dtgPrice,
-
-        total: dtgPrice * locationCount * quantity,
-      });
-    }
-  }
+  const pricing_table = decoration.rows;
 
   /*
    |--------------------------------------------------------------------------
@@ -484,7 +644,10 @@ const buildPricingSnapshot = async ({
 
     quantity,
 
-    inquiry_only,
+    inquiry_only: false,
+
+    // Priced with the print options checked (audit F04, F05); POST order reads it.
+    print_options_checked: true,
 
     /*
      |--------------------------------------------------------------------------
@@ -546,7 +709,7 @@ const lineMinimum = (variant, customization) => {
     if (tiers.length) minimum = Math.max(minimum, Math.min(...tiers.map((tier) => tier.qty)));
   }
 
-  if (customization?.print_method === "SCREEN_PRINT") {
+  if (printMethodOf(customization) === "SCREEN_PRINT") {
     minimum = Math.max(minimum, SCREEN_PRINT_MINIMUM);
   }
 
@@ -559,6 +722,9 @@ const buildSagePricingSnapshot = async ({
   quantity = 1,
   customization = null,
 }) => {
+  // Refused (400) when the product doesn't offer the decoration or it isn't on the price list.
+  const checked = checkPrintOptions(customization, product?.categories);
+
   const tiers = netPriceTiers(variant.meta);
 
   const qtyTiers = tiers.map((tier) => tier.qty);
@@ -615,61 +781,16 @@ const buildSagePricingSnapshot = async ({
     Number(productPricing.final_price) - Number(productPricing.base_price);
 
   /*
- |--------------------------------------------------------------------------
- | SAGE DRINKWARE PRINTING
- |--------------------------------------------------------------------------
- */
+   |--------------------------------------------------------------------------
+   | DECORATION: drinkware's second location, or clothing's print methods
+   | (the same tables as the other suppliers)
+   |--------------------------------------------------------------------------
+   */
 
-  let drinkwareCustomizationPrice = 0;
-  let drinkwarePricingTable = [];
-
-  const isDrinkware = (product?.categories || []).some((category) =>
-    (category.parent_categories || []).some(
-      (parentCategory) =>
-        String(parentCategory.title || "")
-          .trim()
-          .toLowerCase() === "drinkware",
-    ),
-  );
-
-  if (
-    isDrinkware &&
-    customization &&
-    ["LASER_ENGRAVING", "COLOR_IMPRINT"].includes(
-      String(customization.print_method || "")
-        .trim()
-        .toUpperCase(),
-    )
-  ) {
-    const locations = customization.locations || [];
-
-    const hasFrontAndBack = locations.some(
-      (location) =>
-        String(location.location || "")
-          .trim()
-          .toUpperCase() === "FRONT AND BACK",
-    );
-
-    const locationCount = hasFrontAndBack ? 2 : locations.length;
-
-    if (locationCount >= 1) {
-      drinkwareCustomizationPrice =
-        locationCount >= 2 ? SAGE_DRINKWARE_SECOND_LOCATION_PRICE : 0;
-
-      drinkwarePricingTable.push({
-        type: "SAGE_DRINKWARE",
-        print_method: customization.print_method,
-        locations: locations.map((location) => location.location),
-        quantity,
-        second_location_price:
-          locationCount >= 2 ? SAGE_DRINKWARE_SECOND_LOCATION_PRICE : 0,
-        total: drinkwareCustomizationPrice * quantity,
-      });
-    }
-  }
+  const decoration = decorationOf(checked, quantity, "SAGE");
 
   const final_price_per_item = Number(
-    (Number(productPricing.final_price) + drinkwareCustomizationPrice).toFixed(
+    (Number(productPricing.final_price) + decoration.perPiece).toFixed(
       2,
     ),
   );
@@ -682,6 +803,9 @@ const buildSagePricingSnapshot = async ({
     quantity,
 
     inquiry_only: false,
+
+    // Priced with the print options checked (audit F04, F05); POST order reads it.
+    print_options_checked: true,
 
     product_price: {
       actual_price: Number(productPricing.base_price),
@@ -698,7 +822,7 @@ const buildSagePricingSnapshot = async ({
      */
 
     customization_price: {
-      total_customization_price: drinkwareCustomizationPrice,
+      total_customization_price: decoration.perPiece,
 
       setup_fee: 0,
     },
@@ -736,9 +860,19 @@ const buildSagePricingSnapshot = async ({
         total: total_price,
       },
 
-      ...drinkwarePricingTable,
+      ...decoration.rows,
     ],
   };
 };
 
-module.exports = { buildPricingSnapshot, buildSagePricingSnapshot, lineMinimum };
+module.exports = {
+  buildPricingSnapshot,
+  buildSagePricingSnapshot,
+  lineMinimum,
+  readPrintOptions,
+  checkPrintOptions,
+  canOrderCartLine,
+  CART_LINE_OPTIONS_GONE,
+  orderLinesOptionsGone,
+  DRINKWARE_SECOND_LOCATION_PRICE,
+};

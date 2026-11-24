@@ -2,7 +2,7 @@
 
 Tracks every finding in [AUDIT_REPORT.md](AUDIT_REPORT.md) (audit of 8 October 2026, commit `268b548`) and what has been done about it. Update this file in the same commit as the fix.
 
-**Last updated:** 24 November 2026 (artwork approval live; N1 confirmed done, which completes H1). Earlier: 6 November (`FIXED_QUANTITY` customization pricing live in `a8cb702`; graphics and the $35 fee, and ShipStation after payment, live in `4b5729f`). `fix/bug-sweep` was merged into `main` on 16 October and is live in production.
+**Last updated:** 24 November 2026: print options checked against the price lists and the product's family, and drinkware's $8 on every supplier (audit F04 and F05, `<commit>`; C4 done); each order keeps its own shipping address (audit F02, `6c6ec41`); artwork approval live; N1 confirmed done, which completes H1. Earlier: 6 November 2026 (`FIXED_QUANTITY` customization pricing live in `a8cb702`; graphics and the $35 fee, and ShipStation after payment, live in `4b5729f`). `fix/bug-sweep` was merged into `main` on 16 October and is live in production.
 
 **Status:** ✅ done · ◐ partly done · ❌ open.
 
@@ -16,10 +16,10 @@ Tracks every finding in [AUDIT_REPORT.md](AUDIT_REPORT.md) (audit of 8 October 2
 
 | Severity | Findings | ✅ Done | ◐ Partly | ❌ Open |
 |---|---|---|---|---|
-| Critical | 11 | 5 | 4 | 2 |
+| Critical | 11 | 7 | 3 | 1 |
 | High | 26 | 17 | 7 | 2 |
 | Medium | 41 | 25 | 3 | 13 |
-| **Total** | **78** | **47** | **14** | **17** |
+| **Total** | **78** | **49** | **13** | **16** |
 
 Found after the audit: N1 to N4 (bottom of this file).
 
@@ -113,7 +113,7 @@ Changes the shop and the admin panel need: [docs/frontend-changes.md](docs/front
 | C1 | Admin API had no authentication | ◐ | `335d27b` | Three payment admin routes still public. Payments |
 | C2 | Admin account takeover | ✅ | `335d27b` | Confirm `JWT_SECRET` was changed at deploy. Server |
 | C3 | Payment webhooks not verified | ✅ | `4b5729f`, `2634b76` | The ShipStation webhook is signed (`4b5729f`); Square's and PayPal's read each payment back with our own keys (`2634b76`) |
-| C4 | Customer-controlled prices | ◐ | `335d27b`, `44141b0`, `4b5729f` | Decoration options not on the price list priced at $0 (the client wants them refused, Q10) |
+| C4 | Customer-controlled prices | ✅ | `335d27b`, `44141b0`, `4b5729f`, `<commit>` | Decoration options not on the price list are refused (400) instead of priced at $0 since `<commit>` (audit F05) |
 | C5 | Image proxy fetched any URL | ✅ | `335d27b` | |
 | C6 | Customer and business data exposed | ◐ | `335d27b`, `aba0065` | Supplier cost now hidden from shoppers. The payment admin list is still public (C1). Payments |
 | C7 | Unauthenticated destructive operations | ✅ | `335d27b`, `44141b0` | |
@@ -233,8 +233,8 @@ The client answered on 26 October and answered the follow-ups on 27 October; the
 |---|---|---|---|---|---|
 | 1, 2 | Tiers and minimums per product, artwork and print method: the same artwork and method at two locations count together (50 chests + 30 backs = the 80-piece tier). The fee is per graphic: see Q3 | Group cart lines by product, artwork and method; reprice the group when a line changes | ❌ | | |
 | 3 | Changed on 4 Nov: $35 once per new graphic on clothing, for every print type, when fewer than 12 pieces in the order carry it; a graphic stops being new after a paid order. No $20 | `user_graphics`, `POST graphics`, `GET graphics` and `graphic_id` on cart lines; recognised by file hash and by look (`utils/graphicPrint.js`); `applyGraphicFees` sets the fee across the cart ([details](docs/frontend-changes.md#2026-11-04)) | ◐ | `4b5729f` | The shop's release |
-| 4, 5, 10 | Price tables are correct and editable in the admin; choices outside them are refused; hoodie Full Front and Full Back embroidery stay "contact us" | Tables in the database, admin endpoints, public read endpoint; refuse what isn't in them (C4) | ❌ | | |
-| 6, 7, 9, 14, 15, 17, 22 | Keep as they are: Full Front off on T-shirts and polos, every method on every apparel product, one screen-print colour count for all locations, drinkware's $8 second location, the $35 handling charge, print products, grey mockups | None. Above 6 colours is refused with Q10 | ✅ | | |
+| 4, 5, 10 | Price tables are correct and editable in the admin; choices outside them are refused; hoodie Full Front and Full Back embroidery stay "contact us" | Choices outside the price lists are refused with 400 instead of priced at $0 (audit F05), hoodie Full Front and Full Back embroidery included ([details](docs/frontend-changes.md#2026-11-24-print-options)). Left: the tables in the database, admin endpoints, a public read endpoint | ◐ | `<commit>` | |
+| 6, 7, 9, 14, 15, 17, 22 | Keep as they are: Full Front off on T-shirts and polos, every method on every apparel product, one screen-print colour count for all locations, drinkware's $8 second location, the $35 handling charge, print products, grey mockups | Above 6 colours refused since `<commit>` (F05); drinkware's $8 second location charged on every supplier (audit F04) | ✅ | `<commit>` | |
 | 8 | "Not sure what you mean" | | ❌ | | Client: the reworded DTG question |
 | 11 | Markups: SAGE 49.25%; SanMar, S&S and OttoCap 66.67% | Set the rates (`migrations/2026-10-26_supplier_markups.sql`); 49.25% as the SAGE fallback | ✅ | `1693774` | |
 | 12 | No setup charge for SAGE products | None: none is imported or charged; the shop removes its unused line | ✅ | | |
@@ -276,7 +276,7 @@ Parked by the client, with no backend work for now: Q26 (pre-made products from 
 
 1. **ShipStation:** save the web app's key, run the setup and place one real order ([steps](#deploying-shipstation-after-payment-live)). The shop's side of [graphics](#deploying-graphics-and-the-35-fee-live) is the urgent one: customized clothing pays no $35 until it's out.
 2. **Payments phase:** C3, C10, C11, H7, H8 (refunds), M9, M22, M23, M38, the payment parts of C1/C6/H12, and the 4 lint errors.
-3. **Client decisions:** the decoration rework (Q1, Q4, Q5, Q9, Q10, Q19, Q20: price tables in the database, choices outside them refused, tiers per product, artwork and method, size and placement per location), which the shop has to change with; then fonts and the promo fallback minimum in the admin (Q23, Q16).
+3. **Client decisions:** the decoration rework (Q1, Q4, Q5, Q9, Q19, Q20: price tables in the database, tiers per product, artwork and method, size and placement per location), which the shop has to change with; then fonts and the promo fallback minimum in the admin (Q23, Q16). Choices outside the price lists are refused since `<commit>` (Q10).
 4. **Database changes (archive-first SQL):** H4 purge, M1, M2, M4, M5, M8, M14.
 5. **Remaining code:** H20 (products), H22 (the rest), H26, M31, M33, M37, M16.
 6. **Tooling:** tests and CI in the repo, `npm audit fix`, declare `moment-timezone`, set `engines` to Node 18.

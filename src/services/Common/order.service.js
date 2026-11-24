@@ -41,6 +41,52 @@ const { handlingFeeFor } = require("./handlingFee.service");
 const { orderActions, ordersWithPaymentInProgress } = require("./orderActions");
 const { retireUnpaidOrders } = require("./unpaidOrders.service");
 const { approvalSummaries } = require("./approvalStore");
+const { getProductCategories } = require("./productCategories");
+const { canOrderCartLine, orderLinesOptionsGone } = require("../../utils/pricing/buildPricingSnapshot");
+
+// Stops the order when a cart line can't be sold as it was saved (audit F04, F05): print options
+// the rules refuse now (added before them, or the product has moved to other categories since), a
+// "request a quote" line, or a decoration saved for less than it costs. The message names every
+// such product, so the customer knows which lines to remove.
+const refuseUnsellableLines = async (cartItems, transaction) => {
+  const categoriesOf = new Map();
+  const refused = [];
+
+  for (const item of cartItems) {
+    const customization = parseJson(item.customization_config);
+
+    // Pre-made (MANUAL) lines are priced from the product's own options.
+    if (customization?.type === "MANUAL") continue;
+
+    if (!categoriesOf.has(item.product_id)) {
+      categoriesOf.set(item.product_id, await getProductCategories(item.product_id, { transaction }));
+    }
+
+    const sellable = canOrderCartLine({
+      customization,
+      snapshot: parseJson(item.pricing_snapshot),
+      categories: categoriesOf.get(item.product_id),
+      quantity: item.quantity,
+    });
+
+    if (!sellable) refused.push(item);
+  }
+
+  if (!refused.length) return;
+
+  // A product removed since keeps its name here.
+  const products = await Product.findAll({
+    where: { id: [...new Set(refused.map((item) => item.product_id))] },
+    attributes: ["id", "name"],
+    paranoid: false,
+    transaction,
+  });
+  const nameOf = new Map(products.map((product) => [Number(product.id), decodeHtmlEntities(product.name)]));
+
+  const names = [...new Set(refused.map((item) => nameOf.get(Number(item.product_id)) || "an item in your cart"))];
+
+  throw new ApiError(httpStatus.BAD_REQUEST, orderLinesOptionsGone(names, refused.length));
+};
 
 const createOrder = async (body) => {
   // The new order replaces the customer's earlier unpaid ones (going back at checkout, or after a
@@ -118,6 +164,9 @@ const createOrder = async (body) => {
     if (!cartItems.length) {
       throw new ApiError(httpStatus.BAD_REQUEST, "Cart is empty");
     }
+
+    // A line that can't be sold as it was saved stops the order here, before shipping is priced.
+    await refuseUnsellableLines(cartItems, t);
 
     /*
      |--------------------------------------------------------------------------
