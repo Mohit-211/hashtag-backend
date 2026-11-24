@@ -3,8 +3,9 @@ const router = express.Router();
 const { productController, pricingController, productImportController } = require("../../../controllers");
 const { adminAuthMiddleware } = require("../../../middlewares");
 const { userAuthMiddleware } = require("../../../middlewares");
+const { listLimits } = require("../../../middlewares/listLimits");
 
-const { requireAdmin } = adminAuthMiddleware;
+const { requireAdmin, identifyAdmin } = adminAuthMiddleware;
 
 // admin: product management
 router.post("/create-product", requireAdmin, productController.createProduct);
@@ -21,9 +22,9 @@ router.post("/update", requireAdmin, productController.updateProduct);
 router.post("/delete", requireAdmin, productController.deleteProduct);
 
 // storefront
-router.get("/", productController.getAllProducts);
-router.get("/grand-category-products", productController.getAllProductsByGrandCategory);
-router.get("/product-by-brand", productController.getProductsByBrand);
+router.get("/", identifyAdmin, listLimits(), productController.getAllProducts);
+router.get("/grand-category-products", identifyAdmin, listLimits(), productController.getAllProductsByGrandCategory);
+router.get("/product-by-brand", identifyAdmin, listLimits(), productController.getProductsByBrand);
 router.get("/:id", [userAuthMiddleware.verifyAuthJWTToken], productController.getProductById);
 router.get("/variant/:id", productController.getVariantById);
 router.get("/guest/:id", productController.getGuestProductById);

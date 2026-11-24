@@ -16,8 +16,19 @@ const createSize = async (body) => {
   return await Size.create(pick(body, SIZE_FIELDS));
 };
 
-const getAllSizes = async () => {
-  return await Size.findAll({ where: { is_active: true } });
+// One page of active sizes, oldest first: `page` from 1, `limit` rows (200 by default; listLimits
+// keeps a shopper at 200 or fewer). It used to return every size at once.
+const DEFAULT_SIZE_PAGE = 200;
+
+const getAllSizes = async (query = {}) => {
+  const page = Math.max(Number.parseInt(query.page, 10) || 1, 1);
+  const limit = Math.max(Number.parseInt(query.limit, 10) || DEFAULT_SIZE_PAGE, 1);
+  return await Size.findAll({
+    where: { is_active: true },
+    order: [["id", "ASC"]],
+    limit,
+    offset: (page - 1) * limit,
+  });
 };
 
 const getSizeById = async (id) => {

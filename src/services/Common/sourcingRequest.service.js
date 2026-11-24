@@ -8,31 +8,13 @@ const {
   sendSourcingRequestStatusEmail,
 } = require("./email.service");
 const settings = require("../../config/settings");
+const { checkSourcingRequest } = require("../../helpers/publicForms");
 
 const createSourcingRequest = async (body, files) => {
   try {
-    const {
-      name,
-      email,
-      company,
-      requested_name,
-      details,
-    } = body;
-
-    if (!name?.trim()) {
-      throw new ApiError(httpStatus.BAD_REQUEST, "Name is required.");
-    }
-
-    if (!email?.trim()) {
-      throw new ApiError(httpStatus.BAD_REQUEST, "Email is required.");
-    }
-
-    if (!requested_name?.trim()) {
-      throw new ApiError(
-        httpStatus.BAD_REQUEST,
-        "Brand or product name is required.",
-      );
-    }
+    // Checked before anything is saved or emailed (F16); a refusal is a 400 naming the field, and
+    // upload.middleware deletes the request's images.
+    const fields = checkSourcingRequest(body);
 
     const images = files?.images || [];
 
@@ -45,11 +27,7 @@ const createSourcingRequest = async (body, files) => {
     }
 
     const request = await SourcingRequest.create({
-      name: name.trim(),
-      email: email.trim().toLowerCase(),
-      company: company?.trim() || null,
-      requested_name: requested_name.trim(),
-      details: details?.trim() || null,
+      ...fields,
       status: "PENDING",
     });
 

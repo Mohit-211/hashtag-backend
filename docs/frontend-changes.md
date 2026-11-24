@@ -8,6 +8,7 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 |---|---|---|
 | [2026-11-24: an order keeps the address it was priced for](#2026-11-24-ship-to) | `6c6ec41`, live since 24 Nov | None required |
 | [2026-11-24: print options must be on the price list; one drinkware rule](#2026-11-24-print-options) | `fbc10dd`, live since 24 Nov | None required. Recommended: decide drinkware from `is_drinkware` |
+| [2026-11-24: the contact and sourcing forms are checked on the server; page sizes on public lists](#2026-11-24-forms-lists) | Not deployed yet | None required. Optional: limit the support form's email to 100 characters |
 | [2026-11-20: unpaid orders and one payment at a time](#2026-11-20-paying-order) | `f09c0b4`, live since 20 Nov | None required: the shop already shows the API's messages. Optional: see the note on 409 from `POST order` |
 | [2026-11-20: graphics are PNG, JPG or SVG only](#2026-11-20-graphic-types) | `35ba84e`, live since 20 Nov | Done in hashtag-next, not deployed yet: both graphic pickers limited to PNG, JPG, JPEG and SVG |
 | [2026-11-13: payments go-live](#2026-11-13-go-live) | `2634b76`, live since 16 Nov | Done in hashtag-next `744ba16` and `5d0fcff`, not deployed yet |
@@ -155,6 +156,58 @@ Tested on 24 Nov on a throwaway MariaDB 10.11 built from production's schema, wi
 The shop's own request-building code at both `7590672` and `11c00f8` was also run for every decoration the customization page can produce, at each price-tier boundary from 1 to 1,000 pieces: 47,410 priced combinations. Each was accepted at the price the page shows, and clothing and SAGE drinkware at the same price as before.
 
 The shop's rule and the API's were also compared over all 1,290 listed products, in every order their categories can come back in: the API never refuses a print method the shop offers. They differ on two products, and on both the shop offers no printing: the 50L Utility Duffel Bag (381, also under Workwear) and the Campfire Kit (105868, also under Drinkware).
+
+<a id="2026-11-24-forms-lists"></a>
+## 2026-11-24: the contact and sourcing forms are checked on the server; page sizes on public lists (not deployed yet)
+
+Audit points F16 and F18:
+- **F16:** the support form's and the sourcing form's rules were checked only in the browser. Anyone could make the shop send its "We've received your message" email from support@, info@ or quotes@ to any address, or to several at once (`a@x.com, b@y.com`), with their own text in it. A long name or company gave a server error.
+- **F18:** the public lists took any page size. `GET product?limit=100000` loaded and priced the whole catalog in one request; `limit=-1`, a huge `page` or a repeated `search` gave a server error.
+
+**What the shop must do:** nothing required. Every request the shop sends, in the live version (`7590672`) and in `main` (`11c00f8`), gets the same answer as before:
+- The forms already apply the same rules in the browser. The one difference is the support form's email, below.
+- Lists: products 16 a page, and 200 for the sitemap; brands 1,000 on the categories page, and the default 20 for the sitemap; grand categories 50, and 100 for the sitemap; industries 20, 50 and 100; use-case products 16. The header's search box stops at 100 characters.
+
+**Optional:** limit the support form's email to 100 characters, with `maxLength={100}` on its email input (`SupportContactForm.tsx:108`) and `.max(100)` on its email rule (`supportFormSchema`, `SupportContactForm.tsx:25`). The server now refuses a longer address with "Email must be 100 characters or fewer.", and the form shows that message; before, such an address gave a server error. The sourcing form keeps 254.
+
+**What changed in the API:**
+
+`POST contactUs` and `POST sourcing-requests/create` are checked before anything is saved or emailed. A refusal is a `400` whose message names the field, and the forms show it like any other `400`:
+
+| Form | Field | Rule | Message when refused |
+|---|---|---|---|
+| Contact | `name` | 2 to 80 characters | "Full name is required." / "Full name must be 2 to 80 characters." |
+| Sourcing | `name` | 2 to 80 characters | "Name is required." / "Name must be 2 to 80 characters." |
+| Both | `email` | exactly one address, by the forms' own rule | "Email is required." / "Enter a single valid email address." |
+| Contact | `email` | 100 characters at most | "Email must be 100 characters or fewer." |
+| Sourcing | `email` | 254 characters at most | "Email must be 254 characters or fewer." |
+| Contact | `reason` | one of the five subjects in `src/data/supportData.ts`, as written there | "Choose a subject from the list." |
+| Contact | `message` | 10 to 2,000 characters | "Message is required." / "Message must be 10 to 2,000 characters." |
+| Sourcing | `company` | optional, 120 characters at most | "Company must be 120 characters or fewer." |
+| Sourcing | `requested_name` | 2 to 200 characters | "Brand or product name is required." / "Brand or product name must be 2 to 200 characters." |
+| Sourcing | `details` | optional, 2,000 characters at most | "Details must be 2,000 characters or fewer." |
+
+- Fields are checked in the forms' order, so the first message is the one the form itself would show.
+- Text is counted the way the forms count it: after trimming, with a line break counted once (browsers send a textarea's line breaks as two characters).
+- What's saved is the checked text: trimmed, with line breaks as one character. The sourcing email is still saved in lower case.
+- **Subjects:** if the shop renames or adds a subject in `supportData.ts`, the backend's list (`src/helpers/publicForms.js`) must change first, or that subject is refused.
+- Unchanged: 10 posts an hour per connection, Turnstile when it's switched on, and who each email comes from (support@ for Order Issue, Customization Help, Shipping & Delivery and Payment Issue; info@ for General Inquiry; quotes@ for sourcing).
+
+Lists anyone can call: `GET product`, `product/grand-category-products`, `product/product-by-brand`, `brand/website-brands`, `brand`, `brand/ss`, `product-category`, `product-category/get-parent-categories`, `product-category/get-grand-categories`, `industry`, `industry/use-case`, `industry/use-case/products`, `industry/use-case/:id/products`, `tiers/:id/products`, `add-on/addon-product`, `customization-option`, `size`, `country`, `state` and `city`:
+- `limit` above 200 is answered as 200, and below 1 as 1. `brand/website-brands` goes up to 1,000, because the categories page loads 1,000 brands at once. Add-ons and customization options keep their own 100. Not a number, or 0: the list's default.
+- The lists that page say which size they used: `pagination.limit` (`pagination.per_page` on `industry` and `industry/use-case`, and `limit` at the top of the answer on `brand/website-brands`). `size`, `country`, `state` and `city` answer a plain list.
+- `page` below 1 is page 1, and above 1,000,000 is page 1,000,000 (an empty page).
+- `limit` and `page` are read as whole numbers, as most lists already read them: `limit=16abc` is 16 and `limit=1e3` is 1, also on the few lists that used to read `1e3` as 1,000. The shop sends plain numbers, which are unchanged.
+- A `search` longer than 100 characters, not counting spaces around it, searches its first 100. A search sent twice (`?search=a&search=b`) is refused: `400` "Enter a single search." `size`, `country`, `state` and `city` have no search and ignore it, as before.
+- `GET size` now answers one page of up to 200 sizes, oldest first (`?page=2` for the next). It used to return all of them at once. Neither the shop nor the admin panel calls it.
+- Requests with a valid admin token (the admin panel) keep their own sizes, up to 10,000 rows, and their whole search.
+
+**Not in this change:** the filters on `GET product` (size, colour, price, and `use_case_id` with `tier`) and `use_case_ids` on `industry/use-case/products` have no limits of their own yet, and `limit` doesn't bound the work they do. Limiting them is a separate decision, to be checked against the shop's own requests first.
+
+Tested on 24 Nov against a throwaway MariaDB 10.11 with production's schema and strict mode, with the old code (`78f5232`) and the new side by side, and email faked:
+- 92 requests that the shop or the admin panel sends, or that are within the limits, got exactly the same answers as before, emails included. Among them: the categories page's 1,000 brands out of 1,250.
+- 58 crafted requests, the audit's own among them, were refused with a message that names the field or the search. None of them saved a row, sent an email or left a file. 62 more were brought within the limits.
+- 120,000 random forms went through the shop's own rules and the server's. Every form the shop accepts passes the server, except contact emails of 101 to 254 characters.
 
 ---
 

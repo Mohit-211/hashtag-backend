@@ -3,14 +3,15 @@ const express = require("express");
 const router = express.Router();
 const { tierController } = require("../../../controllers/Common");
 const { adminAuthMiddleware } = require("../../../middlewares");
+const { listLimits } = require("../../../middlewares/listLimits");
 
-const { requireAdmin } = adminAuthMiddleware;
+const { requireAdmin, identifyAdmin } = adminAuthMiddleware;
 
 router.post("/", requireAdmin, tierController.createTier);
 router.get("/", tierController.getAllTiers);
 router.get("/:id/parent-categories", tierController.getTierParentCategories);
 router.put("/:id/parent-categories", requireAdmin, tierController.updateTierParentCategories);
-router.get("/:id/products", tierController.getTierProducts);
+router.get("/:id/products", identifyAdmin, listLimits(), tierController.getTierProducts);
 router.post("/:id/products/add", requireAdmin, tierController.addProductsToTier);
 // IMPORTANT: this must stay ABOVE /products/:productId or Express will
 // try to match "current" as a productId.

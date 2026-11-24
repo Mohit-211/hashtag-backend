@@ -5,6 +5,7 @@ What each backend release changes for the admin panel, and what the panel has to
 | Release | Backend commit | Panel action |
 |---|---|---|
 | [2026-11-24: print options must be on the price list](#2026-11-24-print-options) | `fbc10dd`, live since 24 Nov | None required |
+| [2026-11-24: page sizes on the lists the website also uses](#2026-11-24-list-limits) | Not deployed yet | None: the panel's admin token keeps its page sizes (up to 500 today) and its whole search |
 | [2026-11-20: pricing templates from a CSV file](#2026-11-20-template-import) | `898c128`, live since 20 Nov | Done in Hashtag-Billionaire-Admin `c597d0d`, live since 20 Nov: Pricing Templates › Import from CSV |
 | [2026-11-19: the Dashboard](#2026-11-19-dashboard) | `c1e6f1c`, live since 19 Nov | Done in Hashtag-Billionaire-Admin `5af5d20`, live since 19 Nov: the Dashboard page, and the Orders page takes its filters from the link |
 | [2026-11-18: grand, parent and supplier category names](#2026-11-18-category-names) | `98cddea`, live since 18 Nov | Done in Hashtag-Billionaire-Admin `91fe6df`, live since 18 Nov: every label now says Grand / Parent / Supplier Category |
@@ -81,6 +82,16 @@ Audit points F05 and F04. The cart now refuses (400) print options that aren't o
 - A SAGE product filed under "Apparel & Uniforms" (none today) gets the clothing rows (`EMBROIDERY`, `DTF`, `SCREEN_PRINT`, `DTG`) after its `SAGE` row.
 
 **What the panel must do:** nothing.
+
+<a id="2026-11-24-list-limits"></a>
+## 2026-11-24: page sizes on the lists the website also uses (not deployed yet)
+
+Audit point F18: the public lists now stop shoppers at 200 rows a page (1,000 for `brand/website-brands`) and search only the first 100 characters ([frontend-changes.md](frontend-changes.md#2026-11-24-forms-lists)). The panel needs no change: it sends its admin token on every request, and a valid admin token keeps its own sizes, up to 10,000 rows, and its whole search. Its biggest requests, `brand/website-brands` and `brand/ss` with `limit=500`, still get every brand.
+
+- If the panel calls one of these lists without a valid token, as when a session has just expired, it gets at most 200 rows (1,000 brands) rather than an error. Its other calls answer `401` then, which signs the admin out.
+- With the admin token, these lists now include the supplier fields shoppers never get (on products, `supplier_last_hash` and the supplier data kept in `meta`), as `get-grand-categories` already did. The panel doesn't read them.
+- `GET size` now pages, 200 a page by default. The panel doesn't call it.
+- The contact and sourcing forms' new checks (F16) don't change the Contact Us and Sourcing Requests pages. Rows saved from now on have trimmed text, and a contact row's subject is always one of the website's five.
 
 <a id="2026-11-23-artwork-approval"></a>
 ## 2026-11-23: artwork approval (live since 24 Nov)

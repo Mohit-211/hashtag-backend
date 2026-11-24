@@ -2,11 +2,12 @@ const express = require("express");
 const router = express.Router();
 const { customizationController } = require("../../../controllers/Common");
 const { adminAuthMiddleware } = require("../../../middlewares");
+const { listLimits } = require("../../../middlewares/listLimits");
 
-const { requireAdmin } = adminAuthMiddleware;
+const { requireAdmin, identifyAdmin } = adminAuthMiddleware;
 
 router.post("/", requireAdmin, customizationController.createCustomizationOption);
-router.get("/", customizationController.getAllCustomizationOptions);
+router.get("/", identifyAdmin, listLimits(), customizationController.getAllCustomizationOptions);
 router.get("/:id", customizationController.getCustomizationOptionById);
 router.put("/:id", requireAdmin, customizationController.updateCustomizationOption);
 router.delete("/:id", requireAdmin, customizationController.deleteCustomizationOption);

@@ -4,16 +4,14 @@ const { Op } = require('sequelize');
 const { ContactUs } = require('../../models');
 const ApiError = require('../../utils/ApiError');
 const { sendAdminContactUsNotification, sendContactUsConfirmation } = require('./email.service');
+const { checkContactForm } = require('../../helpers/publicForms');
 
 
 const createContactUs = async (reqBody) => {
   try {
+    // Checked before anything is saved or emailed (F16); a refusal is a 400 naming the field.
     const contactUsObj = {
-      name: reqBody.name,
-      email: reqBody.email,
-      mobile: reqBody.mobile,
-      reason: reqBody.reason,
-      message: reqBody.message,
+      ...checkContactForm(reqBody),
       status: "NEW",
     };
 

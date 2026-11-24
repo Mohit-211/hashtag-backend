@@ -9,7 +9,7 @@ const createSize = catchAsync(async (req, res) => {
 });
 
 const getAllSizes = catchAsync(async (req, res) => {
-  const data = await sizeService.getAllSizes();
+  const data = await sizeService.getAllSizes(req.query);
   return responseWrapper(res, data, "", httpStatus.OK);
 });
 

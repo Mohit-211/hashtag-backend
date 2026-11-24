@@ -2,12 +2,13 @@ const express = require("express");
 const router = express.Router();
 const { productCategoryController, parentCategoryController, grandCategoryController } = require("../../../controllers");
 const { adminAuthMiddleware } = require("../../../middlewares");
+const { listLimits } = require("../../../middlewares/listLimits");
 
 const { requireAdmin, identifyAdmin } = adminAuthMiddleware;
 
-router.get("/get-parent-categories", parentCategoryController.getAllParentCategories);
+router.get("/get-parent-categories", identifyAdmin, listLimits(), parentCategoryController.getAllParentCategories);
 // Admins get every category; the website only categories with products to show.
-router.get("/get-grand-categories", identifyAdmin, grandCategoryController.getAllGrandCategories);
+router.get("/get-grand-categories", identifyAdmin, listLimits(), grandCategoryController.getAllGrandCategories);
 router.post("/add-category-to-parent", requireAdmin, parentCategoryController.addCategoryToParent);
 router.post("/add-parent-to-grand", requireAdmin, grandCategoryController.addParentToGrand);
 router.post("/remove-category-from-parent", requireAdmin, parentCategoryController.removeCategoryFromParent);
@@ -17,7 +18,7 @@ router.get("/for-categories", parentCategoryController.getParentCategoriesForCat
 router.get("/for-parents", grandCategoryController.getGrandCategoriesForParents);
 
 router.post("/", requireAdmin, productCategoryController.createCategory);
-router.get("/", productCategoryController.getAllCategories);
+router.get("/", identifyAdmin, listLimits(), productCategoryController.getAllCategories);
 // import categories from ss activewear
 router.get("/sync/ss", requireAdmin, productCategoryController.syncSSCategories);
 router.get("/:id", productCategoryController.findCategoryById);
