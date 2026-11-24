@@ -2,7 +2,7 @@
 
 Tracks every finding in [AUDIT_REPORT.md](AUDIT_REPORT.md) (audit of 8 October 2026, commit `268b548`) and what has been done about it. Update this file in the same commit as the fix.
 
-**Last updated:** 6 November 2026 (`FIXED_QUANTITY` customization pricing live in `a8cb702`; graphics and the $35 fee, and ShipStation after payment, live in `4b5729f`). `fix/bug-sweep` was merged into `main` on 16 October and is live in production.
+**Last updated:** 24 November 2026 (artwork approval live; N1 confirmed done, which completes H1). Earlier: 6 November (`FIXED_QUANTITY` customization pricing live in `a8cb702`; graphics and the $35 fee, and ShipStation after payment, live in `4b5729f`). `fix/bug-sweep` was merged into `main` on 16 October and is live in production.
 
 **Status:** ✅ done · ◐ partly done · ❌ open.
 
@@ -17,9 +17,9 @@ Tracks every finding in [AUDIT_REPORT.md](AUDIT_REPORT.md) (audit of 8 October 2
 | Severity | Findings | ✅ Done | ◐ Partly | ❌ Open |
 |---|---|---|---|---|
 | Critical | 11 | 5 | 4 | 2 |
-| High | 26 | 16 | 8 | 2 |
+| High | 26 | 17 | 7 | 2 |
 | Medium | 41 | 25 | 3 | 13 |
-| **Total** | **78** | **46** | **15** | **17** |
+| **Total** | **78** | **47** | **14** | **17** |
 
 Found after the audit: N1 to N4 (bottom of this file).
 
@@ -94,17 +94,15 @@ Found after the audit: N1 to N4 (bottom of this file).
 
 Changes the shop and the admin panel need: [docs/frontend-changes.md](docs/frontend-changes.md), [docs/admin-panel-changes.md](docs/admin-panel-changes.md).
 
-### Deploying artwork approval (not live)
+### Deploying artwork approval (live)
 
-**Status (23 Nov):** committed in the backend, the admin panel and the new `Hashtag_approval` site; not pushed. Tested on a local copy of the database: the end-to-end check passed 721 checks, and a full run through all three passed 226. The shop needs no change. The steps, in order, are in [docs/deployment.md](docs/deployment.md#artwork-approval):
+**Status (24 Nov):** steps 1 to 4 are done: the backend's `91017fa`, the admin panel's `199d5ed` and the approval site's `6c27f41` are live. Step 5 is still to do. This release has the 24 Nov change: the customer approves an item, rejects it with a note and pictures, or goes back to an earlier version (which approves that version and rejects the newer ones), and Undo takes back their last choice until the team presses Lock for production. The admin page and the customer's page are simpler too. Tested locally: 61 rule checks passed, 737 end-to-end checks on a throwaway database, and 422 in a full run through all three in Chrome. The approval site deploys itself on each push to its `main` (its GitHub secrets were added on 24 Nov). The fixes from the final review went out the same day: the admin panel's `f25eb73` and the approval site's `20133fe`. The shop needs no change. The steps, in order, are in [docs/deployment.md](docs/deployment.md#artwork-approval):
 
 1. Back up the database, then run `migrations/2026-11-23_order_approvals_before_deploy.sql`.
 2. Push the backend, and start the Deploy workflow with "migrations done" ticked.
 3. Push the admin panel.
 4. Set up `/approval` on the server (Apache), then deploy the approval site.
 5. Check the address in the Artwork approval page address setting, and do one real run.
-
-N1 should be fixed soon after: until then, customers behind the same Cloudflare server share the approval page's rate limit.
 
 ---
 
@@ -128,7 +126,7 @@ N1 should be fixed soon after: until then, customers behind the same Cloudflare 
 
 | # | Finding | Status | Commit | Remaining |
 |---|---|---|---|---|
-| H1 | Rate limiter never ran | ◐ | `335d27b` | Counts per Cloudflare server until `TRUST_PROXY` is set (N1). Server |
+| H1 | Rate limiter never ran | ✅ | `335d27b` | Counts per visitor since `TRUST_PROXY` was set on the server (N1) |
 | H2 | Production ran as development | ✅ | `335d27b` | |
 | H3 | Uploads everywhere, unlimited | ✅ | `335d27b`, `44141b0` | Graphics accept any format by decision (4 Nov); they're served only as downloads |
 | H4 | Token and password hash in addresses | ◐ | `335d27b` | Old rows still hold request bodies; purge needs SQL. DB |
@@ -219,7 +217,7 @@ N1 should be fixed soon after: until then, customers behind the same Cloudflare 
 
 | # | Finding | Status | Remaining |
 |---|---|---|---|
-| N1 | Rate limits count per Cloudflare server, not per visitor | ❌ | Set `TRUST_PROXY` to `loopback` plus Cloudflare's ranges (see `.env.example`). Server |
+| N1 | Rate limits count per Cloudflare server, not per visitor | ✅ | `TRUST_PROXY` has been `loopback` plus Cloudflare's ranges on the server since 27 Oct. Confirmed 24 Nov: the logs show visitors' own addresses |
 | N2 | The repository is public and contains the audit | ❌ | Make the GitHub repository private. Still public on 26 October, as are hashtag-next and the admin panel |
 | N3 | Public uploads saved before the rate limit | ✅ | `44141b0` |
 | N4 | Database backups stopped partway: a row in `products` is bigger than `mysqldump`'s default packet, so the 15 Oct backup ends there | ✅ | Use `--max-allowed-packet=1G` and check the end of the file ([migrations/README.md](migrations/README.md)). The 4 Nov backup is complete |

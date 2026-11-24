@@ -78,7 +78,7 @@ The client's list spelled the quotes address `quotes@hashtagbillioniaire.com`; t
 
 ## Artwork approval
 
-Built on 23 November; **not live yet**. Before a customized order is made, the team shows the customer how each item will look:
+Live since 24 November 2026. Before a customized order is made, the team shows the customer how each item will look:
 
 1. **The team uploads previews.** On the order's **Artwork approval** page in the admin panel (Orders, the stamp button), they add an artwork preview of each item.
 2. **order@ emails the customer a private link.**
@@ -116,7 +116,7 @@ Both sides see the history.
 7. **Settings page:** check that **Artwork approval page address** is `https://hashtagbillionaire.com/approval`.
 8. **One real run:** on a paid test order, start the approval, upload a preview, send it to yourself, approve it on a phone, and lock it.
 
-Until N1 is fixed ([progress.md](../progress.md#found-after-the-audit)), everyone who reaches the page through the same Cloudflare server shares its rate limit, and the history records Cloudflare's address instead of the customer's.
+Rate limits and the history use the visitor's own address: `TRUST_PROXY` on the server lists Cloudflare's ranges (N1 in [progress.md](../progress.md#found-after-the-audit)).
 
 ## Upload limits
 
