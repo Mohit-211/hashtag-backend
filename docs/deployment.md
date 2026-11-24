@@ -48,7 +48,7 @@ Step 4 loads that account's carriers, registers the tracking webhook and prints 
 
 ## An order's shipping address
 
-Built on 24 November (audit F02); **not live yet**. `POST order` copies the saved address it prices the shipping for onto the order (`orders.ship_to_*`). The label, the order's pages and its emails use that copy, so editing or deleting a saved address on the Account page changes only later orders.
+Live since 24 November 2026 (audit F02, `6c6ec41`). `POST order` copies the saved address it prices the shipping for onto the order (`orders.ship_to_*`). The label, the order's pages and its emails use that copy, so editing or deleting a saved address on the Account page changes only later orders.
 
 **Going live, in this order:**
 

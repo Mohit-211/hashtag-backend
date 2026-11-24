@@ -7,7 +7,7 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 | Release | Backend commit | Shop action |
 |---|---|---|
 | [2026-11-24: an order keeps the address it was priced for](#2026-11-24-ship-to) | `6c6ec41`, live since 24 Nov | None required |
-| [2026-11-24: print options must be on the price list; one drinkware rule](#2026-11-24-print-options) | `<commit>`, not deployed yet | None required. Recommended: decide drinkware from `is_drinkware` |
+| [2026-11-24: print options must be on the price list; one drinkware rule](#2026-11-24-print-options) | `fbc10dd`, live since 24 Nov | None required. Recommended: decide drinkware from `is_drinkware` |
 | [2026-11-20: unpaid orders and one payment at a time](#2026-11-20-paying-order) | `f09c0b4`, live since 20 Nov | None required: the shop already shows the API's messages. Optional: see the note on 409 from `POST order` |
 | [2026-11-20: graphics are PNG, JPG or SVG only](#2026-11-20-graphic-types) | `35ba84e`, live since 20 Nov | Done in hashtag-next, not deployed yet: both graphic pickers limited to PNG, JPG, JPEG and SVG |
 | [2026-11-13: payments go-live](#2026-11-13-go-live) | `2634b76`, live since 16 Nov | Done in hashtag-next `744ba16` and `5d0fcff`, not deployed yet |
@@ -84,7 +84,7 @@ Audit point F02. **What `GET order/:id` returns:** `address` is now the order's 
 **What the shop must do:** nothing.
 
 <a id="2026-11-24-print-options"></a>
-## 2026-11-24: print options must be on the price list; one drinkware rule (not deployed yet)
+## 2026-11-24: print options must be on the price list; one drinkware rule (live since 24 Nov)
 
 Audit points F05 and F04. `POST product/cart` charged $0 for any decoration it had no price for: a print method it didn't know (even `embroidery` in small letters), 7 screen-print colours, DTG without a print area, embroidery on a location with no price (hoodie Full Front and Full Back, the oversized back), or a decorated line with no location. The garment was charged, the printing was free, the $35 graphic fee was skipped, and production still got the instructions. Drinkware's $8 for the second location was charged only on SAGE products under a parent category named exactly "Drinkware", and only for Color Imprint and Laser Engraving.
 

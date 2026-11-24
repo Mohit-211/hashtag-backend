@@ -4,7 +4,7 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
-| [2026-11-24: print options must be on the price list](#2026-11-24-print-options) | `<commit>`, not deployed yet | None required |
+| [2026-11-24: print options must be on the price list](#2026-11-24-print-options) | `fbc10dd`, live since 24 Nov | None required |
 | [2026-11-20: pricing templates from a CSV file](#2026-11-20-template-import) | `898c128`, live since 20 Nov | Done in Hashtag-Billionaire-Admin `c597d0d`, live since 20 Nov: Pricing Templates › Import from CSV |
 | [2026-11-19: the Dashboard](#2026-11-19-dashboard) | `c1e6f1c`, live since 19 Nov | Done in Hashtag-Billionaire-Admin `5af5d20`, live since 19 Nov: the Dashboard page, and the Orders page takes its filters from the link |
 | [2026-11-18: grand, parent and supplier category names](#2026-11-18-category-names) | `98cddea`, live since 18 Nov | Done in Hashtag-Billionaire-Admin `91fe6df`, live since 18 Nov: every label now says Grand / Parent / Supplier Category |
@@ -68,7 +68,7 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 2. **The 2 unpaid orders the panel doesn't show:** when a customer's cart changes, the backend soft-deletes their latest unpaid order (`invalidatePendingOrder` in `cartWishlist.service.js`), and orders are paranoid, so those two are hidden from every list. Nothing is missing on the panel's side; the behaviour itself is on the payments list (audit H8).
 
 <a id="2026-11-24-print-options"></a>
-## 2026-11-24: print options must be on the price list (not deployed yet)
+## 2026-11-24: print options must be on the price list (live since 24 Nov)
 
 Audit points F05 and F04. The cart now refuses (400) print options that aren't on the price list instead of charging $0 for them, and charges drinkware's $8 second location on every supplier. What it means for the shop, with every message: [frontend-changes.md](frontend-changes.md#2026-11-24-print-options). For the order screens (`GET order/admin`, payments):
 - Old orders are never repriced: their items show as before.
@@ -83,7 +83,7 @@ Audit points F05 and F04. The cart now refuses (400) print options that aren't o
 **What the panel must do:** nothing.
 
 <a id="2026-11-23-artwork-approval"></a>
-## 2026-11-23: artwork approval (not live yet)
+## 2026-11-23: artwork approval (live since 24 Nov)
 
 The panel's side is built in the same change: the **Artwork approval** page (`/orders/:id/approval`), the stamp button and badge on the Orders list, and two Dashboard counts. What the feature does and how it goes live: [deployment.md](deployment.md#artwork-approval).
 
