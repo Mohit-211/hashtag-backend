@@ -6,6 +6,7 @@ const { AddOnProduct, ProductAddOn, Product } = require("../../models");
 const ApiError = require("../../utils/ApiError");
 const httpStatus = require("http-status");
 const settings = require("../../config/settings");
+const { keepUpload } = require("../../utils/keptUploads");
 
 
 // MariaDB returns JSON columns as text. The admin endpoints always send `features` as
@@ -106,6 +107,9 @@ const createAddOnProduct = async (body, files) => {
 
       is_active: true,
     });
+
+    // Kept with the add-on (upload.middleware.js deletes the rest).
+    keepUpload(imageFile);
 
     return forAdmin(addon);
   } catch (error) {
@@ -300,6 +304,9 @@ const updateAddOnProduct = async (id, body, files) => {
     // -----------------------------------------
 
     await addon.update(updateData);
+
+    // Kept with the add-on (upload.middleware.js deletes the rest).
+    keepUpload(imageFile);
 
     return forAdmin(addon);
   } catch (error) {

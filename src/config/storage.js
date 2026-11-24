@@ -13,7 +13,8 @@ const LOG_DIR = path.resolve(config.logDir || path.join(REPO_ROOT, "../logs"));
 const dirs = {
   root: STORAGE_DIR,
   uploads: path.join(STORAGE_DIR, "uploads"),
-  // Admin and customer uploads (product, brand, preview, profile images). Served at /images.
+  // Admin and customer uploads (product, brand, preview, sourcing form images). Served at
+  // /images; an SVG there only as a download (app.js).
   images: path.join(STORAGE_DIR, "uploads", "images"),
   // Customers' graphics: PNG, JPG or SVG (older ones any format). Kept out of uploads, which
   // /uploads serves as they are;

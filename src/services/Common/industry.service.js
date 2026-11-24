@@ -19,6 +19,7 @@ const { getCurrentTiersForProducts, resolveAllTierProductIds, resolveTierProduct
 const decodeHtmlEntities = require("../../utils/decodeHtmlEntities");
 const pick = require("../../utils/pick");
 const { productInStock } = require("../../utils/stock");
+const { keepUpload } = require("../../utils/keptUploads");
 
 // Fields an admin may set; anything else in the request body is ignored. Images come
 // from the upload, not the body.
@@ -48,6 +49,9 @@ const createIndustry = async (body, files) => {
   }
 
   const industry = await Industry.create(industryObj);
+
+  // Kept with the industry (upload.middleware.js deletes the rest).
+  keepUpload(files?.images?.[0]);
 
   return industry;
 };
@@ -174,6 +178,9 @@ const updateIndustry = async (id, body, files) => {
 
   await industry.update(updateObj);
 
+  // Kept with the industry (upload.middleware.js deletes the rest).
+  keepUpload(files?.images?.[0]);
+
   return industry;
 };
 
@@ -238,7 +245,12 @@ const createUseCase = async (body, files) => {
     );
   }
 
-  return await UseCase.create(useCaseObj);
+  const useCase = await UseCase.create(useCaseObj);
+
+  // Kept with the use case (upload.middleware.js deletes the rest).
+  keepUpload(files?.images?.[0]);
+
+  return useCase;
 };
 
 const getAllUseCasesDropdown = async () => {
@@ -393,6 +405,9 @@ const updateUseCase = async (id, body, files) => {
   }
 
   await useCase.update(updateObj);
+
+  // Kept with the use case (upload.middleware.js deletes the rest).
+  keepUpload(files?.images?.[0]);
 
   return useCase;
 };

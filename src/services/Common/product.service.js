@@ -43,6 +43,7 @@ const {
   resolveTierProductIds,
   resolveAllTierProductIds,
 } = require("./tier.service");
+const { keepUpload } = require("../../utils/keptUploads");
 
 const createSkuGenerator = async (productId, requestVariants) => {
   const normalize = (sku) => String(sku).trim().toUpperCase();
@@ -283,6 +284,9 @@ const createProduct = async (body, files) => {
         supplier: "MANUAL",
         source_url: null,
       });
+
+      // Kept with the product (upload.middleware.js deletes the rest).
+      keepUpload(file);
     }
   }
 
@@ -444,6 +448,7 @@ const addProductVariants = async (body, files) => {
       // Variant Images
       // --------------------------------------------------
       const variantImages = [];
+      const variantImageFiles = [];
 
       if (files?.variant_images?.length) {
         // image_count 0 means "no images for this variant" — only fall
@@ -468,6 +473,7 @@ const addProductVariants = async (body, files) => {
             source_url: null,
             file_type: "image",
           });
+          variantImageFiles.push(file);
 
           imageIndex++;
         }
@@ -475,6 +481,9 @@ const addProductVariants = async (body, files) => {
 
       if (variantImages.length) {
         await VariantAttachment.bulkCreate(variantImages);
+
+        // Kept with the variant (upload.middleware.js deletes the rest).
+        variantImageFiles.forEach(keepUpload);
       }
 
       createdVariants.push(variant);
@@ -627,6 +636,10 @@ const updateManualProductFull = async (body, files) => {
       }));
 
       await ProductAttachment.bulkCreate(imageRows);
+
+      // Kept with the product, even if a later step refuses the save (upload.middleware.js
+      // deletes the rest).
+      files.images.forEach(keepUpload);
     }
 
     const remainingImages = await ProductAttachment.findAll({
@@ -906,6 +919,7 @@ const updateManualProductFull = async (body, files) => {
 
         const newImageCount = Number(v.image_count) || 0;
         const variantImageRows = [];
+        const variantImageFiles = [];
 
         for (let i = 0; i < newImageCount; i++) {
           const file = files?.variant_images?.[variantImageIndex];
@@ -924,12 +938,16 @@ const updateManualProductFull = async (body, files) => {
             source_url: null,
             file_type: "image",
           });
+          variantImageFiles.push(file);
 
           variantImageIndex++;
         }
 
         if (variantImageRows.length > 0) {
           await VariantAttachment.bulkCreate(variantImageRows);
+
+          // Kept with the variant (upload.middleware.js deletes the rest).
+          variantImageFiles.forEach(keepUpload);
         }
 
         const remainingVariantImages = await VariantAttachment.findAll({
@@ -2912,6 +2930,9 @@ const updateProduct = async (body, files) => {
       }));
 
       await ProductAttachment.bulkCreate(imageRows);
+
+      // Kept with the product (upload.middleware.js deletes the rest).
+      files.images.forEach(keepUpload);
     }
 
     // -------------------------------------------------------
@@ -3122,6 +3143,7 @@ const updateProduct = async (body, files) => {
         const newImageCount = Number(image_count) || 0;
 
         const variantImageRows = [];
+        const variantImageFiles = [];
 
         for (let i = 0; i < newImageCount; i++) {
           const file = files?.variant_images?.[variantImageIndex];
@@ -3137,12 +3159,16 @@ const updateProduct = async (body, files) => {
             file_size: file.size,
             is_primary: false,
           });
+          variantImageFiles.push(file);
 
           variantImageIndex++;
         }
 
         if (variantImageRows.length > 0) {
           await VariantAttachment.bulkCreate(variantImageRows);
+
+          // Kept with the variant (upload.middleware.js deletes the rest).
+          variantImageFiles.forEach(keepUpload);
         }
 
         // ---------------------------------------------------

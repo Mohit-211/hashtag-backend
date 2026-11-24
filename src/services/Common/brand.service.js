@@ -8,6 +8,7 @@ const httpStatus = require("http-status");
 const { Op } = require("sequelize");
 const pick = require("../../utils/pick");
 const settings = require("../../config/settings");
+const { keepUpload } = require("../../utils/keptUploads");
 
 // Fields an admin may set through the generic brand create and update endpoints.
 const BRAND_FIELDS = ["name", "slug", "description", "show_on_website", "is_active"];
@@ -22,6 +23,9 @@ const createBrand = async (body, files) => {
 
   // ✅ Then create
   const brand = await Brand.create(brandObj);
+
+  // Kept with the brand (upload.middleware.js deletes the rest).
+  keepUpload(files?.images?.[0]);
 
   return brand;
 };
@@ -180,6 +184,9 @@ const publishBrand = async (body, files) => {
 
     await brand.update(updateData);
 
+    // Kept with the brand (upload.middleware.js deletes the rest).
+    keepUpload(files?.images?.[0]);
+
     return brand;
   } catch (err) {
     console.error("Error in publishBrand:", err);
@@ -268,6 +275,9 @@ const createManualBrand = async (body, files) => {
       show_on_website: true,
       is_active: true,
     });
+
+    // Kept with the brand (upload.middleware.js deletes the rest).
+    keepUpload(files?.images?.[0]);
 
     return brand;
   } catch (err) {

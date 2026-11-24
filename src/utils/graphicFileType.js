@@ -123,13 +123,53 @@ const PICTURE_TYPE_MESSAGE = "Pictures must be PNG or JPG files.";
 const isPictureFile = (file) => PICTURE_EXTENSIONS.includes(extensionOf(file)) && isGraphicFile(file);
 
 // After saving, like checkGraphicContents: each picture must really be a PNG or a JPEG.
-const checkPictureContents = async (files) => {
+// typeMessage: what's allowed, for pictures that aren't on the approval page (the cart's preview).
+const checkPictureContents = async (files, typeMessage = PICTURE_TYPE_MESSAGE) => {
   for (const file of files) {
     const type = detectGraphicType(await readSample(file.path));
     if (type !== "png" && type !== "jpeg") {
-      throw new ApiError(httpStatus.BAD_REQUEST, `"${shownName(file)}" isn't a real PNG or JPG file. ${PICTURE_TYPE_MESSAGE}`);
+      throw new ApiError(httpStatus.BAD_REQUEST, `"${shownName(file)}" isn't a real PNG or JPG file. ${typeMessage}`);
     }
     file.mimetype = CANONICAL_MIME[type];
+  }
+};
+
+// Photos saved from shops, social apps and phones are often WebP, AVIF, HEIC or GIF under a .jpg
+// or .png name, and browsers show them all. These are the major brands of AVIF and HEIC files (an
+// MP4 or MOV video has its own).
+const HEIF_BRANDS = ["avif", "avis", "heic", "heix", "heim", "heis", "hevc", "hevx", "hevm", "hevs", "mif1", "msf1"];
+
+// The picture format from the first bytes: "png", "jpeg", "gif", "webp", "heif", or null.
+const detectPictureType = (sample) => {
+  const type = detectGraphicType(sample);
+  if (type === "png" || type === "jpeg") return type;
+
+  const text = (start, end) => sample.subarray(start, end).toString("latin1");
+  if (["GIF87a", "GIF89a"].includes(text(0, 6))) return "gif";
+  if (text(0, 4) === "RIFF" && text(8, 12) === "WEBP") return "webp";
+  if (text(4, 8) === "ftyp" && HEIF_BRANDS.includes(text(8, 12))) return "heif";
+  return null;
+};
+
+const PICTURE_MIME = { ...CANONICAL_MIME, gif: "image/gif", webp: "image/webp", heif: "image/heif" };
+
+// After saving, for the sourcing form's logos and reference images: an .svg name must hold an SVG,
+// and a .png, .jpg or .jpeg name a picture (PNG, JPEG, GIF, WebP, AVIF or HEIC), as the form has
+// always taken them. ZIP files, PDFs, web pages and videos are refused. typeMessage: what's allowed.
+const checkReferenceContents = async (files, typeMessage) => {
+  for (const file of files) {
+    const sample = await readSample(file.path);
+    const isSvgName = extensionOf(file) === "svg";
+    const type = isSvgName ? (detectGraphicType(sample) === "svg" ? "svg" : null) : detectPictureType(sample);
+
+    if (!type) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        `"${shownName(file)}" isn't a real ${isSvgName ? "SVG" : "PNG or JPG"} file. ${typeMessage}`,
+      );
+    }
+
+    file.mimetype = PICTURE_MIME[type];
   }
 };
 
@@ -139,7 +179,9 @@ module.exports = {
   PICTURE_TYPE_MESSAGE,
   isGraphicFile,
   isPictureFile,
+  shownName,
   detectGraphicType,
   checkGraphicContents,
   checkPictureContents,
+  checkReferenceContents,
 };

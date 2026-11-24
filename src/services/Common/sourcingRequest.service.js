@@ -9,6 +9,7 @@ const {
 } = require("./email.service");
 const settings = require("../../config/settings");
 const { checkSourcingRequest } = require("../../helpers/publicForms");
+const { keepUpload } = require("../../utils/keptUploads");
 
 const createSourcingRequest = async (body, files) => {
   try {
@@ -45,6 +46,9 @@ const createSourcingRequest = async (body, files) => {
           is_primary: i === 0,
           is_active: true,
         });
+
+        // Kept with the request (upload.middleware.js deletes the rest).
+        keepUpload(file);
       }
     }
 

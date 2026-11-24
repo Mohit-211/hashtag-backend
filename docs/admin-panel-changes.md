@@ -5,7 +5,8 @@ What each backend release changes for the admin panel, and what the panel has to
 | Release | Backend commit | Panel action |
 |---|---|---|
 | [2026-11-24: print options must be on the price list](#2026-11-24-print-options) | `fbc10dd`, live since 24 Nov | None required |
-| [2026-11-24: page sizes on the lists the website also uses](#2026-11-24-list-limits) | Not deployed yet | None: the panel's admin token keeps its page sizes (up to 500 today) and its whole search |
+| [2026-11-24: page sizes on the lists the website also uses](#2026-11-24-list-limits) | `311e5ee`, live since 24 Nov | None: the panel's admin token keeps its page sizes (up to 500 today) and its whole search |
+| [2026-11-24: each upload takes only its own files](#2026-11-24-uploads) | not deployed yet | None |
 | [2026-11-20: pricing templates from a CSV file](#2026-11-20-template-import) | `898c128`, live since 20 Nov | Done in Hashtag-Billionaire-Admin `c597d0d`, live since 20 Nov: Pricing Templates › Import from CSV |
 | [2026-11-19: the Dashboard](#2026-11-19-dashboard) | `c1e6f1c`, live since 19 Nov | Done in Hashtag-Billionaire-Admin `5af5d20`, live since 19 Nov: the Dashboard page, and the Orders page takes its filters from the link |
 | [2026-11-18: grand, parent and supplier category names](#2026-11-18-category-names) | `98cddea`, live since 18 Nov | Done in Hashtag-Billionaire-Admin `91fe6df`, live since 18 Nov: every label now says Grand / Parent / Supplier Category |
@@ -84,7 +85,7 @@ Audit points F05 and F04. The cart now refuses (400) print options that aren't o
 **What the panel must do:** nothing.
 
 <a id="2026-11-24-list-limits"></a>
-## 2026-11-24: page sizes on the lists the website also uses (not deployed yet)
+## 2026-11-24: page sizes on the lists the website also uses (live since 24 Nov)
 
 Audit point F18: the public lists now stop shoppers at 200 rows a page (1,000 for `brand/website-brands`) and search only the first 100 characters ([frontend-changes.md](frontend-changes.md#2026-11-24-forms-lists)). The panel needs no change: it sends its admin token on every request, and a valid admin token keeps its own sizes, up to 10,000 rows, and its whole search. Its biggest requests, `brand/website-brands` and `brand/ss` with `limit=500`, still get every brand.
 
@@ -92,6 +93,33 @@ Audit point F18: the public lists now stop shoppers at 200 rows a page (1,000 fo
 - With the admin token, these lists now include the supplier fields shoppers never get (on products, `supplier_last_hash` and the supplier data kept in `meta`), as `get-grand-categories` already did. The panel doesn't read them.
 - `GET size` now pages, 200 a page by default. The panel doesn't call it.
 - The contact and sourcing forms' new checks (F16) don't change the Contact Us and Sourcing Requests pages. Rows saved from now on have trimmed text, and a contact row's subject is always one of the website's five.
+
+<a id="2026-11-24-uploads"></a>
+## 2026-11-24: each upload takes only its own files (not live yet)
+
+Audit point F15. Each upload endpoint now takes only the fields the panel sends. A request with any other file is refused (`400`) and nothing it sent is kept.
+
+| Endpoint | Files |
+|---|---|
+| `POST product/create-product` | `images`, up to 10 |
+| `POST product/add-product-variants` | `variant_images`, up to 20 |
+| `PUT product/manual/full`, `POST product/update` | `images` up to 10, `variant_images` up to 20 |
+| `POST brand`, `POST brand/publish`, `POST brand/manual-brand`, `POST industry`, `PUT industry/:id`, `POST industry/use-case`, `PUT industry/use-case/:id`, `POST add-on/addon-product`, `PUT add-on/addon-product/:id`, `POST gallery`, `PUT gallery/:id` | one `images` |
+
+- **Formats and size:** every image must be JPG, JPEG, PNG, WebP, AVIF or GIF with an image type, up to 20 MB, as `src/lib/uploads.ts` already checks. Videos, PDFs, audio and Word files are refused now; the panel never sends them. An image of exactly 20 MB is now taken: it was refused before, though the panel let it through.
+- **Messages:**
+  - `"x.pdf" can't be uploaded. Images must be JPG, PNG, WebP, AVIF or GIF files.`
+  - `"photo.jpg" is over 20 MB. Images must each be 20 MB or smaller.`
+  - "You can add up to 10 product images per save."
+  - "You can add up to 20 variant images per save, across all variants."
+  - "Send one image at a time." (gallery: "Send one image per gallery photo.")
+  - "This form doesn't take that kind of file. Remove it and try again."
+  - `PUT product/manual/full` and `POST product/update`, only for a hand-made request padded with empty file parts: "You can add up to 10 product images and 20 variant images per save."
+- **Files nothing uses are deleted** once the request is answered: every file of a refused or failed request, and a variant image sent without a variant to take it. An image that a saved record points to stays, even when a later step of the same save is refused.
+- **Unchanged:** the CSV imports, artwork approval previews, and replaced images (a brand's old logo still stays on disk).
+- **Sourcing requests** can now have SVG logos. The thumbnails and the lightbox show them; opening the file's own link downloads it.
+
+**Panel action:** none. Optional: the logo hint in `AllBrands.tsx:490` says "PNG, JPG, SVG", but the panel's picker and the API take JPG, PNG, WebP, AVIF or GIF.
 
 <a id="2026-11-23-artwork-approval"></a>
 ## 2026-11-23: artwork approval (live since 24 Nov)

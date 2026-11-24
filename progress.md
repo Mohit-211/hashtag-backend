@@ -128,7 +128,7 @@ Changes the shop and the admin panel need: [docs/frontend-changes.md](docs/front
 |---|---|---|---|---|
 | H1 | Rate limiter never ran | ✅ | `335d27b` | Counts per visitor since `TRUST_PROXY` was set on the server (N1) |
 | H2 | Production ran as development | ✅ | `335d27b` | |
-| H3 | Uploads everywhere, unlimited | ✅ | `335d27b`, `44141b0` | Graphics accept any format by decision (4 Nov); they're served only as downloads |
+| H3 | Uploads everywhere, unlimited | ✅ | `335d27b`, `44141b0` | Graphics are PNG, JPG or SVG since F21 (20 Nov) and are served only as downloads. Each endpoint takes only its own fields, formats and sizes since F15 (24 Nov, not live yet), and deletes the files it didn't use; [deployment.md](docs/deployment.md#upload-limits) lists them |
 | H4 | Token and password hash in addresses | ◐ | `335d27b` | Old rows still hold request bodies; purge needs SQL. DB |
 | H5 | Weak customer password reset | ✅ | `335d27b` | |
 | H6 | Login leaked account state | ✅ | `335d27b` | |

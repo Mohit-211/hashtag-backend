@@ -127,11 +127,10 @@ POST /admin/auth/forgot-password
 
 Files are accepted only on these admin endpoints, and the token is checked **before** the file is stored:
 
-`POST /product/create-product`, `POST /product/add-product-variants`, `PUT /product/manual/full`, `POST /product/update`, `POST /brand/`, `POST /brand/publish`, `POST /brand/manual-brand`, `POST /industry/`, `PUT /industry/:id`, `POST /industry/use-case`, `PUT /industry/use-case/:id`, `POST /add-on/addon-product`, `PUT /add-on/addon-product/:id`
+`POST /product/create-product`, `POST /product/add-product-variants`, `PUT /product/manual/full`, `POST /product/update`, `POST /brand/`, `POST /brand/publish`, `POST /brand/manual-brand`, `POST /industry/`, `PUT /industry/:id`, `POST /industry/use-case`, `PUT /industry/use-case/:id`, `POST /add-on/addon-product`, `PUT /add-on/addon-product/:id`, `POST /gallery`, `PUT /gallery/:id`, `POST /product/import` and `/product/import/preview`, `POST /pricing-template/import` and `/pricing-template/import/preview`, `POST /order/admin/:id/approval/lines/:lineId/proofs`
 
 - Files sent to any other endpoint get `400`. Multipart forms **without** files still work everywhere.
-- **Limits:** 20 MB per file, 40 files per request.
-- **Allowed types:** unchanged (`images`/`variant_images`: images, video, PDF, audio, Word; `customization_images`: SVG or AI).
+- **Limits and allowed types:** since 24 Nov (F15) each endpoint takes only the fields the panel sends ([admin-panel-changes.md](admin-panel-changes.md#2026-11-24-uploads)): JPG, PNG, WebP, AVIF or GIF images of up to 20 MB; 10 `images` and 20 `variant_images` on the product endpoints, and one `images` on the brand, industry, use case, add-on and gallery endpoints. As before, the CSV imports take one `file` (.csv, .tsv or .txt, up to 2 MB) and the approval previews one `approval_proof` (PNG, JPG or SVG, up to 20 MB). Until 24 Nov the image endpoints took 20 MB per file, 40 files per request, and images, video, PDF, audio or Word.
 - **Errors now return `400` with a readable message** (before, some were 500).
 - **Filenames:** uploaded file names now end with a random suffix (`images-<time>-<random>.png`). Nothing should depend on the old pattern.
 

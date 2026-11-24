@@ -103,13 +103,23 @@ if (config.env !== "test") {
   app.use(morgan.errorHandler);
 }
 
+// An SVG can carry scripts, and the sourcing form's logos can be SVG (since F15). In /uploads and
+// /images one never runs in a browser: opening it downloads it, and <img> and fetch can still
+// read it, as in /graphics below. Other files are served as before.
+const servedAsDownload = (res, filePath) => {
+  if (!/\.svgz?$/i.test(filePath)) return;
+  res.setHeader("Content-Disposition", "attachment");
+  res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
+};
+
 // Every file under <storage>/uploads, e.g. /uploads/images/x.png and /uploads/suppliers/...
 app.use(
   "/uploads",
   express.static(dirs.uploads, {
-    setHeaders: (res) => {
+    setHeaders: (res, filePath) => {
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+      servedAsDownload(res, filePath);
     },
   }),
 );
@@ -121,6 +131,7 @@ app.use(
     setHeaders: (res, filePath) => {
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+      servedAsDownload(res, filePath);
 
       if (filePath.endsWith(".avif")) {
         res.setHeader("Content-Type", "image/avif");

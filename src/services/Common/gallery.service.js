@@ -6,6 +6,7 @@ const { GalleryImage } = require("../../models");
 const ApiError = require("../../utils/ApiError");
 const { dirs } = require("../../config/storage");
 const settings = require("../../config/settings");
+const { keepUpload } = require("../../utils/keptUploads");
 
 // Gallery photos and captions (client decision Q56): the team adds, edits, orders and removes
 // them in the admin panel, and the shop lists the active ones.
@@ -96,6 +97,8 @@ const createGalleryImage = async (body, files) => {
     }
 
     const image = await GalleryImage.create({ ...pickFields(body), file_name: file.filename });
+    // Kept with the photo (upload.middleware.js deletes the rest).
+    keepUpload(file);
     return toResponse(image, true);
   } catch (error) {
     discardUploads(files);
@@ -116,6 +119,8 @@ const updateGalleryImage = async (id, body, files) => {
     if (file) fields.file_name = file.filename;
 
     await image.update(fields);
+    // Kept with the photo (upload.middleware.js deletes the rest).
+    keepUpload(file);
     return toResponse(image, true);
   } catch (error) {
     discardUploads(files);

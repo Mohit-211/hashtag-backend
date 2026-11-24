@@ -44,6 +44,7 @@ const settings = require("../../config/settings");
 const { cartLineTotal } = require("../../utils/pricing/cartLineTotal");
 const { handlingFeeFor } = require("./handlingFee.service");
 const { retireUnpaidOrders } = require("./unpaidOrders.service");
+const { keepUpload } = require("../../utils/keptUploads");
 
 // Variant's primary image, else its first image, else the product's first attachment.
 const getVariantImage = (variant) => {
@@ -1646,6 +1647,9 @@ const addToCart = async (body, files) => {
               artworkFile,
             );
 
+            // Saved as the customer's graphic: kept (upload.middleware.js deletes the rest).
+            keepUpload(artworkFile);
+
             updatedItem.graphic_id = graphic.id;
 
             updatedItem.logo_image =
@@ -1797,6 +1801,9 @@ const addToCart = async (body, files) => {
 
           pricing_snapshot,
         });
+
+        // The line shows the preview: kept (upload.middleware.js deletes the rest).
+        keepUpload(files?.images?.[0]);
 
         createdCartItems.push(cart);
       }
@@ -1980,6 +1987,9 @@ const addToCart = async (body, files) => {
 
           pricing_snapshot,
         });
+
+        // The line shows the preview: kept (upload.middleware.js deletes the rest).
+        keepUpload(files?.images?.[0]);
 
         createdCartItems.push(cart);
       }

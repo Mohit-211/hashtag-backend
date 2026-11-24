@@ -25,7 +25,7 @@ All API paths below are relative to `/api/v1`. Responses keep the usual shape:
 
 **Removed:** `POST /user/auth/otp` and `POST /user/auth/verify-otp`. The 4-digit code screen and its resend timer go away.
 
-**Registration:** `POST /user/auth/register` works as before: same fields, multipart allowed for profile `images`. Response `201` with message *"Account created. Please check your email and click the verification link within 2 hours."*
+**Registration:** `POST /user/auth/register` works as before: same fields, multipart allowed (text only since 24 Nov: sign-up takes no files, F15). Response `201` with message *"Account created. Please check your email and click the verification link within 2 hours."*
 - The account starts unverified.
 - The backend emails a link: `https://<your site>/verify-email?token=<64 hex characters>`.
 - **Accounts not verified within 2 hours are deleted automatically**, and the same email can then register again.
@@ -101,12 +101,13 @@ The same `/reset-password` page also serves customers whose account was created 
 
 ## 5. File uploads
 
-- **Files are accepted only on:**
-  - `POST /user/auth/register` (`images`)
-  - `POST /product/cart` (`images`, `customization_images`; sign-in required before the file is accepted)
-  - `POST /sourcing-requests/create`
+- **Files are accepted only on** (each endpoint's own fields since 24 Nov, F15):
+  - `POST /product/cart` (`images`: one design preview; `customization_images`: graphics; sign-in required before the file is accepted)
+  - `POST /sourcing-requests/create` (`images`)
+  - `POST /graphics` (`graphic`, since 4 Nov)
+  - `POST /user/auth/register` took `images` until 24 Nov; it takes no files now.
 - Multipart requests with files to **any other endpoint get `400`** *"File uploads aren't accepted for this field or endpoint."* Multipart forms without files still work everywhere.
-- **Limits:** 20 MB per file, 40 files per request. `customization_images`: SVG or AI only (unchanged).
+- **Limits:** were 20 MB per file and 40 files per request. Since 24 Nov (F15) each endpoint has its own counts, formats and sizes: [frontend-changes.md](frontend-changes.md#2026-11-24-uploads). Graphics are PNG, JPG or SVG since 20 Nov (F21).
 
 ## 6. Rate limits (new)
 

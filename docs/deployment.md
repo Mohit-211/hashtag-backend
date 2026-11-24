@@ -146,6 +146,23 @@ Rate limits and the history use the visitor's own address: `TRUST_PROXY` on the 
 
 ## Upload limits
 
+Each upload endpoint takes only its own fields (F15, 24 Nov; `UPLOADS` in `src/config/multer.js`). Any other file is refused with `400`:
+
+| Endpoint | Field: count, formats, size of each |
+|---|---|
+| `POST user/auth/register` | none |
+| `POST sourcing-requests/create` | `images`: 10, PNG, JPG or SVG, 20 MB |
+| `POST product/cart` | `images`: 1 design preview, PNG or JPG, 2 MB; `customization_images`: 10, PNG, JPG or SVG, 100 MB |
+| `POST graphics` | `graphic`: 1, PNG, JPG or SVG, 100 MB |
+| Admin product endpoints | `images`: 10 and `variant_images`: 20, JPG, PNG, WebP, AVIF or GIF, 20 MB |
+| Admin brand, industry, use case, add-on and gallery endpoints | `images`: 1, the same formats, 20 MB |
+| CSV imports | `file`: 1 CSV, 2 MB, read in memory |
+| Artwork approval | `approval_proof`: 1, PNG, JPG or SVG, 20 MB; `approval_picture`: 5, PNG or JPG, 10 MB |
+
+On the endpoints F15 changed, files a request didn't use are deleted once it has answered, and a request whose sender goes away before its upload finishes leaves nothing on disk. `POST graphics`, the CSV imports and the approval routes work as before.
+
+Known gap, as before F15: on `POST graphics` and the two approval routes, an upload whose sender goes away part way still leaves its partial file in `graphics` or `approvals`, and keeps one file handle open until the app restarts (multer never calls back when the sender leaves). Only a signed-in customer, the team, or someone with an approval link can send these uploads.
+
 Customers' graphics can be up to 100 MB each. They're stored in `graphics` in the storage folder, which the app creates at start, and served at `/graphics`. What sits in front of the app allows that (checked 4 November):
 
 - **Apache:** `node.hashtagbillionaire.com.conf` passes everything to the app with `ProxyPass /`, `/graphics` included, and sets no `LimitRequestBody`.

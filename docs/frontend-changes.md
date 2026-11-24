@@ -8,7 +8,8 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 |---|---|---|
 | [2026-11-24: an order keeps the address it was priced for](#2026-11-24-ship-to) | `6c6ec41`, live since 24 Nov | None required |
 | [2026-11-24: print options must be on the price list; one drinkware rule](#2026-11-24-print-options) | `fbc10dd`, live since 24 Nov | None required. Recommended: decide drinkware from `is_drinkware` |
-| [2026-11-24: the contact and sourcing forms are checked on the server; page sizes on public lists](#2026-11-24-forms-lists) | Not deployed yet | None required. Optional: limit the support form's email to 100 characters |
+| [2026-11-24: the contact and sourcing forms are checked on the server; page sizes on public lists](#2026-11-24-forms-lists) | `311e5ee`, live since 24 Nov | None required. Optional: limit the support form's email to 100 characters |
+| [2026-11-24: each upload takes only what its form sends](#2026-11-24-uploads) | not deployed yet | None required. Recommended: show the sourcing form's 20 MB limit, and cap pre-made products at 10 graphics in total |
 | [2026-11-20: unpaid orders and one payment at a time](#2026-11-20-paying-order) | `f09c0b4`, live since 20 Nov | None required: the shop already shows the API's messages. Optional: see the note on 409 from `POST order` |
 | [2026-11-20: graphics are PNG, JPG or SVG only](#2026-11-20-graphic-types) | `35ba84e`, live since 20 Nov | Done in hashtag-next, not deployed yet: both graphic pickers limited to PNG, JPG, JPEG and SVG |
 | [2026-11-13: payments go-live](#2026-11-13-go-live) | `2634b76`, live since 16 Nov | Done in hashtag-next `744ba16` and `5d0fcff`, not deployed yet |
@@ -158,7 +159,7 @@ The shop's own request-building code at both `7590672` and `11c00f8` was also ru
 The shop's rule and the API's were also compared over all 1,290 listed products, in every order their categories can come back in: the API never refuses a print method the shop offers. They differ on two products, and on both the shop offers no printing: the 50L Utility Duffel Bag (381, also under Workwear) and the Campfire Kit (105868, also under Drinkware).
 
 <a id="2026-11-24-forms-lists"></a>
-## 2026-11-24: the contact and sourcing forms are checked on the server; page sizes on public lists (not deployed yet)
+## 2026-11-24: the contact and sourcing forms are checked on the server; page sizes on public lists (live since 24 Nov)
 
 Audit points F16 and F18:
 - **F16:** the support form's and the sourcing form's rules were checked only in the browser. Anyone could make the shop send its "We've received your message" email from support@, info@ or quotes@ to any address, or to several at once (`a@x.com, b@y.com`), with their own text in it. A long name or company gave a server error.
@@ -208,6 +209,62 @@ Tested on 24 Nov against a throwaway MariaDB 10.11 with production's schema and 
 - 92 requests that the shop or the admin panel sends, or that are within the limits, got exactly the same answers as before, emails included. Among them: the categories page's 1,000 brands out of 1,250.
 - 58 crafted requests, the audit's own among them, were refused with a message that names the field or the search. None of them saved a row, sent an email or left a file. 62 more were brought within the limits.
 - 120,000 random forms went through the shop's own rules and the server's. Every form the shop accepts passes the server, except contact emails of 101 to 254 characters.
+
+<a id="2026-11-24-uploads"></a>
+## 2026-11-24: each upload takes only what its form sends (not live yet)
+
+Audit point F15, and the preview half of F12:
+- The sourcing form says "PNG, JPG, or SVG", but the server refused SVG, so the whole request failed and the lead was lost. It also took PDF, video and Word files the form doesn't offer.
+- Sign-up, the sourcing form and add to cart each took up to 40 files (20 MB each, 100 MB on the cart). Most were never used and never deleted, and a request cut off mid-upload left its partial file behind.
+- The cart's preview picture could be any of those types, up to 100 MB. It becomes the line's `logo_image`, which orders, the admin and the approval page show as the design.
+
+**What changed in the API.** A refused request gets `400` with one of the messages below, and nothing it sent is kept.
+
+| Endpoint | Files it takes |
+|---|---|
+| `POST user/auth/register` | None. |
+| `POST sourcing-requests/create` | `images`: up to 10, PNG, JPG/JPEG or SVG, 20 MB each. The whole request must also stay under about 100 MB, Cloudflare's limit. |
+| `POST product/cart` | `images`: one design preview, PNG or JPG, up to 2 MB. `customization_images`: as before, up to 10 graphics in one add to cart across all options, PNG, JPG/JPEG or SVG, 100 MB each. |
+
+- After saving, the server reads each sourcing image: an `.svg` must be a real SVG, and a `.png`, `.jpg` or `.jpeg` a real picture. A WebP, AVIF, HEIC or GIF photo saved under a `.jpg` or `.png` name is still taken, as before; a ZIP, PDF, video or web page under such a name isn't. The preview must really be a PNG or JPEG.
+- A sourcing image of exactly 20 MB and a cart graphic of exactly 100 MB are now taken. They were refused before, although the messages say "or smaller".
+
+Messages (the file's own name is shown in quotes):
+- Sign-up with any file: "Sign-up doesn't take files. Remove the file and try again."
+- Sourcing form:
+  - another format: `"brief.pdf" can't be uploaded. Logo and reference images must be PNG, JPG or SVG files.`
+  - a file that isn't what its name says: `"logo.png" isn't a real PNG or JPG file. Logo and reference images must be PNG, JPG or SVG files.` For an `.svg` name: `"logo.svg" isn't a real SVG file. Logo and reference images must be PNG, JPG or SVG files.`
+  - an 11th image: "You can upload up to 10 images."
+  - over 20 MB: `"IMG_2041.jpg" is over 20 MB. Logo and reference images must each be 20 MB or smaller.`
+- Cart:
+  - a preview that isn't a PNG or JPG: "The design preview must be a PNG or JPG picture."
+  - a preview that isn't what its name says: `"customization.png" isn't a real PNG or JPG file. The design preview must be a PNG or JPG picture.`
+  - a second preview: "Send only one design preview."
+  - a preview over 2 MB: `"customization.png" is over 2 MB. The design preview must be 2 MB or smaller.`
+  - an 11th graphic: "You can upload up to 10 graphics in one add to cart, across all options." (was "File uploads aren't accepted for this field or endpoint.")
+  - a graphic of another format, a renamed one or one over 100 MB: F21's messages, unchanged.
+- Sourcing form or cart, a file in any other field: "This form doesn't take that kind of file. Remove it and try again."
+- Cart, only for a hand-made request padded with empty file parts: "Send one design preview and up to 10 graphics in one add to cart." The sourcing form answers such a request with "You can upload up to 10 images."
+
+Other changes:
+- An SVG sent with the sourcing form is kept as sent. Its link downloads it, like a graphic's; `<img>` shows it as usual.
+- Files a request doesn't use are deleted once it's answered: a graphic sent with a supplier line, a file no option points to, and every file of a refused request, except a graphic already saved to the customer's Saved graphics and a preview already on a cart line written before the refusal. So is what was sent before the customer left mid-upload.
+- A refused request is answered once the server has read the rest of it, so a big upload always gets its message instead of a cut connection.
+- Unchanged: `POST graphics`, F21's rules for `customization_images`, the approval page, and every other endpoint (files are refused there, as before).
+
+**What the shop must do: nothing.** The live site (`7590672`) and `main` (`11c00f8`) send only what's still accepted:
+- sign-up sends text only (`RegisterForm.tsx:62-70`);
+- the sourcing form sends at most 10 `images`, of the types it allows (`Conciergesourcingsection.tsx:24-26`, `:78-83`, `:132`);
+- the customizer sends one 500×500 `customization.png` (`AddToCartModal.tsx:294-296`) or none. The largest a 500×500 canvas can make is about 1 MB;
+- pre-made products send only `customization_images` (`manualCartPayload.ts:102`).
+
+Recommended, not required:
+1. **Sourcing form:** show "PNG, JPG or SVG — up to 10 images, 20 MB each" at `Conciergesourcingsection.tsx:359`, and in `handleFilesSelected` (`:74`) skip files over 20 MB with a toast, the way it already skips other formats, so one big photo doesn't stop the whole request.
+2. **Pre-made products:** `IMAGE_MAX_COUNT` (5) is per option, and nothing caps the total. With three or more options that take uploads, a customer can pick 11 to 15 files, and the add to cart is refused, as it is today. Cap the total at 10 in `handleFiles` (`ManualCustomizationPage.tsx:298` on `main`, `:293` live) with "You can upload up to 10 graphics in one add to cart."
+
+If the shop changes what it sends, it has to stay inside the table above: a bigger or different preview must still be one PNG or JPG of 2 MB at most, sign-up can't attach a file (a profile photo needs a backend change first), and the sourcing form can't offer PDF, WebP, HEIC or other formats by name.
+
+Tested on 24 Nov against production's schema in strict SQL mode, the live code and this change side by side, 119 requests. The requests the website and the admin panel send get the same answers as before, except that the sourcing form now takes an SVG. 31 crafted requests are refused with the messages above, and no request to the three endpoints above leaves a file that nothing points to.
 
 ---
 
