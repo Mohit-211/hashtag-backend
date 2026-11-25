@@ -4,8 +4,9 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
-| [2026-11-25: SAGE products are customized for free](#2026-11-25-sage-free) | not deployed yet | None required |
-| [2026-11-25: a customization value's price is optional](#2026-11-25-optional-price) | not deployed yet | Done in Hashtag-Billionaire-Admin, not deployed yet: the price is optional on the Customizations page |
+| [2026-11-25: print locations per garment](#2026-11-25-print-locations) | live since 25 Nov | None required |
+| [2026-11-25: SAGE products are customized for free](#2026-11-25-sage-free) | `8b7b9fc`, live since 25 Nov | None required |
+| [2026-11-25: a customization value's price is optional](#2026-11-25-optional-price) | `4888377`, live since 25 Nov | Done in Hashtag-Billionaire-Admin `6962059`, live since 25 Nov: the price is optional on the Customizations page |
 | [2026-11-24: print options must be on the price list](#2026-11-24-print-options) | `fbc10dd`, live since 24 Nov | None required |
 | [2026-11-24: page sizes on the lists the website also uses](#2026-11-24-list-limits) | `311e5ee`, live since 24 Nov | None: the panel's admin token keeps its page sizes (up to 500 today) and its whole search |
 | [2026-11-24: each upload takes only its own files](#2026-11-24-uploads) | `739b58c`, live since 24 Nov | None |
@@ -71,8 +72,15 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 1. **`payment_status=ALL`:** coming in the next release: `GET order/admin?payment_status=ALL` lists orders of every payment status. Without the parameter it still lists paid orders only.
 2. **The 2 unpaid orders the panel doesn't show:** when a customer's cart changes, the backend soft-deletes their latest unpaid order (`invalidatePendingOrder` in `cartWishlist.service.js`), and orders are paranoid, so those two are hidden from every list. Nothing is missing on the panel's side; the behaviour itself is on the payments list (audit H8).
 
+<a id="2026-11-25-print-locations"></a>
+## 2026-11-25: print locations per garment (live since 25 Nov)
+
+Audit point F08. The cart now refuses (400) print locations the product's garment doesn't offer: Full Front and the oversized back, hat spots on clothing and the reverse, `SLEEVE_LEFT` and `SLEEVE_RIGHT`, both back sizes, and a location twice (`SLEEVE` twice aside, until the shop offers one sleeve on T-shirts). The rules and messages: [frontend-changes.md](frontend-changes.md#2026-11-25-print-locations). For the order screens: old orders are never repriced and show as before; new items' `customization_config.locations` hold only their garment's codes, with `SLEEVE` as the only sleeve code.
+
+**What the panel must do:** nothing.
+
 <a id="2026-11-25-sage-free"></a>
-## 2026-11-25: SAGE products are customized for free (not deployed yet)
+## 2026-11-25: SAGE products are customized for free (live since 25 Nov)
 
 Decided on 25 Nov. A SAGE order item's `pricing_snapshot` has no `pricing_table` and no customization price; the drinkware $8 back print is gone on SAGE.
 - **Supplier cost:** still in `product_price` (`actual_price`, `supplier_markup`), and the tier is in `tier_quantity`.
@@ -82,7 +90,7 @@ Decided on 25 Nov. A SAGE order item's `pricing_snapshot` has no `pricing_table`
 **What the panel must do:** nothing.
 
 <a id="2026-11-25-optional-price"></a>
-## 2026-11-25: a customization value's price is optional (not deployed yet)
+## 2026-11-25: a customization value's price is optional (live since 25 Nov)
 
 Asked for on 25 Nov: a **One price** (`FIXED`) or **Fixed quantity** (`FIXED_QUANTITY`) value can be saved without a price. Left empty, it costs nothing extra: the cart and the shop count a missing price as $0, as they always have.
 
@@ -102,7 +110,7 @@ Audit points F05 and F04. The cart now refuses (400) print options that aren't o
 - `customization_config` holds the print method, locations, colours and DTG print area as they were priced: in capitals, with `colors` only for screen print and `dtg_style` only for DTG. The shop already sends them that way.
 - SAGE drinkware keeps its `pricing_table` row as it is (`type: "SAGE_DRINKWARE"`, no `price_per_item`), so the panel's "$0.00, confirm" caution and the "Decoration per item" mismatch on that row show as before.
 - A drinkware product from another supplier gets a `type: "DRINKWARE"` row with the same fields plus `price_per_item` (8 with front and back, 0 with one location). The Orders page's checks add up on it, and the Payments page shows "5 × $8" for 5 pieces. The panel shows `print_method` for both rows.
-- Embroidery on `SLEEVE_LEFT` and `SLEEVE_RIGHT` (the shop sends `SLEEVE` today) gets a row each at the sleeve price.
+- Embroidery on `SLEEVE_LEFT` and `SLEEVE_RIGHT` (the shop sends `SLEEVE` today) got a row each at the sleeve price. Refused since [print locations per garment](#2026-11-25-print-locations) (25 Nov).
 - A SAGE product filed under "Apparel & Uniforms" (none today) gets the clothing rows (`EMBROIDERY`, `DTF`, `SCREEN_PRINT`, `DTG`) after its `SAGE` row.
 
 **What the panel must do:** nothing.

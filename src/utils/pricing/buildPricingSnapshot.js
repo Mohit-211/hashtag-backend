@@ -2,7 +2,7 @@ const { calculatePricing } = require("../../config/pricing");
 const httpStatus = require("http-status");
 const ApiError = require("../ApiError");
 const { netPriceTiers } = require("./pricing.util");
-const { APPAREL_PRINT_METHODS, DRINKWARE_PRINT_METHODS, printMethodsFor } = require("../productFamily");
+const { APPAREL_PRINT_METHODS, DRINKWARE_PRINT_METHODS, printMethodsFor, garmentsFor } = require("../productFamily");
 
 // The tumblers' $35 handling charge used to be added to each SAGE cart line here. It is now an
 // order fee, charged once per order and set on the Settings page (handlingFee.service.js).
@@ -214,20 +214,39 @@ const DTG_PRICING = {
 
 /*
 |--------------------------------------------------------------------------
-| WHAT CAN BE SOLD (audit F04, F05)
+| WHAT CAN BE SOLD (audit F04, F05, F08)
 |--------------------------------------------------------------------------
 */
 
 const DRINKWARE_LOCATIONS = ["FRONT", "BACK"];
 
-// Embroidery prices each sleeve at the sleeve rate. The shop sends both as SLEEVE today; keeping
-// them apart waits for the client (audit F08, question A10).
-const EMBROIDERY_PRICE_ROW = { SLEEVE_LEFT: "SLEEVE", SLEEVE_RIGHT: "SLEEVE" };
+// Where each garment can be printed (audit F08): the spots the shop offers on it
+// (Productcustomizationpage.tsx GARMENT_VIEWS, the same at 7590672, 0802ff4 and e3197b8), as the shop sends
+// them. Its left and right sleeve both go as SLEEVE, the only sleeve code (decision of 24 Nov
+// 2026). Full Front is left out: the shop never lets it be chosen.
+const GARMENT_LOCATIONS = {
+  tshirt: ["LEFT_CHEST", "RIGHT_CHEST", "FULL_BACK_STANDARD", "FULL_BACK_LARGE", "SLEEVE"],
+  hoodie: ["LEFT_CHEST", "RIGHT_CHEST", "FULL_BACK", "SLEEVE"],
+  hat: ["HAT_FRONT", "HAT_BACK_ARCH", "HAT_SIDE"],
+  polo: ["LEFT_CHEST", "RIGHT_CHEST", "FULL_BACK_STANDARD", "FULL_BACK_LARGE", "SLEEVE"],
+};
 
-// Embroidery quoted by the team, never added to a cart (client decisions Q5 and Q6, audit DEC-04
-// and DEC-06). Under DTF, screen print and DTG these are priced like any other location until each
-// garment's own locations are decided (audit F08).
-const EMBROIDERY_QUOTE_ONLY = { FULL_FRONT: "Full Front", FULL_BACK: "Full Back", OVERSIZED_BACK: "Oversized Back" };
+// Quoted by the team, never added to a cart, whatever the print method: no garment offers them
+// (client decisions Q5 and Q6, audit DEC-05 and DEC-06).
+const QUOTE_ONLY_LOCATIONS = { FULL_FRONT: "Full Front", OVERSIZED_BACK: "Oversized Back" };
+
+// Two sizes of the same print area: the shop drops one when the other is picked.
+const BACK_SIZES = ["FULL_BACK_STANDARD", "FULL_BACK_LARGE"];
+
+// The shop sends a T-shirt's left and right sleeve both as SLEEVE, so a tee with both sleeves comes
+// as SLEEVE twice, priced twice. Until the shop offers one sleeve on T-shirts (decision of 24 Nov
+// 2026), SLEEVE twice is the one repeated location accepted. Set this to false once it does
+// (docs/deployment.md, "Switching off SLEEVE twice").
+const SLEEVE_TWICE_ACCEPTED = true;
+
+// Hoodies offer the full back, but its embroidery is quoted by the team, never added to a cart
+// (client decision Q5, audit DEC-04).
+const EMBROIDERY_QUOTE_ONLY = { FULL_BACK: "Full Back" };
 
 // What the customer reads when a decoration can't be sold (400). The shop never sends these
 // requests; an old page or an edited request can.
@@ -245,6 +264,11 @@ const MESSAGES = {
     `${label} embroidery is by quote only. Please remove it, choose another print method, or contact us for a quote.`,
   embroideryLocation: "This print location isn't available for embroidery. Please choose another one.",
   drinkwareLocation: "This product can only be printed on the front, the back, or both. Please choose one of those.",
+  quoteOnlyLocation: (label) =>
+    `${label} is by quote only. Please choose another print location or contact us for a quote.`,
+  garmentLocation: "This print location isn't available for this product. Please choose another one.",
+  backSizes: "Please choose Full Back (Standard) or Full Back (Large), not both.",
+  repeatedLocation: "Please choose each print location only once.",
 };
 
 // Lines already in a cart that today's rules refuse (added before them, or the product has moved
@@ -358,10 +382,32 @@ const methodProblem = (allowed) => {
   return MESSAGES.noPrinting;
 };
 
-// A cart line's decoration read the way it's priced (audit F04, F05): { customization }, a copy with
-// print_method, the location codes, colors and dtg_style written as the price tables write them
-// (colors only for screen print, dtg_style only for DTG), or { problem }: why it can't be sold. A
-// line without a print method or locations is undecorated and taken as it is.
+// Why a clothing line's locations can't be sold on this product, or null (audit F08): Full Front
+// and the oversized back are by quote only; the locations must all be offered on one garment the
+// shop can show the product as; the two back sizes go alone; and each location goes once, SLEEVE
+// twice aside (SLEEVE_TWICE_ACCEPTED).
+const garmentLocationProblem = (codes, categories) => {
+  const quoted = codes.find((code) => Object.hasOwn(QUOTE_ONLY_LOCATIONS, code));
+  if (quoted) return MESSAGES.quoteOnlyLocation(QUOTE_ONLY_LOCATIONS[quoted]);
+
+  const offered = garmentsFor(categories).some((garment) =>
+    codes.every((code) => GARMENT_LOCATIONS[garment].includes(code)),
+  );
+  if (!offered) return MESSAGES.garmentLocation;
+
+  if (BACK_SIZES.every((code) => codes.includes(code))) return MESSAGES.backSizes;
+
+  const repeats = codes.filter((code, index) => codes.indexOf(code) !== index);
+  const sleeveTwice = SLEEVE_TWICE_ACCEPTED && repeats.length === 1 && repeats[0] === "SLEEVE";
+  if (repeats.length && !sleeveTwice) return MESSAGES.repeatedLocation;
+
+  return null;
+};
+
+// A cart line's decoration read the way it's priced (audit F04, F05, F08): { customization }, a
+// copy with print_method, the location codes, colors and dtg_style written as the price tables
+// write them (colors only for screen print, dtg_style only for DTG), or { problem }: why it can't
+// be sold. A line without a print method or locations is undecorated and taken as it is.
 const readPrintOptions = (customization, categories) => {
   if (!customization || typeof customization !== "object" || Array.isArray(customization)) {
     return { customization };
@@ -398,9 +444,13 @@ const readPrintOptions = (customization, categories) => {
       : { problem: MESSAGES.drinkwareLocation };
   }
 
+  // Clothing: only the locations the shop offers on this garment (audit F08).
+  const locationProblem = garmentLocationProblem(codes, categories);
+  if (locationProblem) return { problem: locationProblem };
+
   if (method === "EMBROIDERY") {
     for (const code of codes) {
-      if (Object.hasOwn(EMBROIDERY_PRICING, EMBROIDERY_PRICE_ROW[code] || code)) continue;
+      if (Object.hasOwn(EMBROIDERY_PRICING, code)) continue;
       return {
         problem: EMBROIDERY_QUOTE_ONLY[code]
           ? MESSAGES.embroideryQuote(EMBROIDERY_QUOTE_ONLY[code])
@@ -447,7 +497,7 @@ const decorationOf = (checked, quantity, supplier) => {
 
   if (method === "EMBROIDERY") {
     const rows = locations.map((location) => {
-      const price = getEmbroideryPrice(EMBROIDERY_PRICING[EMBROIDERY_PRICE_ROW[location] || location], quantity);
+      const price = getEmbroideryPrice(EMBROIDERY_PRICING[location], quantity);
 
       return {
         type: "EMBROIDERY",

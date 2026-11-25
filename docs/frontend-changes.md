@@ -6,6 +6,7 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
+| [2026-11-25: print locations per garment; one sleeve](#2026-11-25-print-locations) | live since 25 Nov | **Required:** one Sleeve spot on T-shirts (decided 24 Nov). Everything the shop sends today is still accepted |
 | [2026-11-25: one add to cart adds all its lines or none](#2026-11-25-all-or-none) | live since 25 Nov | None required |
 | [2026-11-25: quantity-based options are sold only at their listed quantities](#2026-11-25-quantity-options) | live since 25 Nov | None required: the product page already sells only those quantities, and the cart shows the API's message |
 | [2026-11-25: customers can change their name and phone](#2026-11-25-profile) | live since 25 Nov | **To turn it on:** set `PROFILE_EDIT_ENABLED` to `true` in `ProfileSection.tsx` and deploy |
@@ -84,6 +85,31 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 **Waiting on the client:** A8, DTG with several locations (Q8, reworded); which font settings besides the font list (Q23). **Later, by the client's choice:** A24 pre-made products from suppliers (Q26), A42 price filter (Q54), A46 Back button (Q57), policy pages editable in the admin (Q61).
 
 ---
+
+<a id="2026-11-25-print-locations"></a>
+## 2026-11-25: print locations per garment; one sleeve (live since 25 Nov)
+
+Audit F08; decided on 24 Nov that one sleeve is enough and `SLEEVE` stays the only sleeve code. `POST product/cart`, the cart's quantity changes and `POST order` (for lines already in a cart) now accept only the print locations the product's garment offers on the website:
+
+| Garment (from a parent category's title, the shop's `garmentType` rule) | Locations |
+|---|---|
+| Hoodie ("hoodie" or "sweatshirt") | `LEFT_CHEST`, `RIGHT_CHEST`, `FULL_BACK`, `SLEEVE` |
+| Hat ("hat", "cap" or "headwear") | `HAT_FRONT`, `HAT_BACK_ARCH`, `HAT_SIDE` |
+| Polo ("polo") | `LEFT_CHEST`, `RIGHT_CHEST`, `FULL_BACK_STANDARD`, `FULL_BACK_LARGE`, `SLEEVE` |
+| T-shirt (any other title) | `LEFT_CHEST`, `RIGHT_CHEST`, `FULL_BACK_STANDARD`, `FULL_BACK_LARGE`, `SLEEVE` |
+
+A product under several parent categories can use the list of any one of its garments (one list per line), since the shop takes the garment from whichever parent category comes first. Codes are read in any letter case, as before.
+
+Refused with 400:
+- `FULL_FRONT` and `OVERSIZED_BACK`, with any print method: "Full Front is by quote only. Please choose another print location or contact us for a quote." (or "Oversized Back ...").
+- A location the garment doesn't have, a made-up code, and `SLEEVE_LEFT` or `SLEEVE_RIGHT`: "This print location isn't available for this product. Please choose another one."
+- Both back sizes on one line: "Please choose Full Back (Standard) or Full Back (Large), not both."
+- A location twice: "Please choose each print location only once." **`SLEEVE` twice is still accepted**, because the shop sends a T-shirt's two sleeves both as `SLEEVE`.
+- Hoodie Full Back embroidery stays by quote only, as before.
+
+Everything the shop sends today is accepted and priced as before. All 1,632 combinations of garment, locations, print method and quantity the customizer can send were checked against the previous release.
+
+**What the shop must do (required):** give T-shirts a single "Sleeve" spot, like hoodies and polos, so a T-shirt sends `SLEEVE` at most once. In `Productcustomizationpage.tsx`, replace the `SLEEVE_LEFT` and `SLEEVE_RIGHT` views of the `tshirt` entry in `GARMENT_VIEWS` with one sleeve view. Keep sending `SLEEVE`, and in `pricing.ts` (`decorationRequestFields`) drop a repeated location, so a design saved before the change can't send two sleeves. Tell the backend team once it's live: `SLEEVE` twice will then be refused too.
 
 <a id="2026-11-25-all-or-none"></a>
 ## 2026-11-25: one add to cart adds all its lines or none (live since 25 Nov)
@@ -214,7 +240,7 @@ As with the other refusals there (stock, minimums), the elements of the same req
 
 **Accepted and priced now** (they were $0):
 - A print method or DTG print area in small letters (`"embroidery"`, `"front_regular"`). The line is saved in capitals.
-- `SLEEVE_LEFT` and `SLEEVE_RIGHT` under embroidery, at the sleeve price. They're saved as sent.
+- `SLEEVE_LEFT` and `SLEEVE_RIGHT` under embroidery, at the sleeve price. They're saved as sent. Refused since [print locations per garment](#2026-11-25-print-locations) (25 Nov): `SLEEVE` is the only sleeve code.
 - Embroidery on a location written with a space, such as `"left chest"`. It's saved as `LEFT_CHEST`.
 
 **Saved in the price tables' spelling, at the same price as before:** location codes such as `"left-chest"` (saved as `LEFT_CHEST`), and `colors` sent as text (`"3"`, saved as `3`). The saved line keeps `colors` only for screen print and `dtg_style` only for DTG.

@@ -12,6 +12,10 @@
 // 24 Nov 2026 the two differ on two products, both ones the website offers no printing for: the 50L
 // Utility Duffel Bag (also under Workwear) and the Campfire Kit (also under Drinkware).
 //
+// It also gives the garments the shop can show a clothing product as (garmentsFor, audit F08), from
+// its parent categories' titles, the website's garmentType rule; buildPricingSnapshot.js lists the
+// print locations of each.
+//
 // `categories`: product categories with their `parent_categories` and those parents'
 // `grand_categories`, as getProductCategories and the product pages load them (model instances or
 // plain objects).
@@ -38,10 +42,33 @@ const printMethodsFor = (categories) => [
   ...(isDrinkwareProduct(categories) ? DRINKWARE_PRINT_METHODS : []),
 ];
 
+// The garment the shop shows a clothing product as, from a parent category's title (audit F08):
+// the website's own rule, word for word (Productcustomizationpage.tsx, garmentType). Every other
+// title, clothing or not (outerwear, workwear, patches, bags), means a T-shirt.
+const garmentOfParent = (title) => {
+  const parent = String(title ?? "").toLowerCase().trim();
+  if (parent.includes("hoodie") || parent.includes("sweatshirt")) return "hoodie";
+  if (parent.includes("hat") || parent.includes("cap") || parent.includes("headwear")) return "hat";
+  if (parent.includes("polo")) return "polo";
+  return "tshirt";
+};
+
+// The garments the shop can show a clothing product as. The website takes the garment from the
+// first parent category it finds, so, as with the print methods, every parent category counts here
+// and whatever the shop offers is accepted in any order. On the catalog of 24 Nov 2026 these are
+// exactly the garments the shop can show, for every product; 92 S&S products filed under Workwear
+// and under Polos or Sweatshirt & Fleece are shown as a T-shirt, a polo or a hoodie, depending on
+// that order.
+const garmentsFor = (categories) => [
+  ...new Set(parentCategoriesOf(categories).map((parent) => garmentOfParent(parent?.title))),
+];
+
 module.exports = {
   APPAREL_PRINT_METHODS,
   DRINKWARE_PRINT_METHODS,
   isApparelProduct,
   isDrinkwareProduct,
   printMethodsFor,
+  garmentOfParent,
+  garmentsFor,
 };

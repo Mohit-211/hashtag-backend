@@ -233,6 +233,12 @@ From this release the cart and checkout refuse print options that aren't on the 
 
 If the first query shows a line that fails, stop and ask before pushing: that customer would be stopped at checkout with "The print options on … aren't available any more. Please remove it from your cart and add it again."
 
+## Print locations per garment (audit F08)
+
+Live since 25 Nov. The cart and checkout refuse print locations the product's garment doesn't offer ([frontend-changes.md](frontend-changes.md#2026-11-25-print-locations)). No migration. Lines already in carts stay, but one the new rule refuses can't be ordered: checkout answers 400 and names it ("The print options on … aren't available any more. Please remove it from your cart and add it again."). The shop has never sent a location this refuses, so only an edited request could have made such a line.
+
+**Switching off SLEEVE twice.** The shop sends a T-shirt's left and right sleeve both as `SLEEVE`, so `SLEEVE` twice is the one repeated location accepted. Once the shop offers one sleeve on T-shirts and that is live, set `SLEEVE_TWICE_ACCEPTED` to `false` in `src/utils/pricing/buildPricingSnapshot.js` and push. Lines in carts with two sleeves are then refused at checkout, so check first that no open cart line has `SLEEVE` twice.
+
 ## Undoing a release
 
 `git revert <commit>` and push. The server only moves forward along `main`: don't force-push it, the deploy refuses a commit that doesn't build on the one running.
