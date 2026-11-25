@@ -1434,16 +1434,61 @@ const findProductIdsForSearch = async (search) => {
   return searchProductIds;
 };
 
+// The lowest price per piece of a manual variant priced by quantity (decided 25 Nov: cards show
+// the lowest price per piece, the way SAGE cards already do). Read the way the cart charges it
+// (cartWishlist.service.js):
+// - "Set quantities" (quantity_fixed): each row is the TOTAL for exactly that quantity, so its
+//   price per piece is total ÷ quantity. 5,000 pins for $5,757.06 is $1.15 a pin.
+// - "Variable ranges" (tiered): each row is already a price PER PIECE for its range, so the
+//   cheapest row is the answer, with no dividing.
+// The price is "from" (a "+" on the card) when smaller quantities cost more per piece. A fixed
+// price, or rows that can't be read, give null: the variant's flat price is used, as before.
+const manualPerPiecePrice = (rawMeta) => {
+  let meta = rawMeta;
+  if (typeof meta === "string") {
+    try {
+      meta = JSON.parse(meta);
+    } catch {
+      return null;
+    }
+  }
+  if (!meta || typeof meta !== "object") return null;
+
+  const mode = String(meta.pricing_mode || "fixed").toLowerCase();
+  let perPiece = [];
+
+  if (mode === "quantity_fixed" && Array.isArray(meta.quantity_pricing)) {
+    perPiece = meta.quantity_pricing.map((row) => {
+      const quantity = Number(row?.quantity);
+      return quantity > 0 ? Number(row?.price) / quantity : NaN;
+    });
+  } else if (mode === "tiered" && Array.isArray(meta.bulk_pricing)) {
+    perPiece = meta.bulk_pricing.map((row) => Number(row?.price));
+  }
+
+  perPiece = perPiece.filter((price) => Number.isFinite(price) && price >= 0);
+  if (!perPiece.length) return null;
+
+  const lowest = Math.min(...perPiece);
+  return { effectivePrice: lowest, priceFrom: Math.max(...perPiece) > lowest };
+};
+
 // The cheapest variant of each product, comparing the case price when there is one.
 // The supplier price a listing starts from. SAGE prices come from its quantity tiers (Q47), so
-// a SAGE card starts at the lowest tier and is shown as a "from" price; the rest use the
-// variant's case or unit price. Needs the variant's meta for SAGE.
+// a SAGE card starts at the lowest tier and is shown as a "from" price. A manual variant priced
+// by quantity starts at its lowest price per piece (manualPerPiecePrice). The rest use the
+// variant's case or unit price. Needs the variant's meta for SAGE and manual variants.
 const listingBasePrice = (variant) => {
   if (variant.supplier === "SAGE") {
     const tiers = netPriceTiers(variant.meta);
     if (tiers.length) {
       return { effectivePrice: Math.min(...tiers.map((tier) => tier.net)), priceFrom: true };
     }
+  }
+
+  if (variant.supplier === "MANUAL") {
+    const perPiece = manualPerPiecePrice(variant.meta);
+    if (perPiece) return perPiece;
   }
 
   const effectivePrice =

@@ -6,6 +6,7 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
+| [2026-11-25: product cards show the lowest price per piece](#2026-11-25-card-price) | not deployed yet | None required |
 | [2026-11-25: a customization value's price can be empty](#2026-11-25-optional-price) | not deployed yet | None required: the shop already counts a missing price as $0 |
 | [2026-11-24: an order keeps the address it was priced for](#2026-11-24-ship-to) | `6c6ec41`, live since 24 Nov | None required |
 | [2026-11-24: print options must be on the price list; one drinkware rule](#2026-11-24-print-options) | `fbc10dd`, live since 24 Nov | None required. Recommended: decide drinkware from `is_drinkware` |
@@ -78,6 +79,21 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 **Waiting on the client:** A8, DTG with several locations (Q8, reworded); which font settings besides the font list (Q23). **Later, by the client's choice:** A24 pre-made products from suppliers (Q26), A42 price filter (Q54), A46 Back button (Q57), policy pages editable in the admin (Q61).
 
 ---
+
+<a id="2026-11-25-card-price"></a>
+## 2026-11-25: product cards show the lowest price per piece (not deployed yet)
+
+Asked for by the client on 25 Nov ("lowest price on card per piece"). On every product list (`GET product`, grand-category, brand, use-case and tier products, search), a manual product priced by quantity now gets the lowest price per piece in `price`, with `price_from: true` when smaller quantities cost more per piece. The shop already shows that as "$1.15+", as for SAGE products.
+
+- **Set quantities** (`pricing_mode: "quantity_fixed"`): each row is the total for that exact quantity, so the price per piece is total ÷ quantity and the card shows the cheapest. Hard Enamel Pin: 5,000 for $5,757.06, so "$1.15+" (it was $147.76, the price of 1 pin).
+- **Variable ranges** (`pricing_mode: "tiered"`): each row is already a price per piece, so the card shows the cheapest row. PVC Patches: "$2.94+" (was $11.76).
+- Rounded to the nearest cent: Glossy Business Cards (10,000 for $202.74) show "$0.02+".
+- **Unchanged:** one-price products (T-shirts, hoodies and the other manual products with a fixed price), SAGE (already the lowest tier per piece), S&S, SanMar and OTTOCAP. The product page and the cart are unchanged.
+- The list's price filter (`min_price`, `max_price`) uses the same price, so it matches the cards.
+
+On 25 Nov this changed 17 cards: 14 with set quantities and 3 with ranges.
+
+**What the shop must do:** nothing.
 
 <a id="2026-11-25-optional-price"></a>
 ## 2026-11-25: a customization value's price can be empty (not deployed yet)
