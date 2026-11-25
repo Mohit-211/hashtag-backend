@@ -6,6 +6,7 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
+| [2026-11-25: graphics can also be WebP](#2026-11-25-webp) | not deployed yet | None: the shop's pickers already offer WebP (`88dcfa1`) |
 | [2026-11-25: SAGE products are customized for free](#2026-11-25-sage-free) | not deployed yet | **Required:** charge nothing for customization on SAGE products in the customizer (the drinkware $8 back print first). The cart's "Sage" line goes away on its own |
 | [2026-11-25: product cards show the lowest price per piece](#2026-11-25-card-price) | not deployed yet | None required |
 | [2026-11-25: a customization value's price can be empty](#2026-11-25-optional-price) | not deployed yet | None required: the shop already counts a missing price as $0 |
@@ -80,6 +81,18 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 **Waiting on the client:** A8, DTG with several locations (Q8, reworded); which font settings besides the font list (Q23). **Later, by the client's choice:** A24 pre-made products from suppliers (Q26), A42 price filter (Q54), A46 Back button (Q57), policy pages editable in the admin (Q61).
 
 ---
+
+<a id="2026-11-25-webp"></a>
+## 2026-11-25: graphics can also be WebP (not deployed yet)
+
+Asked for on 25 Nov, because the shop's artwork pickers offer WebP (hashtag-next `88dcfa1`). Customers' graphics are now PNG, JPG/JPEG, SVG or WebP, on `POST graphics` (field `graphic`) and on `POST product/cart` for pre-made products (`customization_images`). This updates [2026-11-20](#2026-11-20-graphic-types).
+
+- **Name and type:** a `.webp` name must come with the type `image/webp`, or a generic one.
+- **Contents:** the file itself must be a real WebP, PNG or JPEG under any of those picture names (a WebP saved as `.png` is fine). An SVG name must hold an SVG. A ZIP renamed `.webp` is refused.
+- **Refusal (400):** "Graphics must be PNG, JPG, JPEG, SVG or WebP files. ZIP, PDF and other files can't be uploaded."
+- **Unchanged:** the team's artwork previews for an approval, the approval page's pictures and the sourcing form take no WebP, as before.
+
+**What the shop must do:** nothing. The pickers already accept WebP; it no longer fails at upload.
 
 <a id="2026-11-25-sage-free"></a>
 ## 2026-11-25: SAGE products are customized for free (not deployed yet)

@@ -6,9 +6,10 @@ const httpStatus = require("http-status");
 const ApiError = require("../utils/ApiError");
 const {
   isGraphicFile,
+  isCustomerGraphicFile,
+  checkCustomerGraphicContents,
   isPictureFile,
   shownName,
-  checkGraphicContents,
   checkPictureContents,
   checkReferenceContents,
   GRAPHIC_TYPE_MESSAGE,
@@ -19,7 +20,7 @@ const { dirs } = require("./storage");
 
 const MB = 1024 * 1024;
 
-// Customers' graphics: PNG, JPG/JPEG or SVG (see utils/graphicFileType.js), any dimensions,
+// Customers' graphics: PNG, JPG/JPEG, SVG or WebP (see utils/graphicFileType.js), any dimensions,
 // stored exactly as uploaded.
 const GRAPHIC_FIELDS = ["graphic", "customization_images"];
 
@@ -165,7 +166,7 @@ const graphicLimits = { ...limits, fileSize: 100 * MB };
 // Graphics: the name and type are checked here, before saving; upload.middleware.js checks the
 // saved file's contents.
 const graphicFileFilter = (req, file, cb) =>
-  isGraphicFile(file) ? cb(null, true) : cb(new ApiError(httpStatus.BAD_REQUEST, GRAPHIC_TYPE_MESSAGE));
+  isCustomerGraphicFile(file) ? cb(null, true) : cb(new ApiError(httpStatus.BAD_REQUEST, GRAPHIC_TYPE_MESSAGE));
 
 // POST /graphics
 const graphicUpload = multer({ storage: graphicStorage, limits: graphicLimits, fileFilter: graphicFileFilter }).fields([
@@ -183,9 +184,9 @@ const KINDS = {
   graphic: {
     folder: dirs.graphics,
     extension: getGraphicExtension,
-    accepts: isGraphicFile,
+    accepts: isCustomerGraphicFile,
     typeMessage: () => GRAPHIC_TYPE_MESSAGE,
-    check: (files) => checkGraphicContents(files),
+    check: (files) => checkCustomerGraphicContents(files),
   },
   // The sourcing form's logos and reference images: PNG, JPG or SVG, as the form says. An SVG is
   // served from /images only as a download (app.js).

@@ -4,14 +4,17 @@ const httpStatus = require("http-status");
 
 const ApiError = require("./ApiError");
 
-// Customers' graphics are PNG, JPG/JPEG or SVG only (decided 20 Nov 2026): ZIP, PDF, AI and every
-// other format are refused. The name and the type the browser reports are checked before the file
-// is saved, and the file's first bytes after, because the name and the type can say anything.
+// Customers' graphics are PNG, JPG/JPEG, SVG or WebP (decided 20 Nov 2026; WebP added 25 Nov, as the
+// website offers it): ZIP, PDF, AI and every other format are refused. The name and the type the
+// browser reports are checked before the file is saved, and the file's first bytes after, because
+// the name and the type can say anything. The other uploads that use these checks (the team's
+// artwork previews for an approval, and the sourcing form) stay PNG, JPG/JPEG or SVG.
 
 const GRAPHIC_EXTENSIONS = ["png", "jpg", "jpeg", "svg"];
+const CUSTOMER_GRAPHIC_EXTENSIONS = [...GRAPHIC_EXTENSIONS, "webp"];
 
 const GRAPHIC_TYPE_MESSAGE =
-  "Graphics must be PNG, JPG, JPEG or SVG files. ZIP, PDF and other files can't be uploaded.";
+  "Graphics must be PNG, JPG, JPEG, SVG or WebP files. ZIP, PDF and other files can't be uploaded.";
 
 // The types browsers and tools report for those files. A generic type (or none) is left to the
 // check of the contents.
@@ -20,19 +23,26 @@ const MIME_TYPES = {
   jpg: ["image/jpeg", "image/jpg", "image/pjpeg"],
   jpeg: ["image/jpeg", "image/jpg", "image/pjpeg"],
   svg: ["image/svg+xml", "text/xml", "application/xml"],
+  webp: ["image/webp"],
 };
 const GENERIC_MIME_TYPES = ["", "application/octet-stream", "binary/octet-stream"];
 
 const extensionOf = (file) => path.extname(file.originalname || "").toLowerCase().replace(".", "");
 
-// Before saving: a .png, .jpg, .jpeg or .svg name, and a type that doesn't say it's something else.
-const isGraphicFile = (file) => {
+// Before saving: an allowed name, and a type that doesn't say it's something else.
+const hasAllowedNameAndType = (file, extensions) => {
   const ext = extensionOf(file);
-  if (!GRAPHIC_EXTENSIONS.includes(ext)) return false;
+  if (!extensions.includes(ext)) return false;
 
   const mime = String(file.mimetype || "").toLowerCase();
   return GENERIC_MIME_TYPES.includes(mime) || MIME_TYPES[ext].includes(mime);
 };
+
+// A .png, .jpg, .jpeg or .svg name (artwork previews, the sourcing form).
+const isGraphicFile = (file) => hasAllowedNameAndType(file, GRAPHIC_EXTENSIONS);
+
+// Customers' graphics (POST graphics, and a pre-made product's customization_images): .webp too.
+const isCustomerGraphicFile = (file) => hasAllowedNameAndType(file, CUSTOMER_GRAPHIC_EXTENSIONS);
 
 // Enough of the file to find an SVG's root element after its XML declaration, comments and DOCTYPE.
 const SAMPLE_BYTES = 64 * 1024;
@@ -90,30 +100,41 @@ const detectGraphicType = (sample) => {
   return isSvgText(sample) ? "svg" : null;
 };
 
-const CANONICAL_MIME = { png: "image/png", jpeg: "image/jpeg", svg: "image/svg+xml" };
+const CANONICAL_MIME = { png: "image/png", jpeg: "image/jpeg", svg: "image/svg+xml", webp: "image/webp" };
+
+// A WebP file: "RIFF", its size, then "WEBP".
+const isWebp = (sample) =>
+  sample.length >= 12 &&
+  sample.subarray(0, 4).toString("latin1") === "RIFF" &&
+  sample.subarray(8, 12).toString("latin1") === "WEBP";
 
 // multer reads the name as latin1; browsers send UTF-8.
 const shownName = (file) => Buffer.from(file.originalname || "", "latin1").toString("utf8").slice(0, 100);
 
-// After saving: every graphic in the request must really be a PNG, a JPEG or an SVG, and an .svg
-// name must hold an SVG (a .png or .jpg name may hold either picture format). The saved type is
-// set to the real one. Throws a 400 for the first file that fails. typeMessage: what's allowed,
-// for files that aren't customers' graphics (order approval proofs).
-const checkGraphicContents = async (files, typeMessage = GRAPHIC_TYPE_MESSAGE) => {
+// After saving: every graphic in the request must really be a PNG, a JPEG or an SVG (or, with
+// { webp: true }, a WebP), and an .svg name must hold an SVG (any other allowed name may hold any
+// of the picture formats). The saved type is set to the real one. Throws a 400 for the first file
+// that fails. typeMessage: what's allowed, for files that aren't customers' graphics (order
+// approval proofs, which take no WebP).
+const checkGraphicContents = async (files, typeMessage = GRAPHIC_TYPE_MESSAGE, { webp = false } = {}) => {
   for (const file of files) {
-    const type = detectGraphicType(await readSample(file.path));
+    const sample = await readSample(file.path);
+    const type = detectGraphicType(sample) || (webp && isWebp(sample) ? "webp" : null);
     const isSvgName = extensionOf(file) === "svg";
 
     if (!type || (type === "svg") !== isSvgName) {
       throw new ApiError(
         httpStatus.BAD_REQUEST,
-        `"${shownName(file)}" isn't a real ${isSvgName ? "SVG" : "PNG or JPG"} file. ${typeMessage}`,
+        `"${shownName(file)}" isn't a real ${isSvgName ? "SVG" : webp ? "PNG, JPG or WebP" : "PNG or JPG"} file. ${typeMessage}`,
       );
     }
 
     file.mimetype = CANONICAL_MIME[type];
   }
 };
+
+// Customers' graphics: PNG, JPEG, SVG or WebP.
+const checkCustomerGraphicContents = (files) => checkGraphicContents(files, GRAPHIC_TYPE_MESSAGE, { webp: true });
 
 // Pictures customers add to their notes on the approval page: PNG or JPEG only, no SVG, because
 // anyone with the page's link can upload them.
@@ -175,6 +196,9 @@ const checkReferenceContents = async (files, typeMessage) => {
 
 module.exports = {
   GRAPHIC_EXTENSIONS,
+  CUSTOMER_GRAPHIC_EXTENSIONS,
+  isCustomerGraphicFile,
+  checkCustomerGraphicContents,
   GRAPHIC_TYPE_MESSAGE,
   PICTURE_TYPE_MESSAGE,
   isGraphicFile,

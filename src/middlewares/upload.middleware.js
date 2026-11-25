@@ -24,7 +24,7 @@ const { verifyAuthJWTToken } = require("./userAuth.middleware");
 const { approvalUploadGate } = require("./approvalGate.middleware");
 const { emailLimiter, publicFormLimiter } = require("./rateLimiter");
 const ApiError = require("../utils/ApiError");
-const { checkGraphicContents, checkPictureContents } = require("../utils/graphicFileType");
+const { checkGraphicContents, checkCustomerGraphicContents, checkPictureContents } = require("../utils/graphicFileType");
 const { isKept } = require("../utils/keptUploads");
 
 // Routes that accept file uploads (paths relative to /api/v1). Admin and customer
@@ -90,7 +90,7 @@ const discardWhenRefused = (req, res) => {
 // name each field's own check instead.
 const CONTENT_CHECKS = [
   // Customers' graphics: PNG, JPEG or SVG.
-  { fields: GRAPHIC_FIELDS, check: checkGraphicContents },
+  { fields: GRAPHIC_FIELDS, check: checkCustomerGraphicContents },
   // Order approval proofs: the same formats.
   { fields: [APPROVAL_PROOF_FIELD], check: (files) => checkGraphicContents(files, PROOF_TYPE_MESSAGE) },
   // Pictures on the approval page: PNG or JPEG only.
