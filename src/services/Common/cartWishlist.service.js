@@ -1139,6 +1139,15 @@ const buildManualPricingSnapshot = async ({
   };
 };
 
+// Adds the lines of one add-to-cart request together, or none of them (audit F07): every line is
+// checked and priced before this, and a refused one used to leave the lines before it in the cart.
+const addCartLines = (lines) =>
+  sequelize.transaction(async (transaction) => {
+    const created = [];
+    for (const line of lines) created.push(await Cart.create(line, { transaction }));
+    return created;
+  });
+
 const addToCart = async (body, files) => {
   try {
     let {
@@ -1259,7 +1268,8 @@ const addToCart = async (body, files) => {
        * -------------------------------------------------------
        */
 
-      const createdCartItems = [];
+      // Each variant is checked and priced first; the lines are added together below.
+      const newLines = [];
 
       /*
        * Each variant gets its own:
@@ -1772,11 +1782,11 @@ const addToCart = async (body, files) => {
 
         /*
          * -----------------------------------------------------
-         * Create ONE cart row for this variant
+         * ONE cart row for this variant, added below
          * -----------------------------------------------------
          */
 
-        const cart = await Cart.create({
+        newLines.push({
           user_id: user.id,
 
           product_id:
@@ -1793,16 +1803,18 @@ const addToCart = async (body, files) => {
 
           pricing_snapshot,
         });
-
-        // The line shows the preview: kept (upload.middleware.js deletes the rest).
-        keepUpload(files?.images?.[0]);
-
-        createdCartItems.push(cart);
       }
 
       /*
-       * Return all created cart rows.
+       * All the variants go in together, or none (audit F07).
+       * A graphic uploaded with the request stays saved
+       * either way, as with POST graphics.
        */
+
+      const createdCartItems = await addCartLines(newLines);
+
+      // The lines show the preview: kept (upload.middleware.js deletes the rest).
+      if (createdCartItems.length) keepUpload(files?.images?.[0]);
 
       return createdCartItems;
     }
@@ -1847,7 +1859,8 @@ const addToCart = async (body, files) => {
       logo_image = `/images/${file.filename}`;
     }
 
-    const createdCartItems = [];
+    // Each size is checked and priced first; the lines are added together below.
+    const newLines = [];
 
     for (const customizationItem of customization) {
       const sizes =
@@ -1961,7 +1974,7 @@ const addToCart = async (body, files) => {
             });
         }
 
-        const cart = await Cart.create({
+        newLines.push({
           user_id: user.id,
 
           product_id:
@@ -1979,13 +1992,14 @@ const addToCart = async (body, files) => {
 
           pricing_snapshot,
         });
-
-        // The line shows the preview: kept (upload.middleware.js deletes the rest).
-        keepUpload(files?.images?.[0]);
-
-        createdCartItems.push(cart);
       }
     }
+
+    // All the sizes go in together, or none (audit F07).
+    const createdCartItems = await addCartLines(newLines);
+
+    // The lines show the preview: kept (upload.middleware.js deletes the rest).
+    if (createdCartItems.length) keepUpload(files?.images?.[0]);
 
     await applyGraphicFees(user.id);
 

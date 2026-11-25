@@ -6,6 +6,7 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
+| [2026-11-25: one add to cart adds all its lines or none](#2026-11-25-all-or-none) | live since 25 Nov | None required |
 | [2026-11-25: quantity-based options are sold only at their listed quantities](#2026-11-25-quantity-options) | live since 25 Nov | None required: the product page already sells only those quantities, and the cart shows the API's message |
 | [2026-11-25: customers can change their name and phone](#2026-11-25-profile) | live since 25 Nov | **To turn it on:** set `PROFILE_EDIT_ENABLED` to `true` in `ProfileSection.tsx` and deploy |
 | [2026-11-25: graphics can also be WebP](#2026-11-25-webp) | `a149b35`, live since 25 Nov | None: the shop's pickers already offer WebP (`88dcfa1`, live) |
@@ -83,6 +84,15 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 **Waiting on the client:** A8, DTG with several locations (Q8, reworded); which font settings besides the font list (Q23). **Later, by the client's choice:** A24 pre-made products from suppliers (Q26), A42 price filter (Q54), A46 Back button (Q57), policy pages editable in the admin (Q61).
 
 ---
+
+<a id="2026-11-25-all-or-none"></a>
+## 2026-11-25: one add to cart adds all its lines or none (live since 25 Nov)
+
+Audit F07. `POST product/cart` adds a line for each size (and for each variant of a pre-made product). It used to save them one at a time, so when a later size was refused (out of stock, under the screen-print minimum of 12, a variant that doesn't exist), the sizes before it stayed in the cart and the request still answered with an error.
+
+Now every line is checked and priced first, and the lines are saved together, or none of them. The error is the same as before. The preview image (`images`) is kept only when lines were added. A graphic uploaded in the same request for a pre-made product (`customization_images`) stays in the customer's saved graphics either way, as with `POST graphics`.
+
+**What the shop must do:** nothing. After an error, the cart no longer holds part of the request, so there is nothing to clean up.
 
 <a id="2026-11-25-quantity-options"></a>
 ## 2026-11-25: quantity-based options are sold only at their listed quantities (live since 25 Nov)
