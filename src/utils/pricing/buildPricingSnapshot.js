@@ -568,6 +568,8 @@ const canOrderCartLine = ({ customization, snapshot, categories, quantity }) => 
   if (problem) return false;
   if (!printMethodOf(checked)) return true;
   if (snapshot?.print_options_checked) return true;
+  // Customization is free on SAGE (25 Nov): there's no print price to compare.
+  if (snapshot?.supplier === "SAGE") return true;
 
   let today;
   try {
@@ -723,7 +725,9 @@ const buildSagePricingSnapshot = async ({
   customization = null,
 }) => {
   // Refused (400) when the product doesn't offer the decoration or it isn't on the price list.
-  const checked = checkPrintOptions(customization, product?.categories);
+  // The options are still checked, because production reads them, but on SAGE they cost nothing
+  // (decided 25 Nov, below).
+  checkPrintOptions(customization, product?.categories);
 
   const tiers = netPriceTiers(variant.meta);
 
@@ -782,17 +786,16 @@ const buildSagePricingSnapshot = async ({
 
   /*
    |--------------------------------------------------------------------------
-   | DECORATION: drinkware's second location, or clothing's print methods
-   | (the same tables as the other suppliers)
+   | CUSTOMIZATION IS FREE ON SAGE (decided 25 Nov)
    |--------------------------------------------------------------------------
+   | Whatever the category, apparel or drinkware: no print price, no drinkware
+   | back-print $8, and no $35 graphic fee (graphicFees.js skips SAGE lines).
+   | The line costs the product price only, and carries no pricing_table: the
+   | shop showed its one "SAGE" row as "Sage +$0.00".
    */
 
-  const decoration = decorationOf(checked, quantity, "SAGE");
-
   const final_price_per_item = Number(
-    (Number(productPricing.final_price) + decoration.perPiece).toFixed(
-      2,
-    ),
+    Number(productPricing.final_price).toFixed(2),
   );
 
   const total_price = Number((final_price_per_item * quantity).toFixed(2));
@@ -822,7 +825,7 @@ const buildSagePricingSnapshot = async ({
      */
 
     customization_price: {
-      total_customization_price: decoration.perPiece,
+      total_customization_price: 0,
 
       setup_fee: 0,
     },
@@ -837,37 +840,60 @@ const buildSagePricingSnapshot = async ({
 
     total_price,
 
-    /*
-     |--------------------------------------------------------------------------
-     | BREAKDOWN
-     |--------------------------------------------------------------------------
-     */
+    // The SAGE tier this quantity is priced at (it was in the pricing_table row).
+    tier_quantity: tierQuantity,
+  };
+};
 
-    pricing_table: [
-      {
-        type: "SAGE",
+/*
+|--------------------------------------------------------------------------
+| SAGE LINES PRICED BEFORE 25 NOV
+|--------------------------------------------------------------------------
+| A SAGE cart line saved earlier may still carry a customization price (the
+| drinkware $8, or clothing print prices) and its pricing_table. Returns the
+| snapshot as buildSagePricingSnapshot would price it now: the product price
+| only, for the line's quantity, with no pricing_table. A line saved before
+| the handling fee moved to the order also loses its old per-line
+| handling_charge, which its new total doesn't include. Any other snapshot
+| comes back as it is, and so does a SAGE one already priced this way.
+*/
 
-        quantity,
+const withFreeSageCustomization = (snapshot, quantity) => {
+  if (!snapshot || snapshot.supplier !== "SAGE") return snapshot;
 
-        tier_quantity: tierQuantity,
+  const perPiece = Number(snapshot.product_price?.final_product_price);
+  const qty = Number(quantity ?? snapshot.quantity);
 
-        supplier_price: supplierPrice,
+  if (!Number.isFinite(perPiece) || !(qty > 0)) return snapshot;
 
-        markup_percent: Number(productPricing.markup_percent),
+  const rest = { ...snapshot };
+  delete rest.pricing_table;
+  delete rest.handling_charge;
+  const final_price_per_item = Number(perPiece.toFixed(2));
 
-        final_price_per_item,
+  return {
+    ...rest,
 
-        total: total_price,
-      },
+    quantity: qty,
 
-      ...decoration.rows,
-    ],
+    customization_price: {
+      ...(rest.customization_price || {}),
+
+      total_customization_price: 0,
+
+      setup_fee: 0,
+    },
+
+    final_price_per_item,
+
+    total_price: Number((final_price_per_item * qty).toFixed(2)),
   };
 };
 
 module.exports = {
   buildPricingSnapshot,
   buildSagePricingSnapshot,
+  withFreeSageCustomization,
   lineMinimum,
   readPrintOptions,
   checkPrintOptions,

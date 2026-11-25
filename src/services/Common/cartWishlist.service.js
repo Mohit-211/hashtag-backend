@@ -24,6 +24,7 @@ const httpStatus = require("http-status");
 const {
   buildPricingSnapshot,
   buildSagePricingSnapshot,
+  withFreeSageCustomization,
   lineMinimum,
   readPrintOptions,
   checkPrintOptions,
@@ -2107,6 +2108,16 @@ const getCart = async (body) => {
             JSON.parse(
               pricing_snapshot,
             );
+        }
+
+        // Customization is free on SAGE (25 Nov). A SAGE line priced earlier loses its
+        // customization price and its pricing_table here, and is saved that way, so checkout
+        // charges the product price only.
+        const freeSage = withFreeSageCustomization(pricing_snapshot, item.quantity);
+
+        if (freeSage !== pricing_snapshot && JSON.stringify(freeSage) !== JSON.stringify(pricing_snapshot)) {
+          pricing_snapshot = freeSage;
+          await item.update({ pricing_snapshot: freeSage });
         }
 
         // MANUAL only: add option/value names and full artwork URLs.

@@ -4,6 +4,7 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
+| [2026-11-25: SAGE products are customized for free](#2026-11-25-sage-free) | not deployed yet | None required |
 | [2026-11-25: a customization value's price is optional](#2026-11-25-optional-price) | not deployed yet | Done in Hashtag-Billionaire-Admin, not deployed yet: the price is optional on the Customizations page |
 | [2026-11-24: print options must be on the price list](#2026-11-24-print-options) | `fbc10dd`, live since 24 Nov | None required |
 | [2026-11-24: page sizes on the lists the website also uses](#2026-11-24-list-limits) | `311e5ee`, live since 24 Nov | None: the panel's admin token keeps its page sizes (up to 500 today) and its whole search |
@@ -69,6 +70,16 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 
 1. **`payment_status=ALL`:** coming in the next release: `GET order/admin?payment_status=ALL` lists orders of every payment status. Without the parameter it still lists paid orders only.
 2. **The 2 unpaid orders the panel doesn't show:** when a customer's cart changes, the backend soft-deletes their latest unpaid order (`invalidatePendingOrder` in `cartWishlist.service.js`), and orders are paranoid, so those two are hidden from every list. Nothing is missing on the panel's side; the behaviour itself is on the payments list (audit H8).
+
+<a id="2026-11-25-sage-free"></a>
+## 2026-11-25: SAGE products are customized for free (not deployed yet)
+
+Decided on 25 Nov. A SAGE order item's `pricing_snapshot` has no `pricing_table` and no customization price; the drinkware $8 back print is gone on SAGE.
+- **Supplier cost:** still in `product_price` (`actual_price`, `supplier_markup`), and the tier is in `tier_quantity`.
+- **Orders page:** the false cautions on SAGE items, "SAGE is priced at $0.00, confirm" and the "Decoration per item" mismatch, no longer appear on new orders.
+- **Older orders** keep their snapshot as stored.
+
+**What the panel must do:** nothing.
 
 <a id="2026-11-25-optional-price"></a>
 ## 2026-11-25: a customization value's price is optional (not deployed yet)

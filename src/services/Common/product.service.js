@@ -2498,12 +2498,17 @@ const getProductsByBrand = async (query) => {
 // Drinkware by the server's rule (audit F04): a parent category with "drinkware" in its title, on
 // every supplier. The cart charges the second print location by the same rule, so the shop can
 // read these instead of matching category titles itself.
-const drinkwareFieldsOf = (categories) => {
+const drinkwareFieldsOf = (categories, supplier) => {
   const isDrinkware = isDrinkwareProduct(categories);
 
   return {
     is_drinkware: isDrinkware,
-    drinkware_second_location_price: isDrinkware ? DRINKWARE_SECOND_LOCATION_PRICE : null,
+    // Customization is free on SAGE (25 Nov), the back print included.
+    drinkware_second_location_price: isDrinkware
+      ? supplier === "SAGE"
+        ? 0
+        : DRINKWARE_SECOND_LOCATION_PRICE
+      : null,
   };
 };
 
@@ -2573,7 +2578,7 @@ const getProductById = async (id, reqBody) => {
     // { amount, label } when this product adds the order handling fee (once per order), else null.
     data.order_handling_fee = await productHandlingFee(data.id);
 
-    Object.assign(data, drinkwareFieldsOf(data.categories));
+    Object.assign(data, drinkwareFieldsOf(data.categories, data.supplier));
 
     return data;
   } catch (error) {
@@ -2661,7 +2666,7 @@ const getVariantById = async (id) => {
 
     data.product.attachments = (data.product.attachments || []).sort(frontImageFirst);
 
-    Object.assign(data.product, drinkwareFieldsOf(data.product.categories));
+    Object.assign(data.product, drinkwareFieldsOf(data.product.categories, data.product.supplier));
   }
 
   data.title = decodeHtmlEntities(data.title);
@@ -2700,7 +2705,7 @@ const getGuestProductById = async (id) => {
     // { amount, label } when this product adds the order handling fee (once per order), else null.
     data.order_handling_fee = await productHandlingFee(data.id);
 
-    Object.assign(data, drinkwareFieldsOf(data.categories));
+    Object.assign(data, drinkwareFieldsOf(data.categories, data.supplier));
 
     return data;
   } catch (error) {

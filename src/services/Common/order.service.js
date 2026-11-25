@@ -42,7 +42,11 @@ const { orderActions, ordersWithPaymentInProgress } = require("./orderActions");
 const { retireUnpaidOrders } = require("./unpaidOrders.service");
 const { approvalSummaries } = require("./approvalStore");
 const { getProductCategories } = require("./productCategories");
-const { canOrderCartLine, orderLinesOptionsGone } = require("../../utils/pricing/buildPricingSnapshot");
+const {
+  canOrderCartLine,
+  orderLinesOptionsGone,
+  withFreeSageCustomization,
+} = require("../../utils/pricing/buildPricingSnapshot");
 
 // Stops the order when a cart line can't be sold as it was saved (audit F04, F05): print options
 // the rules refuse now (added before them, or the product has moved to other categories since), a
@@ -163,6 +167,17 @@ const createOrder = async (body) => {
 
     if (!cartItems.length) {
       throw new ApiError(httpStatus.BAD_REQUEST, "Cart is empty");
+    }
+
+    // Customization is free on SAGE (25 Nov): a SAGE line priced earlier is charged the product
+    // price only. Saved on the cart line too, so everything below reads the same price.
+    for (const item of cartItems) {
+      const snapshot = parseJson(item.pricing_snapshot);
+      const freeSage = withFreeSageCustomization(snapshot, item.quantity);
+
+      if (freeSage !== snapshot && JSON.stringify(freeSage) !== JSON.stringify(snapshot)) {
+        await item.update({ pricing_snapshot: freeSage }, { transaction: t });
+      }
     }
 
     // A line that can't be sold as it was saved stops the order here, before shipping is priced.

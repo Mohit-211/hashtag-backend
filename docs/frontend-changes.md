@@ -6,6 +6,7 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
+| [2026-11-25: SAGE products are customized for free](#2026-11-25-sage-free) | not deployed yet | **Required:** charge nothing for customization on SAGE products in the customizer (the drinkware $8 back print first). The cart's "Sage" line goes away on its own |
 | [2026-11-25: product cards show the lowest price per piece](#2026-11-25-card-price) | not deployed yet | None required |
 | [2026-11-25: a customization value's price can be empty](#2026-11-25-optional-price) | not deployed yet | None required: the shop already counts a missing price as $0 |
 | [2026-11-24: an order keeps the address it was priced for](#2026-11-24-ship-to) | `6c6ec41`, live since 24 Nov | None required |
@@ -79,6 +80,27 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 **Waiting on the client:** A8, DTG with several locations (Q8, reworded); which font settings besides the font list (Q23). **Later, by the client's choice:** A24 pre-made products from suppliers (Q26), A42 price filter (Q54), A46 Back button (Q57), policy pages editable in the admin (Q61).
 
 ---
+
+<a id="2026-11-25-sage-free"></a>
+## 2026-11-25: SAGE products are customized for free (not deployed yet)
+
+Decided on 25 Nov: a SAGE product can be customized (custom text, a graphic, a print method and its locations, whatever its category) at no extra cost. No print price, no drinkware back print ($8), no $35 graphic fee (SAGE lines never paid it). The customer pays the product price only.
+
+**What the API does now:**
+- **Cart lines and orders for SAGE products:** `pricing_snapshot.customization_price` is `{ total_customization_price: 0, setup_fee: 0 }`, `final_price_per_item` is the product price, and there is **no `pricing_table`**. Its one `"SAGE"` row was what the cart showed as "Sage +$0.00". The SAGE tier the quantity is priced at moved to `pricing_snapshot.tier_quantity`.
+- **SAGE lines already in a cart** lose any customization price and their `pricing_table` the next time the cart is opened or checked out, so no SAGE order is charged one.
+- **The print options are still checked.** A print method or location the product doesn't offer is still refused with 400, as before, because production reads them.
+- **`drinkware_second_location_price`** on `GET product/:id`, `product/guest/:id` and `product/variant/:id` is `0` for SAGE drinkware. It stays 8 for drinkware from other suppliers, which still pay the back print.
+
+**What the shop must do:**
+1. **Cart:** nothing. `CartItem.tsx` reads `pricing_snapshot?.pricing_table ?? []`, so the "Sage" line disappears on its own.
+2. **Customizer, required:** on a SAGE product (the variant's `supplier` is `"SAGE"`, already read in `Productcustomizationpage.tsx` around line 1166), show no customization price.
+   - `drinkwareLocationFee` (about line 1271) is 0. Better: use `drinkware_second_location_price` from the product.
+   - The note "each additional location adds $8 per product" (about line 2802) is hidden.
+   - Any print price or $35 estimate shows as free.
+   Until then, the page shows a higher price than the cart charges.
+3. Optional: show "Customization included" on SAGE products.
+
 
 <a id="2026-11-25-card-price"></a>
 ## 2026-11-25: product cards show the lowest price per piece (not deployed yet)
