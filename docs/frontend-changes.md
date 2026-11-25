@@ -6,10 +6,11 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
+| [2026-11-25: a customization value's price can be empty](#2026-11-25-optional-price) | not deployed yet | None required: the shop already counts a missing price as $0 |
 | [2026-11-24: an order keeps the address it was priced for](#2026-11-24-ship-to) | `6c6ec41`, live since 24 Nov | None required |
 | [2026-11-24: print options must be on the price list; one drinkware rule](#2026-11-24-print-options) | `fbc10dd`, live since 24 Nov | None required. Recommended: decide drinkware from `is_drinkware` |
 | [2026-11-24: the contact and sourcing forms are checked on the server; page sizes on public lists](#2026-11-24-forms-lists) | `311e5ee`, live since 24 Nov | None required. Optional: limit the support form's email to 100 characters |
-| [2026-11-24: each upload takes only what its form sends](#2026-11-24-uploads) | not deployed yet | None required. Recommended: show the sourcing form's 20 MB limit, and cap pre-made products at 10 graphics in total |
+| [2026-11-24: each upload takes only what its form sends](#2026-11-24-uploads) | `739b58c`, live since 24 Nov | None required. Recommended: show the sourcing form's 20 MB limit, and cap pre-made products at 10 graphics in total |
 | [2026-11-20: unpaid orders and one payment at a time](#2026-11-20-paying-order) | `f09c0b4`, live since 20 Nov | None required: the shop already shows the API's messages. Optional: see the note on 409 from `POST order` |
 | [2026-11-20: graphics are PNG, JPG or SVG only](#2026-11-20-graphic-types) | `35ba84e`, live since 20 Nov | Done in hashtag-next, not deployed yet: both graphic pickers limited to PNG, JPG, JPEG and SVG |
 | [2026-11-13: payments go-live](#2026-11-13-go-live) | `2634b76`, live since 16 Nov | Done in hashtag-next `744ba16` and `5d0fcff`, not deployed yet |
@@ -77,6 +78,13 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 **Waiting on the client:** A8, DTG with several locations (Q8, reworded); which font settings besides the font list (Q23). **Later, by the client's choice:** A24 pre-made products from suppliers (Q26), A42 price filter (Q54), A46 Back button (Q57), policy pages editable in the admin (Q61).
 
 ---
+
+<a id="2026-11-25-optional-price"></a>
+## 2026-11-25: a customization value's price can be empty (not deployed yet)
+
+A **One price** (`FIXED`) or **Fixed quantity** (`FIXED_QUANTITY`) value can now be saved in the admin panel without a price, so `GET customization-option/product/:productId/customizations` can return it with `fixed_price: null`. It costs nothing extra, and the cart charges it as $0.
+
+**What the shop must do:** nothing. `getCustomizationPrice` in `pricing.ts` already reads a missing `fixed_price` as 0. Optional: show such a value without a price, rather than "+$0.00".
 
 <a id="2026-11-24-ship-to"></a>
 ## 2026-11-24: an order keeps the address it was priced for (live since 24 Nov)
@@ -211,7 +219,7 @@ Tested on 24 Nov against a throwaway MariaDB 10.11 with production's schema and 
 - 120,000 random forms went through the shop's own rules and the server's. Every form the shop accepts passes the server, except contact emails of 101 to 254 characters.
 
 <a id="2026-11-24-uploads"></a>
-## 2026-11-24: each upload takes only what its form sends (not live yet)
+## 2026-11-24: each upload takes only what its form sends (live since 24 Nov)
 
 Audit point F15, and the preview half of F12:
 - The sourcing form says "PNG, JPG, or SVG", but the server refused SVG, so the whole request failed and the lead was lost. It also took PDF, video and Word files the form doesn't offer.

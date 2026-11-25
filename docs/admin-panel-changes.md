@@ -4,9 +4,10 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
+| [2026-11-25: a customization value's price is optional](#2026-11-25-optional-price) | not deployed yet | Done in Hashtag-Billionaire-Admin, not deployed yet: the price is optional on the Customizations page |
 | [2026-11-24: print options must be on the price list](#2026-11-24-print-options) | `fbc10dd`, live since 24 Nov | None required |
 | [2026-11-24: page sizes on the lists the website also uses](#2026-11-24-list-limits) | `311e5ee`, live since 24 Nov | None: the panel's admin token keeps its page sizes (up to 500 today) and its whole search |
-| [2026-11-24: each upload takes only its own files](#2026-11-24-uploads) | not deployed yet | None |
+| [2026-11-24: each upload takes only its own files](#2026-11-24-uploads) | `739b58c`, live since 24 Nov | None |
 | [2026-11-20: pricing templates from a CSV file](#2026-11-20-template-import) | `898c128`, live since 20 Nov | Done in Hashtag-Billionaire-Admin `c597d0d`, live since 20 Nov: Pricing Templates › Import from CSV |
 | [2026-11-19: the Dashboard](#2026-11-19-dashboard) | `c1e6f1c`, live since 19 Nov | Done in Hashtag-Billionaire-Admin `5af5d20`, live since 19 Nov: the Dashboard page, and the Orders page takes its filters from the link |
 | [2026-11-18: grand, parent and supplier category names](#2026-11-18-category-names) | `98cddea`, live since 18 Nov | Done in Hashtag-Billionaire-Admin `91fe6df`, live since 18 Nov: every label now says Grand / Parent / Supplier Category |
@@ -69,6 +70,17 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 1. **`payment_status=ALL`:** coming in the next release: `GET order/admin?payment_status=ALL` lists orders of every payment status. Without the parameter it still lists paid orders only.
 2. **The 2 unpaid orders the panel doesn't show:** when a customer's cart changes, the backend soft-deletes their latest unpaid order (`invalidatePendingOrder` in `cartWishlist.service.js`), and orders are paranoid, so those two are hidden from every list. Nothing is missing on the panel's side; the behaviour itself is on the payments list (audit H8).
 
+<a id="2026-11-25-optional-price"></a>
+## 2026-11-25: a customization value's price is optional (not deployed yet)
+
+Asked for on 25 Nov: a **One price** (`FIXED`) or **Fixed quantity** (`FIXED_QUANTITY`) value can be saved without a price. Left empty, it costs nothing extra: the cart and the shop count a missing price as $0, as they always have.
+
+- **`POST customization-option/:optionId/value`** and **`PUT customization-option/customization-option-value/:id`** accept `fixed_price` left out, `null` or `""` for these two types and save `null`. On `PUT`, `null` or `""` clears a saved price and leaving it out keeps it. A price that is sent must still be 0 or more (`400` "fixed_price must be 0 or greater"). "fixed_price is required for … pricing" is gone.
+- **Price by quantity** and **Set quantities** are unchanged: each of their rows still needs a price.
+- **Reads** are unchanged: such a value comes back with `fixed_price: null`.
+
+**What the panel does** (done in Hashtag-Billionaire-Admin): the price box is labelled "(optional)", an empty one saves `null` with no error, and the list and the product picker show such a value as ready, "No extra charge", so it can be attached to products.
+
 <a id="2026-11-24-print-options"></a>
 ## 2026-11-24: print options must be on the price list (live since 24 Nov)
 
@@ -95,7 +107,7 @@ Audit point F18: the public lists now stop shoppers at 200 rows a page (1,000 fo
 - The contact and sourcing forms' new checks (F16) don't change the Contact Us and Sourcing Requests pages. Rows saved from now on have trimmed text, and a contact row's subject is always one of the website's five.
 
 <a id="2026-11-24-uploads"></a>
-## 2026-11-24: each upload takes only its own files (not live yet)
+## 2026-11-24: each upload takes only its own files (live since 24 Nov)
 
 Audit point F15. Each upload endpoint now takes only the fields the panel sends. A request with any other file is refused (`400`) and nothing it sent is kept.
 

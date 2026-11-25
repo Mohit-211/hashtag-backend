@@ -18,6 +18,21 @@ const PRICING_TYPES = ["FIXED", "TIERED", "QUANTITY_BASED", "FIXED_QUANTITY"];
 // FIXED_QUANTITY once per cart line.
 const FIXED_PRICE_TYPES = ["FIXED", "FIXED_QUANTITY"];
 
+// The price of a FIXED or FIXED_QUANTITY value is optional (decided 25 Nov): left empty, it's
+// stored as NULL and the value costs nothing extra (the cart and the shop read NULL as 0).
+// Returns null for an empty price, the number for a valid one, and throws for anything else.
+const optionalFixedPrice = (raw) => {
+  if (raw === undefined || raw === null || String(raw).trim() === "") return null;
+
+  const price = Number(raw);
+
+  if (!Number.isFinite(price) || price < 0) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "fixed_price must be 0 or greater");
+  }
+
+  return price;
+};
+
 const parseBoolean = (value, defaultValue = false) => {
   if (value === undefined || value === null || value === "") {
     return defaultValue;
@@ -419,29 +434,10 @@ const createCustomizationOptionValue = async (optionId, body) => {
       );
     }
 
-    let fixedPrice = null;
-
-    if (FIXED_PRICE_TYPES.includes(pricing_type)) {
-      if (
-        fixed_price === undefined ||
-        fixed_price === null ||
-        fixed_price === ""
-      ) {
-        throw new ApiError(
-          httpStatus.BAD_REQUEST,
-          `fixed_price is required for ${pricing_type} pricing`,
-        );
-      }
-
-      fixedPrice = Number(fixed_price);
-
-      if (!Number.isFinite(fixedPrice) || fixedPrice < 0) {
-        throw new ApiError(
-          httpStatus.BAD_REQUEST,
-          "fixed_price must be 0 or greater",
-        );
-      }
-    }
+    // Optional: no price means the value costs nothing extra.
+    let fixedPrice = FIXED_PRICE_TYPES.includes(pricing_type)
+      ? optionalFixedPrice(fixed_price)
+      : null;
 
     if (pricing_type === "TIERED" || pricing_type === "QUANTITY_BASED") {
       fixedPrice = null;
@@ -515,28 +511,13 @@ const updateCustomizationOptionValue = async (id, body) => {
       updateData.pricing_type || optionValue.pricing_type;
 
     if (FIXED_PRICE_TYPES.includes(finalPricingType)) {
+      // Optional: null or "" clears the price (the value then costs nothing extra); a price
+      // left out keeps the saved one. A TIERED value being switched has none saved, so it
+      // stays empty.
       const amount =
         fixed_price !== undefined ? fixed_price : optionValue.fixed_price;
 
-      // Number() turns these into 0, which the cart would charge. A TIERED value being
-      // switched has no saved amount to fall back on.
-      if (amount === null || amount === "") {
-        throw new ApiError(
-          httpStatus.BAD_REQUEST,
-          `fixed_price is required for ${finalPricingType} pricing`,
-        );
-      }
-
-      const finalFixedPrice = Number(amount);
-
-      if (!Number.isFinite(finalFixedPrice) || finalFixedPrice < 0) {
-        throw new ApiError(
-          httpStatus.BAD_REQUEST,
-          "fixed_price must be 0 or greater",
-        );
-      }
-
-      updateData.fixed_price = finalFixedPrice;
+      updateData.fixed_price = optionalFixedPrice(amount);
     }
 
     if (
