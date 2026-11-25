@@ -126,6 +126,39 @@ const validateResetPassordBody = (req, res, next) => {
     next();
 };
 
+// POST user/profile changes the customer's name and phone, nothing else (25 Nov 2026). The email
+// can't be changed: a request that sends one is refused, so nobody thinks it was saved. The name is
+// 2 to 80 characters as on the website, with runs of spaces and line breaks made one space. The
+// phone follows the sign-up rule: optional, and when given a US number stored as 10 digits. A
+// request without mobile keeps the saved phone; an empty one (or null) removes it.
+const PROFILE_NAME_MIN = 2;
+const PROFILE_NAME_MAX = 80;
+
+const validateUpdateProfileBody = (req, res, next) => {
+    const { name, mobile } = req.body;
+
+    if (req.body.email !== undefined) {
+        return responseWrapper(res, '', 'Your email can\'t be changed.', httpStatus.BAD_REQUEST);
+    };
+
+    const fullName = typeof name === 'string' ? name.replace(/\s+/g, ' ').trim() : '';
+    if (fullName.length < PROFILE_NAME_MIN || fullName.length > PROFILE_NAME_MAX || /[\u0000-\u001f\u007f]/.test(fullName)) {
+        return responseWrapper(res, '', `Please enter your full name (${PROFILE_NAME_MIN} to ${PROFILE_NAME_MAX} characters).`, httpStatus.BAD_REQUEST);
+    };
+    req.body.name = fullName;
+
+    if (mobile === null || (typeof mobile === 'string' && mobile.trim() === '')) {
+        req.body.mobile = null;
+    } else if (mobile !== undefined) {
+        const usMobile = typeof mobile === 'string' || typeof mobile === 'number' ? normalizeUsPhone(mobile) : null;
+        if (!usMobile) {
+            return responseWrapper(res, '', 'Please enter a valid 10-digit US phone number, or leave it empty.', httpStatus.BAD_REQUEST);
+        };
+        req.body.mobile = usMobile;
+    };
+    next();
+};
+
 // Customer endpoints always act on the customer role. The client used to be able to
 // pick any role_id through this header. The old name is kept because payment.route.js
 // (not changed in this round) still uses it.
@@ -136,6 +169,7 @@ const useCustomerRole = (req, res, next) => {
 
 module.exports = {
     validateRegisterUserBody,
+    validateUpdateProfileBody,
     verifyAuthJWTToken,
     validateResetPassordBody,
     useCustomerRole,

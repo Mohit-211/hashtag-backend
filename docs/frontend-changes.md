@@ -6,17 +6,18 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
-| [2026-11-25: graphics can also be WebP](#2026-11-25-webp) | not deployed yet | None: the shop's pickers already offer WebP (`88dcfa1`) |
-| [2026-11-25: SAGE products are customized for free](#2026-11-25-sage-free) | not deployed yet | **Required:** charge nothing for customization on SAGE products in the customizer (the drinkware $8 back print first). The cart's "Sage" line goes away on its own |
-| [2026-11-25: product cards show the lowest price per piece](#2026-11-25-card-price) | not deployed yet | None required |
-| [2026-11-25: a customization value's price can be empty](#2026-11-25-optional-price) | not deployed yet | None required: the shop already counts a missing price as $0 |
+| [2026-11-25: customers can change their name and phone](#2026-11-25-profile) | live since 25 Nov | **To turn it on:** set `PROFILE_EDIT_ENABLED` to `true` in `ProfileSection.tsx` and deploy |
+| [2026-11-25: graphics can also be WebP](#2026-11-25-webp) | `a149b35`, live since 25 Nov | None: the shop's pickers already offer WebP (`88dcfa1`, live) |
+| [2026-11-25: SAGE products are customized for free](#2026-11-25-sage-free) | `8b7b9fc`, live since 25 Nov | Done in hashtag-next `46dd2c6`, live since 25 Nov |
+| [2026-11-25: product cards show the lowest price per piece](#2026-11-25-card-price) | `94f3e84`, live since 25 Nov | None required |
+| [2026-11-25: a customization value's price can be empty](#2026-11-25-optional-price) | `4888377`, live since 25 Nov | None required: the shop already counts a missing price as $0 |
 | [2026-11-24: an order keeps the address it was priced for](#2026-11-24-ship-to) | `6c6ec41`, live since 24 Nov | None required |
 | [2026-11-24: print options must be on the price list; one drinkware rule](#2026-11-24-print-options) | `fbc10dd`, live since 24 Nov | None required. Recommended: decide drinkware from `is_drinkware` |
 | [2026-11-24: the contact and sourcing forms are checked on the server; page sizes on public lists](#2026-11-24-forms-lists) | `311e5ee`, live since 24 Nov | None required. Optional: limit the support form's email to 100 characters |
 | [2026-11-24: each upload takes only what its form sends](#2026-11-24-uploads) | `739b58c`, live since 24 Nov | None required. Recommended: show the sourcing form's 20 MB limit, and cap pre-made products at 10 graphics in total |
 | [2026-11-20: unpaid orders and one payment at a time](#2026-11-20-paying-order) | `f09c0b4`, live since 20 Nov | None required: the shop already shows the API's messages. Optional: see the note on 409 from `POST order` |
-| [2026-11-20: graphics are PNG, JPG or SVG only](#2026-11-20-graphic-types) | `35ba84e`, live since 20 Nov | Done in hashtag-next, not deployed yet: both graphic pickers limited to PNG, JPG, JPEG and SVG |
-| [2026-11-13: payments go-live](#2026-11-13-go-live) | `2634b76`, live since 16 Nov | Done in hashtag-next `744ba16` and `5d0fcff`, not deployed yet |
+| [2026-11-20: graphics are PNG, JPG or SVG only](#2026-11-20-graphic-types) | `35ba84e`, live since 20 Nov | Done in hashtag-next `88dcfa1`, live: both graphic pickers limited to PNG, JPG, JPEG, SVG and WebP (WebP allowed since 25 Nov) |
+| [2026-11-13: payments go-live](#2026-11-13-go-live) | `2634b76`, live since 16 Nov | Done in hashtag-next `744ba16` and `5d0fcff`, live |
 | [2026-11-13: colours and sizes on product cards](#2026-11-13) | `630d20c`, live | Optional: show colour swatches and the size range on cards |
 | [2026-11-12: the category list shows only categories with products](#2026-11-12) | `64c340f`, live | None required: read the notes |
 | [2026-11-06: `FIXED_QUANTITY` customization pricing](#2026-11-06) | `a8cb702`, live | **Required before a product gets this type**: show `fixed_price` as a total and never multiply it by quantity |
@@ -82,8 +83,22 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 
 ---
 
+<a id="2026-11-25-profile"></a>
+## 2026-11-25: customers can change their name and phone (live since 25 Nov)
+
+New: `POST user/profile` (signed in, JSON) saves the customer's name and phone. Before this there was no such route, so the profile's Save button couldn't save anything (audit F11).
+
+- **Body:** `{ "name": "Jane Doe", "mobile": "8325550123" }`.
+- **`name`:** required, 2 to 80 characters after trimming, as on the website. Runs of spaces and line breaks become one space. Otherwise 400 "Please enter your full name (2 to 80 characters)."
+- **`mobile`:** the sign-up rule. Optional; when given, a US number in any usual format, stored as its 10 digits. `""` or `null` removes the phone, and leaving `mobile` out keeps the saved one. Otherwise 400 "Please enter a valid 10-digit US phone number, or leave it empty."
+- **The email can't be changed.** A request with an `email` field (any value, even the current one) is refused with 400 "Your email can't be changed." and nothing is saved.
+- Any other field is ignored.
+- **Answer (200):** the profile in the same shape as `GET user/profile`, with the message "Profile updated."
+
+**What the shop must do:** set `PROFILE_EDIT_ENABLED` to `true` in `src/components/account/ProfileSection.tsx` and deploy. The Save code from `f21ac29` already sends `{ name, mobile }` with `mobile: ""` when the phone is empty, which matches. Keep the email out of the request.
+
 <a id="2026-11-25-webp"></a>
-## 2026-11-25: graphics can also be WebP (not deployed yet)
+## 2026-11-25: graphics can also be WebP (live since 25 Nov)
 
 Asked for on 25 Nov, because the shop's artwork pickers offer WebP (hashtag-next `88dcfa1`). Customers' graphics are now PNG, JPG/JPEG, SVG or WebP, on `POST graphics` (field `graphic`) and on `POST product/cart` for pre-made products (`customization_images`). This updates [2026-11-20](#2026-11-20-graphic-types).
 
@@ -95,7 +110,7 @@ Asked for on 25 Nov, because the shop's artwork pickers offer WebP (hashtag-next
 **What the shop must do:** nothing. The pickers already accept WebP; it no longer fails at upload.
 
 <a id="2026-11-25-sage-free"></a>
-## 2026-11-25: SAGE products are customized for free (not deployed yet)
+## 2026-11-25: SAGE products are customized for free (live since 25 Nov)
 
 Decided on 25 Nov: a SAGE product can be customized (custom text, a graphic, a print method and its locations, whatever its category) at no extra cost. No print price, no drinkware back print ($8), no $35 graphic fee (SAGE lines never paid it). The customer pays the product price only.
 
@@ -105,7 +120,7 @@ Decided on 25 Nov: a SAGE product can be customized (custom text, a graphic, a p
 - **The print options are still checked.** A print method or location the product doesn't offer is still refused with 400, as before, because production reads them.
 - **`drinkware_second_location_price`** on `GET product/:id`, `product/guest/:id` and `product/variant/:id` is `0` for SAGE drinkware. It stays 8 for drinkware from other suppliers, which still pay the back print.
 
-**What the shop must do:**
+**Done in hashtag-next `46dd2c6`, live since 25 Nov.** What the shop had to do:
 1. **Cart:** nothing. `CartItem.tsx` reads `pricing_snapshot?.pricing_table ?? []`, so the "Sage" line disappears on its own.
 2. **Customizer, required:** on a SAGE product (the variant's `supplier` is `"SAGE"`, already read in `Productcustomizationpage.tsx` around line 1166), show no customization price.
    - `drinkwareLocationFee` (about line 1271) is 0. Better: use `drinkware_second_location_price` from the product.
@@ -116,7 +131,7 @@ Decided on 25 Nov: a SAGE product can be customized (custom text, a graphic, a p
 
 
 <a id="2026-11-25-card-price"></a>
-## 2026-11-25: product cards show the lowest price per piece (not deployed yet)
+## 2026-11-25: product cards show the lowest price per piece (live since 25 Nov)
 
 Asked for by the client on 25 Nov ("lowest price on card per piece"). On every product list (`GET product`, grand-category, brand, use-case and tier products, search), a manual product priced by quantity now gets the lowest price per piece in `price`, with `price_from: true` when smaller quantities cost more per piece. The shop already shows that as "$1.15+", as for SAGE products.
 
@@ -131,7 +146,7 @@ On 25 Nov this changed 17 cards: 14 with set quantities and 3 with ranges.
 **What the shop must do:** nothing.
 
 <a id="2026-11-25-optional-price"></a>
-## 2026-11-25: a customization value's price can be empty (not deployed yet)
+## 2026-11-25: a customization value's price can be empty (live since 25 Nov)
 
 A **One price** (`FIXED`) or **Fixed quantity** (`FIXED_QUANTITY`) value can now be saved in the admin panel without a price, so `GET customization-option/product/:productId/customizations` can return it with `fixed_price: null`. It costs nothing extra, and the cart charges it as $0.
 

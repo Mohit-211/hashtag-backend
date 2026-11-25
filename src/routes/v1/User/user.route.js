@@ -7,6 +7,7 @@ const { userAuthMiddleware } = require('../../../middlewares');
 router.use(userAuthMiddleware.useCustomerRole);
 
 router.get('/profile', [userAuthMiddleware.verifyAuthJWTToken], userOpController.getProfile);
+router.post('/profile', [userAuthMiddleware.verifyAuthJWTToken, userAuthMiddleware.validateUpdateProfileBody], userOpController.updateProfile);
 router.post('/notifications', [userAuthMiddleware.verifyAuthJWTToken], userOpController.notificationToogle);
 router.delete('/deactivate', [userAuthMiddleware.verifyAuthJWTToken], userOpController.deactivateAccount);
 

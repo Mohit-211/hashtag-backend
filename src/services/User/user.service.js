@@ -38,6 +38,30 @@ const getProfile = async (body, headers) => {
     }
 };
 
+// Saves the name, and the phone when the request sent one (null removes it), as checked by
+// validateUpdateProfileBody. The email is never changed here. Answers with the profile as
+// GET user/profile does. An account without a profile row gets one.
+const updateProfile = async (body, headers) => {
+
+    try {
+        const { user, name, mobile } = body;
+        const changes = { name };
+        if (mobile !== undefined) changes.mobile = mobile;
+
+        const profile = await Profile.findOne({ where: { user_id: user.id } });
+        if (profile) {
+            await profile.update(changes);
+        } else {
+            await Profile.create({ user_id: user.id, email: user.email, ...changes });
+        };
+
+        return await getProfile({ user }, headers);
+
+    } catch (error) {
+        throw new ApiError(error.statusCode ? error.statusCode : httpStatus.INTERNAL_SERVER_ERROR, error.message);
+    }
+};
+
 // Closing an account hides it and signs the customer out everywhere. deleted_by set to their own
 // id marks it as closed by them (an admin's delete leaves it empty): signing in within
 // CLOSED_ACCOUNT_DAYS restores it, and after that the account cleanup deletes it.
@@ -74,6 +98,7 @@ const notificationToogle = async (body) => {
 
 module.exports = {
     getProfile,
+    updateProfile,
     deactivateAccount,
     notificationToogle,
 };
