@@ -47,6 +47,31 @@ const {
   orderLinesOptionsGone,
   withFreeSageCustomization,
 } = require("../../utils/pricing/buildPricingSnapshot");
+const { linesWithQuantityNotSold, orderLinesQuantityNotSold } = require("./quantityBasedOptions");
+
+// The names of the products on these cart lines, once each, for a message. A product removed since
+// keeps its name here.
+const productNamesOf = async (items, transaction) => {
+  const products = await Product.findAll({
+    where: { id: [...new Set(items.map((item) => item.product_id))] },
+    attributes: ["id", "name"],
+    paranoid: false,
+    transaction,
+  });
+  const nameOf = new Map(products.map((product) => [Number(product.id), decodeHtmlEntities(product.name)]));
+
+  return [...new Set(items.map((item) => nameOf.get(Number(item.product_id)) || "an item in your cart"))];
+};
+
+// Stops the order when a pre-made line has a quantity-based option that isn't sold at its quantity
+// (audit F03): added before that rule, or the option's quantities changed since. The message names
+// the products, so the customer knows which quantities to change.
+const refuseQuantityNotSold = async (cartItems, transaction) => {
+  const refused = await linesWithQuantityNotSold(cartItems, transaction);
+  if (!refused.length) return;
+
+  throw new ApiError(httpStatus.BAD_REQUEST, orderLinesQuantityNotSold(await productNamesOf(refused, transaction)));
+};
 
 // Stops the order when a cart line can't be sold as it was saved (audit F04, F05): print options
 // the rules refuse now (added before them, or the product has moved to other categories since), a
@@ -78,18 +103,7 @@ const refuseUnsellableLines = async (cartItems, transaction) => {
 
   if (!refused.length) return;
 
-  // A product removed since keeps its name here.
-  const products = await Product.findAll({
-    where: { id: [...new Set(refused.map((item) => item.product_id))] },
-    attributes: ["id", "name"],
-    paranoid: false,
-    transaction,
-  });
-  const nameOf = new Map(products.map((product) => [Number(product.id), decodeHtmlEntities(product.name)]));
-
-  const names = [...new Set(refused.map((item) => nameOf.get(Number(item.product_id)) || "an item in your cart"))];
-
-  throw new ApiError(httpStatus.BAD_REQUEST, orderLinesOptionsGone(names, refused.length));
+  throw new ApiError(httpStatus.BAD_REQUEST, orderLinesOptionsGone(await productNamesOf(refused, transaction), refused.length));
 };
 
 const createOrder = async (body) => {
@@ -180,8 +194,10 @@ const createOrder = async (body) => {
       }
     }
 
-    // A line that can't be sold as it was saved stops the order here, before shipping is priced.
+    // A line that can't be sold as it was saved, or not at its quantity (F03), stops the order here,
+    // before shipping is priced.
     await refuseUnsellableLines(cartItems, t);
+    await refuseQuantityNotSold(cartItems, t);
 
     /*
      |--------------------------------------------------------------------------

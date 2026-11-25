@@ -46,6 +46,7 @@ const { cartLineTotal } = require("../../utils/pricing/cartLineTotal");
 const { handlingFeeFor } = require("./handlingFee.service");
 const { retireUnpaidOrders } = require("./unpaidOrders.service");
 const { keepUpload } = require("../../utils/keptUploads");
+const { quantityRowFor, listedQuantities, quantityNotListed } = require("./quantityBasedOptions");
 
 // Variant's primary image, else its first image, else the product's first attachment.
 const getVariantImage = (variant) => {
@@ -792,8 +793,14 @@ const buildManualPricingSnapshot = async ({
       /*
        * QUANTITY_BASED
        *
-       * Find the highest configured quantity
-       * that is <= the product quantity.
+       * Sold only at its listed quantities (audit F03,
+       * decided 24 Nov 2026), as on the product page:
+       * the row whose quantity is the product quantity.
+       * Any other quantity is refused with the ones it's
+       * sold in, also when the cart's quantity changes
+       * (repriceManualCartItem prices here too). Before,
+       * the highest row at or below the quantity was
+       * charged, so 49 pieces paid the 25-piece price.
        *
        * IMPORTANT:
        *
@@ -818,28 +825,12 @@ const buildManualPricingSnapshot = async ({
       else if (
         value.pricing_type === "QUANTITY_BASED"
       ) {
-        pricingTier =
-          await CustomizationOptionValuePricing.findOne({
-            where: {
-              customization_option_value_id:
-                value.id,
-
-              is_active: true,
-
-              quantity: {
-                [Op.lte]: finalQty,
-              },
-            },
-
-            order: [
-              ["quantity", "DESC"],
-            ],
-          });
+        pricingTier = await quantityRowFor(value.id, finalQty);
 
         if (!pricingTier) {
           throw new ApiError(
             httpStatus.BAD_REQUEST,
-            `No quantity-based customization pricing found for "${value.name}" at quantity ${finalQty}`,
+            quantityNotListed(value.name, await listedQuantities(value.id)),
           );
         }
 

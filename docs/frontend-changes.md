@@ -6,6 +6,7 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
+| [2026-11-25: quantity-based options are sold only at their listed quantities](#2026-11-25-quantity-options) | live since 25 Nov | None required: the product page already sells only those quantities, and the cart shows the API's message |
 | [2026-11-25: customers can change their name and phone](#2026-11-25-profile) | live since 25 Nov | **To turn it on:** set `PROFILE_EDIT_ENABLED` to `true` in `ProfileSection.tsx` and deploy |
 | [2026-11-25: graphics can also be WebP](#2026-11-25-webp) | `a149b35`, live since 25 Nov | None: the shop's pickers already offer WebP (`88dcfa1`, live) |
 | [2026-11-25: SAGE products are customized for free](#2026-11-25-sage-free) | `8b7b9fc`, live since 25 Nov | Done in hashtag-next `46dd2c6`, live since 25 Nov |
@@ -82,6 +83,17 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 **Waiting on the client:** A8, DTG with several locations (Q8, reworded); which font settings besides the font list (Q23). **Later, by the client's choice:** A24 pre-made products from suppliers (Q26), A42 price filter (Q54), A46 Back button (Q57), policy pages editable in the admin (Q61).
 
 ---
+
+<a id="2026-11-25-quantity-options"></a>
+## 2026-11-25: quantity-based options are sold only at their listed quantities (live since 25 Nov)
+
+Decided on 24 Nov (audit F03). A customization value with `pricing_type: "QUANTITY_BASED"` has a price for set quantities, for example 25 pieces for $50 and 50 pieces for $90. The API now prices it only when the line's quantity is one of those, as the product page does. Before, it charged the highest row at or below the quantity, so a customer who typed 49 in the cart paid the 25-piece price.
+
+- **`POST product/cart`, and the cart's quantity changes (`PUT product/cart`, `PUT product/cart/increment`, `PUT product/cart/decrement`):** any other quantity is refused with 400, naming the quantities: `The "Velcro" option is sold in 25 or 50 pieces. Please choose one of those quantities.` With one quantity: `... is sold in 100 pieces. Please choose that quantity.`
+- **`POST order`:** a pre-made line added earlier at another quantity is refused with 400: `An option on <product> isn't sold in the quantity in your cart. Please change the quantity or remove it.` (several products: `Options on A and B aren't sold in the quantities in your cart. ...`).
+- The listed quantities cost the same as before. The other pricing types (`FIXED`, `TIERED`, `FIXED_QUANTITY`) are unchanged.
+
+**What the shop must do:** nothing. The product page already sells only the listed quantities, and the cart shows the API's message. Optional: on a line with such an option, let + and − step between the listed quantities, since + on a 25-piece line asks for 26, which is refused.
 
 <a id="2026-11-25-profile"></a>
 ## 2026-11-25: customers can change their name and phone (live since 25 Nov)
