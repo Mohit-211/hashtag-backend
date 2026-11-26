@@ -6,7 +6,8 @@ const {
 } = require("../../models");
 
 const sequelize = require("../../config/central.db");
-const { getProductDetails, saveSageProductToDB, isStockReported } = require("./sage.service");
+const { getProductDetails, saveSageProductToDB } = require("./sage.service");
+const { buildSageColorList } = require("./sageColors");
 
 // meta comes back as text from MariaDB.
 const parseMeta = (meta) => {
@@ -175,26 +176,31 @@ const syncImportedSageProducts = async () => {
         // VARIANT CHECK
         // ====================
 
-        const colors =
-          sageProduct.colors
-            ?.split(",")
-            .map((x) => x.trim())
-            .filter(Boolean) || [];
+        // The colours, and each colour's stock, exactly as saveSageProductToDB stores them
+        // (sageColors.js): SAGE's stock list first, then colours only its colour text names.
+        const expected = buildSageColorList(sageProduct);
+        const expectedByName = new Map(
+          expected.colors.map((color) => [color.name, color]),
+        );
 
-        const localColors = existingProduct.variants.map((v) => v.color).sort();
+        // With no colours from SAGE at all, the save adds a "Default" colour and keeps the
+        // others as they are (a gap in SAGE's answer isn't taken as every colour being
+        // dropped), so only the variant it writes is compared then.
+        const comparedVariants =
+          expected.source === "none"
+            ? existingProduct.variants.filter((v) => expectedByName.has(v.color))
+            : existingProduct.variants;
 
-        if (colors.length && colors.slice().sort().join("|") !== localColors.join("|")) {
+        const localColors = comparedVariants.map((v) => v.color).sort();
+        const expectedColors = expected.colors.map((color) => color.name).sort();
+
+        if (localColors.join("|") !== expectedColors.join("|")) {
           console.log(`🎨 Colors changed`);
 
           hasChanges = true;
         }
 
-        // Stock as saveSageProductToDB stores it: SAGE's number, or untracked when SAGE
-        // doesn't report one.
-        const stockReported = isStockReported(sageProduct.onHand);
-        const expectedStock = stockReported ? Number(sageProduct.onHand) : null;
-
-        for (const variant of existingProduct.variants) {
+        for (const variant of comparedVariants) {
           if (
             Number(variant.price) !== listPrice ||
             Number(variant.case_price) !== listPrice ||
@@ -207,9 +213,13 @@ const syncImportedSageProducts = async () => {
             break;
           }
 
+          // A variant whose colour isn't expected any more counts as a change too.
+          const color = expectedByName.get(variant.color);
+
           if (
-            (variant.stock ?? null) !== expectedStock ||
-            !!variant.track_inventory !== stockReported ||
+            !color ||
+            (variant.stock ?? null) !== color.stock ||
+            !!variant.track_inventory !== color.trackInventory ||
             !!variant.is_discontinued !== !!sageProduct.discontinued
           ) {
             console.log(`📦 Stock or discontinued status changed`);

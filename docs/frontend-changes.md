@@ -6,6 +6,7 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
+| [2026-11-26: SAGE colours come from SAGE's stock list; stock per colour](#2026-11-26-sage-colours) | not deployed yet | None required. **Recommended:** show sold-out SAGE colours in the customizer (a colour at 0 is refused by the cart) |
 | [2026-11-25: print locations per garment; one sleeve](#2026-11-25-print-locations) | live since 25 Nov | **Required:** one Sleeve spot on T-shirts (decided 24 Nov). Everything the shop sends today is still accepted |
 | [2026-11-25: one add to cart adds all its lines or none](#2026-11-25-all-or-none) | live since 25 Nov | None required |
 | [2026-11-26: bags can be customized: embroidery, DTF or screen print on the front](#2026-11-26-bags) | live since 26 Nov | **To offer it:** a bag customizer, front only (below). Nothing breaks meanwhile |
@@ -86,6 +87,39 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 **Waiting on the client:** A8, DTG with several locations (Q8, reworded); which font settings besides the font list (Q23). **Later, by the client's choice:** A24 pre-made products from suppliers (Q26), A42 price filter (Q54), A46 Back button (Q57), policy pages editable in the admin (Q61).
 
 ---
+
+<a id="2026-11-26-sage-colours"></a>
+## 2026-11-26: SAGE colours come from SAGE's stock list; stock per colour (not deployed yet)
+
+SAGE describes a product's colours twice. Its colour text is cut at 1,000 characters, so long lists come abbreviated ("Hot P" for Hot Pink) and cut mid-word ("Wh"); its stock list has every colour, spelled in full, with its own stock. The import used only the text. Example: 3/4" Ink Injected Wristbands (#94892) showed 69 colours, among them "Hot P", "Red/P Seg" and a colour called "Wh", and none of SAGE's swirl and glow bands. It now has SAGE's 119.
+
+**What changes in the API** (once the SAGE sync has run after the deploy; there are no new fields):
+- **More colours:** about 595 new colour variants on SAGE products, and 41 that were removed come back. The five big wristband products go from 67–69 to 119–129 colours. New colours have higher variant ids, so they come after the existing ones.
+- **Renamed in place:** 21 abbreviated colours keep their `variant_id` and get the full name, with a new `sku` and `color_code`: "Hot P" becomes "Hot Pink", "Red/P Seg" becomes "Red/Pink Seg", "White/Lime Green Se" becomes "White/Lime Green Seg". Carts, wishlists, orders and `?variant_id=` links keep working.
+- **Removed (soft-deleted):** 26 variants that weren't real colours:
+  - the cut-off fragments ("Wh", "Whi");
+  - "Unavailable" on six drinkware products, which SAGE's real colours replace;
+  - repeated colours on four napkin products ("Bermuda Blue" next to "Bermuda").
+
+  None of them is in a cart, wishlist or order.
+- **Stock is per colour:** SAGE's stock for that colour (added up over its sizes), no longer the product's total on every colour.
+  - A colour SAGE reports at 0 is `stock: 0, track_inventory: true`. It drops off product cards and filters, and `POST product/cart` refuses it (400 "Not enough stock for variant N"). About 519 SAGE colours that can be ordered today are at 0. The other way round, colours on a product whose total SAGE showed as 0 or below (one oversold size) become orderable when SAGE has stock of that colour.
+  - Made-to-order colours (SAGE marks them unlimited) are `stock: null, track_inventory: false`: no limit, as unreported stock is today.
+  - Colours only SAGE's colour text names (no stock record) keep the product's total stock, as every colour had before.
+- **Unchanged:** SAGE products still have one variant per colour (size "One Size", no `size_id`), and colour names are unique within a product. Colours SAGE's text and stock list both have keep the shop's current spelling ("Navy Blue" stays, though SAGE's stock list says "Navy").
+- **Not added:** parts some suppliers keep in the stock list's colour field (custom buttons' "Mylar", "Pinned Backs"; mouse pads' "Gaming"), and colours that only a stock list covering several sizes or models names, as they may be another item's (11-inch-only balloon colours on the 17-inch balloons).
+
+**What the shop must do:** nothing is required; every link and cart line keeps its `variant_id`.
+
+**Recommended:** show sold-out SAGE colours before the customer designs one.
+- The SAGE quantity stepper (`Sagequantitypricing.tsx:382`) treats `stock: 0` as "no limit". The customizer passes only `stock`, not `track_inventory` (`Productcustomizationpage.tsx:2675`).
+- So a customer can pick a colour SAGE has none of, design it, and only then get the cart's error.
+- Fix: use `isInStock` / `stockCeiling` from `src/lib/stock.ts` as the add-colours modal does, mark the colour sold out and block Add to cart with a clear message. On the product page, mark or disable colours with no stock (`ProductInfo.tsx` colour swatches).
+
+**Optional:**
+- **Long colour lists:** the product page draws every swatch, up to 129 on the wristbands. Consider about 30 and a "Show all N colors" button.
+- **Image preloading:** `ProductDetail.tsx:337-355` preloads one image per colour when the page is idle. Limit it (e.g. the first 12) now that SAGE colours can have their own pictures.
+- **Two-tone cart dot:** two-tone colour codes arrive as `"#0000FF,#808080"`, which `backgroundColor` ignores, so the cart's colour dot is blank (`CartItem.tsx:271-274`). Reuse `ColorSwatch`'s gradient.
 
 <a id="2026-11-26-bags"></a>
 ## 2026-11-26: bags can be customized: embroidery, DTF or screen print on the front (live since 26 Nov)

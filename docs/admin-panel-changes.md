@@ -4,6 +4,7 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
+| [2026-11-26: SAGE colours come from SAGE's stock list](#2026-11-26-sage-colours) | not deployed yet | Done in Hashtag-Billionaire-Admin (not deployed yet): the SAGE product page shows the colours the import keeps, with no "No longer offered" |
 | [2026-11-26: bags can be customized; decoration rows priced per location](#2026-11-26-bags) | live since 26 Nov | Done in Hashtag-Billionaire-Admin `f0d2a38`, live since 26 Nov: the Orders and Payments pages multiply DTF, screen print and DTG rows by their locations |
 | [2026-11-25: print locations per garment](#2026-11-25-print-locations) | live since 25 Nov | None required |
 | [2026-11-25: SAGE products are customized for free](#2026-11-25-sage-free) | `8b7b9fc`, live since 25 Nov | None required |
@@ -72,6 +73,45 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 
 1. **`payment_status=ALL`:** coming in the next release: `GET order/admin?payment_status=ALL` lists orders of every payment status. Without the parameter it still lists paid orders only.
 2. **The 2 unpaid orders the panel doesn't show:** when a customer's cart changes, the backend soft-deletes their latest unpaid order (`invalidatePendingOrder` in `cartWishlist.service.js`), and orders are paranoid, so those two are hidden from every list. Nothing is missing on the panel's side; the behaviour itself is on the payments list (audit H8).
+
+<a id="2026-11-26-sage-colours"></a>
+## 2026-11-26: SAGE colours come from SAGE's stock list (not deployed yet)
+
+SAGE's colour text is cut at 1,000 characters and abbreviates long lists, so the import now takes a SAGE product's colours from SAGE's stock list (`skus`, the attribute with typeId 10), each with its own stock. What this means for the shop: [frontend-changes.md](frontend-changes.md#2026-11-26-sage-colours).
+
+**`GET sage/product/:prodEId`** also returns `sageColors`: the colours an import or sync gives the product, built by `src/services/Common/sageColors.js`.
+- `source`: `skus` (SAGE's stock list), `text` (no stock list, so the colour text) or `none` (a single "Default").
+- `textCut`: true when the colour text reached SAGE's 1,000-character limit.
+- `colors`: `[{ name, sageName, listedAs, status, match, stock, trackInventory }]`.
+  - `name` is the shop's colour name; `sageName` is the stock list's spelling; `listedAs` is the colour text's.
+  - `status`: `offered` (in SAGE's stock list), `text_only` (only the colour text names it: kept on sale with the product's total stock, as before), `text` or `default`.
+  - `stock` is null when the stock isn't tracked: made to order, or no stock record.
+- `dropped`: `[{ name, reason }]`, the entries not imported.
+  - `cut_off`: the text's cut-off last entry.
+  - `duplicate`: a colour already listed under another spelling.
+  - `placeholder`: "Various" or "Unavailable" when real colours replace it.
+  - `part`: a part or shape in the stock list's colour field, such as "Mylar", "Pinned Backs (C)" or "Gaming".
+  - `other_item`: a colour only a stock list covering several sizes or models names (some suppliers send one list for a whole product line), so it may be another item's.
+
+`GET sage/supplier-truth/:prodEId` lists the same colours, with `stock`, `trackInventory` and `status`.
+
+**What changes for stored variants** (after the sync), as seen on Products, Variants and the SAGE page's Imported tab:
+- **Renames:** 21 abbreviated colours are renamed in place, keeping their id ("Hot P" → "Hot Pink"). Their `sku` changes too, so a search for the old sku finds nothing. Past orders keep the old sku in `order_items.sku`.
+- **New and returning colours:** about 595 new colours, and 41 removed ones come back.
+- **Retirements:** 26 non-colours are retired as discontinued: cut-off "Wh", "Unavailable", repeated napkin colours.
+- **Stock:** per colour. A colour SAGE reports at 0 shows "Out of stock".
+- **Sync lock:** products locked by an edit on the panel (27 SAGE products) keep their colours. The sync skips them.
+
+**Done in the panel** (not deployed yet):
+- **Colour table:** the SAGE product page's "Variant Data — Color & Stock" table shows `sageColors`, in order: the colours the import keeps, then the entries it leaves out with the reason. The header counts the kept colours.
+- **Spellings:** a colour shows a muted second line when SAGE spells it differently: `In colour text as "Hot P"` or `In stock list as "Blue/Grey Seg"`.
+- **Labels:** "In SAGE's stock list", "Only in colour text", "Cut off — not imported", "Duplicate — not imported", "Not a colour — not imported", "Part or shape — not imported", "Other size or model — not imported". "No longer offered" is gone; it came from comparing the two lists' spellings letter for letter.
+- **Older backend:** if the backend sends no `sageColors`, the table lists SAGE's stock list only and names the differently spelled text entries in one note, so no colour is listed twice.
+
+**Known limits** (review of 26 Nov, left as they are):
+- **Sizes added together:** where a stock list covers several sizes or models, a colour's stock adds up all of them.
+- **Missing stock list:** if SAGE once leaves a product's stock list out, that save uses the colour text alone; the next full answer puts it back.
+- **Skipped colour still expected:** a colour skipped because another product holds its sku would make the sync re-save that product every month. There are none today.
 
 <a id="2026-11-26-bags"></a>
 ## 2026-11-26: bags can be customized; decoration rows priced per location (live since 26 Nov)

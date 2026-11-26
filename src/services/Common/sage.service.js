@@ -4,10 +4,16 @@ const axios = require("axios");
 const { Op } = require("sequelize");
 const httpStatus = require("http-status");
 const ApiError = require("../../utils/ApiError");
-
-// SAGE sends onHand as a number, or null when the supplier doesn't share stock levels.
-const isStockReported = (onHand) =>
-  onHand !== null && onHand !== undefined && onHand !== "" && Number.isFinite(Number(onHand));
+// SAGE's colours (stock list and colour text) and their skus; isStockReported lives there too.
+const {
+  isStockReported,
+  skuKey,
+  buildSageColorList,
+  sageSkuPrefix,
+  sageVariantSku,
+  findColorPic,
+  planSageVariants,
+} = require("./sageColors");
 const sequelize = require("../../config/central.db");
 const {
   SourceRawData,
@@ -69,7 +75,6 @@ const getSageSupplierTruth = async (prodEId) => {
     itemNum,
     spc,
     prName,
-    colors = "",
     qty = [],
     prc = [],
     net = [],
@@ -78,28 +83,27 @@ const getSageSupplierTruth = async (prodEId) => {
     discontinued = 0,
   } = product;
 
-  // Single source of truth for which colors currently exist — split exactly
-  // the same way saveSageProductToDB does, so this reflects reality without
-  // any DB influence.
-  const colorList = colors
-    ? colors.split(",").map((c) => c.trim()).filter(Boolean)
-    : [];
+  // The colours SAGE offers, built exactly as saveSageProductToDB builds them (sageColors.js):
+  // the ones in SAGE's stock list (skus) with each colour's own stock, then the ones only its
+  // colour text names (kept on sale, stock not tracked). The colour text alone isn't enough:
+  // it's cut at 1,000 characters and abbreviates long lists ("Hot P").
+  // sku is the one the import gives the colour, unless another product already holds it
+  // (that needs our database, which this never reads).
+  const { colors: colorList } = buildSageColorList(product);
+  const skuPrefix = sageSkuPrefix(product);
 
   const { priceTiers, netTiers, qtyTiers } = buildTierData(prc, net, qty);
 
-  const supplierVariants = colorList.map((colorName) => {
-    const sku = `${itemNum || spc || `SAGE-${prodEid}`}-${colorName}`;
-
-    const matchingPic = pics.find(
-      (pic) =>
-        pic.caption &&
-        pic.caption.trim().toLowerCase() === colorName.trim().toLowerCase(),
-    );
+  const supplierVariants = colorList.map((color) => {
+    const matchingPic = findColorPic(pics, [color.name, color.sageName, color.listedAs]);
 
     return {
-      sku,
-      color: colorName,
+      sku: sageVariantSku(skuPrefix, color.name),
+      color: color.name,
       image: matchingPic?.url || null,
+      stock: color.stock,
+      trackInventory: color.trackInventory,
+      status: color.status,
     };
   });
 
@@ -475,6 +479,10 @@ const getProductDetails = async (prodEId, includeSuppInfo = true) => {
     variantCount: variants.length,
 
     variants,
+
+    // The colours an import or sync gives this product, and the colour text entries it
+    // leaves out (for the admin's SAGE product page).
+    sageColors: buildSageColorList(product),
   };
 };
 
@@ -621,12 +629,10 @@ const saveSageProductToDB = async (sageProduct, batchId) => {
     prName,
     description,
     category,
-    colors = "",
     prc = [],
     net = [],
     qty = [],
     pics = [],
-    onHand = null,
     dimensions,
     prodTime,
     themes,
@@ -932,116 +938,151 @@ const saveSageProductToDB = async (sageProduct, batchId) => {
     }
 
     // ====================== VARIANTS ======================
-    const colorList = colors
-      ? colors
-          .split(",")
-          .map((c) => c.trim())
-          .filter(Boolean)
-      : ["Default"];
+    // One variant per colour. The colours come from SAGE's stock list (skus) when the product
+    // has one, each with its own stock; the colour text is cut at 1,000 characters and
+    // abbreviates long lists ("Hot P"), so it only gives the spelling the shop already uses
+    // and the colours the stock list lacks. Without a stock list the colour text is used, and
+    // without either a single "Default" colour. See sageColors.js.
+    const colorList = buildSageColorList(sageProduct);
+    const skuPrefix = sageSkuPrefix(sageProduct);
 
-    const variantPayload = await Promise.all(
-      colorList.map(async (colorName) => {
-        const colorCode = await getOrCreateColorCode("SAGE", colorName);
-
-        return {
-          sku: `${itemNum || spc || `SAGE-${prodEid}`}-${colorName}`,
-
-          product_id: product.id,
-
-          price: listPrice,
-
-          case_price: listPrice,
-
-          retail_price: netPrice,
-
-          // SAGE's onHand is the supplier's stock (0 = none) or null when the supplier
-          // doesn't report stock. Unreported stock isn't tracked, so it never blocks an order;
-          // it used to be stored as 999999, and a reported 0 was too.
-          stock: isStockReported(onHand) ? Number(onHand) : null,
-          track_inventory: isStockReported(onHand),
-
-          size: "One Size",
-
-          color: colorName,
-
-          color_code: colorCode,
-
-          supplier: "SAGE",
-
-          import_batch_id: batchId,
-
-          supplier_image_synced: false,
-
-          last_supplier_sync_at: new Date(),
-
-          is_active: !discontinued,
-
-          is_discontinued: !!discontinued,
-
-          discontinued_at: discontinued ? new Date() : null,
-
-          meta: {
-            priceTiers,
-            netTiers,
-            qtyTiers,
-            dimensions,
-            productionTime: prodTime,
-            themes,
-          },
-        };
-      }),
+    // Colour codes before this transaction writes any variant row: colorService updates
+    // product_variants outside the transaction, and would wait on the rows it locks.
+    const colors = await Promise.all(
+      colorList.colors.map(async (color) => ({
+        ...color,
+        colorCode: await getOrCreateColorCode("SAGE", color.name),
+      })),
     );
 
-       // ====================== CLEAN UP STALE VARIANT ROWS ======================
-    // SAGE's `colors` field is the single source of truth for which colors
-    // currently exist for this product. Any local row whose color isn't in
-    // that list (e.g. legacy "Various" rows from before per-color tracking
-    // existed) — or whose SKU no longer matches SAGE's current naming for a
-    // color it still lists — is stale local data that must not be kept as
-    // if it were a supplier-provided variant.
-    const currentSkus = variantPayload.map((v) => v.sku);
-    const currentColors = variantPayload.map((v) => v.color);
-
-    // Guard: colorList only falls back to a single "Default" entry when
-    // SAGE's colors field is genuinely empty/missing for this response.
-    // In that case, DON'T treat every real color as "removed" — that would
-    // wipe out legitimate variant history on what's likely a transient
-    // SAGE data gap, not an actual color discontinuation.
-    const supplierProvidedRealColors = !!colors;
-
-    const staleVariants = await ProductVariant.findAll({
+    // Two SAGE products can share an item number, and so a sku. The skus other products'
+    // rows hold (removed rows too, the unique index counts them): a colour whose sku is one of
+    // them gets this product's SAGE id in its sku, instead of the upsert below overwriting the
+    // other product's variant.
+    const skusHeldElsewhere = await ProductVariant.findAll({
       where: {
-        product_id: product.id,
-        [Op.or]: [
-          // Case 1: color still offered, but SKU naming scheme changed
-          {
-            color: { [Op.in]: currentColors },
-            sku: { [Op.notIn]: currentSkus },
-          },
-          // Case 2: color no longer offered by supplier at all
-          ...(supplierProvidedRealColors
-            ? [{ color: { [Op.notIn]: currentColors } }]
-            : []),
-        ],
+        sku: colors.flatMap((color) => [
+          sageVariantSku(skuPrefix, color.name),
+          sageVariantSku(`${skuPrefix}-${prodEid}`, color.name),
+        ]),
+        product_id: { [Op.ne]: product.id },
       },
-      attributes: ["id"],
+      attributes: ["sku", "product_id"],
       paranoid: false,
       transaction,
     });
 
-    if (staleVariants.length) {
-      const staleIds = staleVariants.map((v) => v.id);
+    const existingVariants = await ProductVariant.findAll({
+      where: { product_id: product.id },
+      attributes: ["id", "sku", "color", "deletedAt"],
+      paranoid: false,
+      transaction,
+    });
 
+    const plan = planSageVariants({
+      colors,
+      existing: existingVariants.map((variant) => variant.get({ plain: true })),
+      prefix: skuPrefix,
+      prodEid,
+      skusHeldElsewhere: skusHeldElsewhere.map((variant) => variant.sku),
+      source: colorList.source,
+    });
+
+    for (const note of plan.notes) {
+      console.log(`⚠️ SAGE product ${prodEid}: ${note}`);
+    }
+
+    // ====================== RENAME VARIANTS IN PLACE ======================
+    // A colour the shop has under an abbreviated or older name ("Hot P" for Hot Pink) keeps
+    // its variant: same id, new name and sku, so carts, wishlists and orders that point at it
+    // keep working. Done before the retiring and the upsert below, which go by the new skus.
+    for (const rename of plan.renames) {
       console.log(
-        `🧹 Retiring ${staleIds.length} stale SAGE variant row(s) for product ${product.id}`,
+        `✏️ Renaming SAGE variant ${rename.id} for product ${product.id}: "${rename.fromColor}" -> "${rename.toColor}" (${rename.fromSku} -> ${rename.toSku})`,
+      );
+
+      await ProductVariant.update(
+        {
+          color: rename.toColor,
+          sku: rename.toSku,
+          color_code: rename.colorCode,
+        },
+        {
+          where: { id: rename.id },
+          paranoid: false,
+          transaction,
+        },
+      );
+    }
+
+    // ====================== CLEAN UP STALE VARIANT ROWS ======================
+    // Live variants that none of the colours uses any more (a colour SAGE dropped, a cut-off
+    // or repeated text entry, a placeholder such as "Various"). When SAGE sent no colours at
+    // all, nothing is retired: that's more likely a gap in SAGE's answer than every colour
+    // being discontinued (planSageVariants).
+    if (plan.retireIds.length) {
+      console.log(
+        `🧹 Retiring ${plan.retireIds.length} stale SAGE variant row(s) for product ${product.id}`,
       );
 
       // Marked discontinued and soft-deleted, not erased: order lines point at
       // variants (erasing an ordered one made every later sync of the product fail),
       // and a color SAGE lists again comes back below.
-      await retireUnlistedVariants({ ids: staleIds, transaction });
+      await retireUnlistedVariants({ ids: plan.retireIds, transaction });
     }
 
+    // A colour whose sku, even with this product's SAGE id in it, another product's row holds is
+    // left out (planSageVariants logged it): the upsert would overwrite that product's variant.
+    const variantPayload = plan.rows.filter((row) => row.action !== "conflict").map((row) => ({
+      sku: row.sku,
+
+      product_id: product.id,
+
+      price: listPrice,
+
+      case_price: listPrice,
+
+      retail_price: netPrice,
+
+      // The colour's stock from SAGE's stock list (0 = none). Not tracked, so it never blocks
+      // an order, when SAGE doesn't report a number, makes the colour to order (unlimited), or
+      // only its colour text names it. Products without a stock list get the product's stock.
+      stock: row.stock,
+      track_inventory: row.trackInventory,
+
+      size: "One Size",
+
+      color: row.color,
+
+      color_code: row.colorCode,
+
+      supplier: "SAGE",
+
+      import_batch_id: batchId,
+
+      supplier_image_synced: false,
+
+      last_supplier_sync_at: new Date(),
+
+      is_active: !discontinued,
+
+      is_discontinued: !!discontinued,
+
+      discontinued_at: discontinued ? new Date() : null,
+
+      meta: {
+        priceTiers,
+        netTiers,
+        qtyTiers,
+        dimensions,
+        productionTime: prodTime,
+        themes,
+      },
+    }));
+
+    const currentSkus = variantPayload.map((v) => v.sku);
+
+    // "color" too: a row found by its sku takes the colour's current spelling.
     await ProductVariant.bulkCreate(variantPayload, {
       updateOnDuplicate: [
         "price",
@@ -1055,6 +1096,7 @@ const saveSageProductToDB = async (sageProduct, batchId) => {
         "discontinued_at",
         "last_supplier_sync_at",
         "meta",
+        "color",
       ],
       transaction,
     });
@@ -1088,15 +1130,13 @@ const saveSageProductToDB = async (sageProduct, batchId) => {
       transaction,
     });
 
-    for (const variant of createdVariants) {
-      const matchingPic = pics.find((pic) => {
-        if (!pic.caption) return false;
+    // A picture's caption may name the colour as the shop does, as SAGE's stock list does or
+    // as the colour text does ("Hot P").
+    const rowBySku = new Map(plan.rows.map((row) => [skuKey(row.sku), row]));
 
-        return (
-          pic.caption.trim().toLowerCase() ===
-          (variant.color || "").trim().toLowerCase()
-        );
-      });
+    for (const variant of createdVariants) {
+      const row = rowBySku.get(skuKey(variant.sku));
+      const matchingPic = findColorPic(pics, [variant.color, row?.sageName, row?.listedAs]);
 
       if (!matchingPic?.url) continue;
 
