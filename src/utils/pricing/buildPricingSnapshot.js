@@ -2,7 +2,15 @@ const { calculatePricing } = require("../../config/pricing");
 const httpStatus = require("http-status");
 const ApiError = require("../ApiError");
 const { netPriceTiers } = require("./pricing.util");
-const { APPAREL_PRINT_METHODS, DRINKWARE_PRINT_METHODS, printMethodsFor, garmentsFor } = require("../productFamily");
+const {
+  APPAREL_PRINT_METHODS,
+  DRINKWARE_PRINT_METHODS,
+  BAG_PRINT_METHODS,
+  isApparelProduct,
+  isBagProduct,
+  printMethodsFor,
+  garmentsFor,
+} = require("../productFamily");
 
 // The tumblers' $35 handling charge used to be added to each SAGE cart line here. It is now an
 // order fee, charged once per order and set on the Settings page (handlingFee.service.js).
@@ -95,6 +103,21 @@ const EMBROIDERY_PRICING = {
     "72-95": 15,
     "96-143": 14,
     "144+": 12,
+  },
+};
+
+// Bags (decided 26 Nov 2026): embroidery on a bag's front, a piece. The same prices as DTF, and
+// not the clothing embroidery rows above. DTF and screen print on bags use the tables below, as
+// on clothing.
+const BAG_EMBROIDERY_PRICING = {
+  FRONT: {
+    "1-11": 15,
+    "12-23": 12,
+    "24-35": 10,
+    "36-71": 9,
+    "72-95": 7,
+    "96-143": 5,
+    "144+": 5,
   },
 };
 
@@ -214,11 +237,15 @@ const DTG_PRICING = {
 
 /*
 |--------------------------------------------------------------------------
-| WHAT CAN BE SOLD (audit F04, F05, F08)
+| WHAT CAN BE SOLD (audit F04, F05, F08; bags 26 Nov)
 |--------------------------------------------------------------------------
 */
 
 const DRINKWARE_LOCATIONS = ["FRONT", "BACK"];
+
+// A bag is printed in one place, its front (decided 26 Nov 2026), so each bag pays its print price
+// once.
+const BAG_LOCATIONS = ["FRONT"];
 
 // Where each garment can be printed (audit F08): the spots the shop offers on it
 // (Productcustomizationpage.tsx GARMENT_VIEWS, the same at 7590672, 0802ff4 and e3197b8), as the shop sends
@@ -254,6 +281,7 @@ const MESSAGES = {
   notAvailable: "This print option isn't available. Please choose another one.",
   methodApparel: "This print method isn't available for this product. Please choose embroidery, DTF, screen print or DTG.",
   methodDrinkware: "This print method isn't available for this product. Please choose Color Imprint or Laser Engraving.",
+  methodBag: "This print method isn't available for this product. Please choose embroidery, DTF or screen print.",
   methodOther: "This print method isn't available for this product. Please choose another one.",
   noPrinting: "Print methods can't be chosen for this product. Please add it without one.",
   noLocation: "Please choose at least one print location.",
@@ -264,6 +292,7 @@ const MESSAGES = {
     `${label} embroidery is by quote only. Please remove it, choose another print method, or contact us for a quote.`,
   embroideryLocation: "This print location isn't available for embroidery. Please choose another one.",
   drinkwareLocation: "This product can only be printed on the front, the back, or both. Please choose one of those.",
+  bagLocation: "Bags can only be printed on the front. Please choose the front.",
   quoteOnlyLocation: (label) =>
     `${label} is by quote only. Please choose another print location or contact us for a quote.`,
   garmentLocation: "This print location isn't available for this product. Please choose another one.",
@@ -373,11 +402,15 @@ const locationCodeOf = (value) =>
 const sentLocations = (locations) =>
   Array.isArray(locations) ? locations.length > 0 : locations !== undefined && locations !== null && locations !== "";
 
+// Why a print method isn't sold on this product, from the methods it does take. Only clothing
+// takes DTG; bags take the other three clothing methods.
 const methodProblem = (allowed) => {
-  const apparel = allowed.some((method) => APPAREL_PRINT_METHODS.includes(method));
+  const apparel = allowed.includes("DTG");
+  const bag = !apparel && allowed.some((method) => BAG_PRINT_METHODS.includes(method));
   const drinkware = allowed.some((method) => DRINKWARE_PRINT_METHODS.includes(method));
-  if (apparel && drinkware) return MESSAGES.methodOther;
+  if ((apparel || bag) && drinkware) return MESSAGES.methodOther;
   if (apparel) return MESSAGES.methodApparel;
+  if (bag) return MESSAGES.methodBag;
   if (drinkware) return MESSAGES.methodDrinkware;
   return MESSAGES.noPrinting;
 };
@@ -444,19 +477,32 @@ const readPrintOptions = (customization, categories) => {
       : { problem: MESSAGES.drinkwareLocation };
   }
 
-  // Clothing: only the locations the shop offers on this garment (audit F08).
-  const locationProblem = garmentLocationProblem(codes, categories);
-  if (locationProblem) return { problem: locationProblem };
+  // Bags (26 Nov): embroidery, DTF or screen print on the front, once. A bag that is also clothing
+  // (the 50L Utility Duffel Bag) takes either a bag's front or a garment's spots, not both at once.
+  const bagLine =
+    BAG_PRINT_METHODS.includes(method) &&
+    isBagProduct(categories) &&
+    codes.every((code) => BAG_LOCATIONS.includes(code));
 
-  if (method === "EMBROIDERY") {
-    for (const code of codes) {
-      if (Object.hasOwn(EMBROIDERY_PRICING, code)) continue;
-      return {
-        problem: EMBROIDERY_QUOTE_ONLY[code]
-          ? MESSAGES.embroideryQuote(EMBROIDERY_QUOTE_ONLY[code])
-          : MESSAGES.embroideryLocation,
-      };
+  if (bagLine) {
+    if (new Set(codes).size !== codes.length) return { problem: MESSAGES.repeatedLocation };
+  } else if (APPAREL_PRINT_METHODS.includes(method) && isApparelProduct(categories)) {
+    // Clothing: only the locations the shop offers on this garment (audit F08).
+    const locationProblem = garmentLocationProblem(codes, categories);
+    if (locationProblem) return { problem: locationProblem };
+
+    if (method === "EMBROIDERY") {
+      for (const code of codes) {
+        if (Object.hasOwn(EMBROIDERY_PRICING, code)) continue;
+        return {
+          problem: EMBROIDERY_QUOTE_ONLY[code]
+            ? MESSAGES.embroideryQuote(EMBROIDERY_QUOTE_ONLY[code])
+            : MESSAGES.embroideryLocation,
+        };
+      }
     }
+  } else {
+    return { problem: isBagProduct(categories) ? MESSAGES.bagLocation : MESSAGES.garmentLocation };
   }
 
   if (method === "SCREEN_PRINT") {
@@ -496,8 +542,9 @@ const decorationOf = (checked, quantity, supplier) => {
   const locations = checked.locations.map((entry) => entry.location);
 
   if (method === "EMBROIDERY") {
+    // A bag's front has its own row (BAG_EMBROIDERY_PRICING); clothing never uses FRONT.
     const rows = locations.map((location) => {
-      const price = getEmbroideryPrice(EMBROIDERY_PRICING[location], quantity);
+      const price = getEmbroideryPrice(EMBROIDERY_PRICING[location] || BAG_EMBROIDERY_PRICING[location], quantity);
 
       return {
         type: "EMBROIDERY",
@@ -552,6 +599,10 @@ const decorationOf = (checked, quantity, supplier) => {
 
           quantity,
 
+          // How many print locations price_per_item is charged for, as on DTF (26 Nov: the admin
+          // panel multiplies by it).
+          locations: locations.length,
+
           price_per_item: price,
 
           total: price * locations.length * quantity,
@@ -572,6 +623,9 @@ const decorationOf = (checked, quantity, supplier) => {
           dtg_style: checked.dtg_style,
 
           quantity,
+
+          // As on DTF and screen print: the print locations price_per_item is charged for.
+          locations: locations.length,
 
           price_per_item: price,
 
@@ -777,7 +831,7 @@ const buildSagePricingSnapshot = async ({
   // Refused (400) when the product doesn't offer the decoration or it isn't on the price list.
   // The options are still checked, because production reads them, but on SAGE they cost nothing
   // (decided 25 Nov, below).
-  checkPrintOptions(customization, product?.categories);
+  const checked = checkPrintOptions(customization, product?.categories);
 
   const tiers = netPriceTiers(variant.meta);
 
@@ -801,6 +855,12 @@ const buildSagePricingSnapshot = async ({
 
   if (quantity < minQty) {
     throw new ApiError(httpStatus.BAD_REQUEST, `Minimum quantity for this product is ${minQty}`);
+  }
+
+  // Screen print takes 12 pieces on SAGE too (a SAGE bag, since 26 Nov), as lineMinimum says and
+  // as other suppliers' pricing enforces. Free on SAGE is about the price, not the minimum.
+  if (printMethodOf(checked) === "SCREEN_PRINT" && quantity < SCREEN_PRINT_MINIMUM) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Screen print requires minimum quantity of 12");
   }
 
   /*

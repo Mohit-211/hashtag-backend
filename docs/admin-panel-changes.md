@@ -4,6 +4,7 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
+| [2026-11-26: bags can be customized; decoration rows priced per location](#2026-11-26-bags) | live since 26 Nov | Done in Hashtag-Billionaire-Admin `f0d2a38`, live since 26 Nov: the Orders and Payments pages multiply DTF, screen print and DTG rows by their locations |
 | [2026-11-25: print locations per garment](#2026-11-25-print-locations) | live since 25 Nov | None required |
 | [2026-11-25: SAGE products are customized for free](#2026-11-25-sage-free) | `8b7b9fc`, live since 25 Nov | None required |
 | [2026-11-25: a customization value's price is optional](#2026-11-25-optional-price) | `4888377`, live since 25 Nov | Done in Hashtag-Billionaire-Admin `6962059`, live since 25 Nov: the price is optional on the Customizations page |
@@ -71,6 +72,20 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 
 1. **`payment_status=ALL`:** coming in the next release: `GET order/admin?payment_status=ALL` lists orders of every payment status. Without the parameter it still lists paid orders only.
 2. **The 2 unpaid orders the panel doesn't show:** when a customer's cart changes, the backend soft-deletes their latest unpaid order (`invalidatePendingOrder` in `cartWishlist.service.js`), and orders are paranoid, so those two are hidden from every list. Nothing is missing on the panel's side; the behaviour itself is on the payments list (audit H8).
+
+<a id="2026-11-26-bags"></a>
+## 2026-11-26: bags can be customized; decoration rows priced per location (live since 26 Nov)
+
+- Bags (the parent category Bags) take embroidery, DTF or screen print on their front (`FRONT`), at their own prices: embroidery and DTF $15 down to $5 a piece, screen print as on clothing ([frontend-changes.md](frontend-changes.md#2026-11-26-bags)). Their order items look like clothing items: `customization_config.print_method`, and `locations: [{ location: "FRONT" }]`. An embroidery row has `location: "FRONT"` and the bag price.
+- `pricing_table` rows for screen print and DTG now carry `locations`: the number of locations `price_per_item` is charged for, as DTF rows always did. Drinkware rows keep `locations` as the list of codes.
+
+**Done in the panel** (`f0d2a38`):
+- The Orders page and the Payments page multiply a DTF, screen print or DTG row's `price_per_item` by its number of locations. A row without the count, from an older order, uses the line's own locations.
+  - Before, a DTF line with 2 locations showed half its decoration, with a false "mismatch" caution.
+  - The Orders page's decoration table shows the line's locations on these rows, and the price for all of them ("2 × $15.00" under it).
+- Print methods show the same whatever their letter case: "embroidery" and "EMBROIDERY" both show "Embroidery". DTF and DTG stay in capitals; the Orders page showed them as "Dtf" and "Dtg".
+
+**Also in this release (backend):** a new artwork approval groups the sizes of one design into one line whatever the letter case of its print method, locations or DTG style. Before, an older item saved in small letters made a separate line. Approvals made earlier keep their lines.
 
 <a id="2026-11-25-print-locations"></a>
 ## 2026-11-25: print locations per garment (live since 25 Nov)

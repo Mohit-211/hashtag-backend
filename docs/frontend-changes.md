@@ -8,6 +8,7 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 |---|---|---|
 | [2026-11-25: print locations per garment; one sleeve](#2026-11-25-print-locations) | live since 25 Nov | **Required:** one Sleeve spot on T-shirts (decided 24 Nov). Everything the shop sends today is still accepted |
 | [2026-11-25: one add to cart adds all its lines or none](#2026-11-25-all-or-none) | live since 25 Nov | None required |
+| [2026-11-26: bags can be customized: embroidery, DTF or screen print on the front](#2026-11-26-bags) | live since 26 Nov | **To offer it:** a bag customizer, front only (below). Nothing breaks meanwhile |
 | [2026-11-25: quantity-based options are sold only at their listed quantities](#2026-11-25-quantity-options) | live since 25 Nov | None required: the product page already sells only those quantities, and the cart shows the API's message |
 | [2026-11-25: customers can change their name and phone](#2026-11-25-profile) | live since 25 Nov | **To turn it on:** set `PROFILE_EDIT_ENABLED` to `true` in `ProfileSection.tsx` and deploy |
 | [2026-11-25: graphics can also be WebP](#2026-11-25-webp) | `a149b35`, live since 25 Nov | None: the shop's pickers already offer WebP (`88dcfa1`, live) |
@@ -85,6 +86,48 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 **Waiting on the client:** A8, DTG with several locations (Q8, reworded); which font settings besides the font list (Q23). **Later, by the client's choice:** A24 pre-made products from suppliers (Q26), A42 price filter (Q54), A46 Back button (Q57), policy pages editable in the admin (Q61).
 
 ---
+
+<a id="2026-11-26-bags"></a>
+## 2026-11-26: bags can be customized: embroidery, DTF or screen print on the front (live since 26 Nov)
+
+Decided on 26 Nov. A bag is a product with a parent category whose title contains "bag". Today that is the parent category **Bags** (under Promo Products), with its subcategories Bags, Tote Bags and Duffel Bags: 89 products in the live catalog (75 SanMar, 9 SAGE, 5 S&S). Bags can now be customized with embroidery, DTF or screen print, on one spot: the front.
+
+**How to tell a bag:** `GET product/:id` and `product/guest/:id` return `is_bag`, next to `is_drinkware`. On `GET product/variant/:id` it's `data.product.is_bag`.
+
+**What to send** on `POST product/cart`, as for clothing:
+- `print_method`: `EMBROIDERY`, `DTF` or `SCREEN_PRINT`;
+- `locations`: `[{ "location": "FRONT" }]`, the only spot on a bag;
+- `colors`: 1 to 6, for screen print only.
+
+**Prices** a piece, by the line's quantity. Each bag pays once, so the line's decoration is the price × the quantity.
+
+| Pieces | 1–11 | 12–23 | 24–35 | 36–71 | 72–95 | 96–143 | 144+ |
+|---|---|---|---|---|---|---|---|
+| Embroidery or DTF | $15 | $12 | $10 | $9 | $7 | $5 | $5 |
+
+- Screen print uses the clothing screen-print table (`SP_PRICES` in `pricing.ts`), from 12 pieces.
+- Bag embroidery is **not** the clothing embroidery table: it has the DTF numbers.
+- Example: 5 bags with embroidery = 5 × $15 = $75 of decoration.
+
+**The $35 graphic fee** applies to bags as to clothing: a new graphic on fewer than 12 pieces in the cart. **SAGE bags** are customized for free, as every SAGE product is.
+
+**Refused (400):**
+- DTG, Color Imprint or Laser Engraving on a bag: "This print method isn't available for this product. Please choose embroidery, DTF or screen print."
+- Any spot but the front: "Bags can only be printed on the front. Please choose the front."
+- The front twice: "Please choose each print location only once."
+- Screen print under 12 pieces, or outside 1 to 6 colors: the same messages as on clothing.
+
+**A bag that is also clothing** (the 50L Utility Duffel Bag, also under Workwear) takes either the front at bag prices, or the garment's spots at clothing prices as today, not both on one line. What the shop sends for it today keeps working.
+
+**Also in this release:**
+- Screen print and DTG rows in `pricing_table` carry `locations`: how many locations `price_per_item` is charged for, as DTF rows always have.
+- The $35 fee reads the print method in any letter case, so a line saved as "embroidery" pays it as "EMBROIDERY" does.
+- Screen print takes 12 pieces on SAGE products too, SAGE bags included: 400 "Screen print requires minimum quantity of 12". The decoration stays free. The minimum was lifted by mistake with the free SAGE customization on 25 Nov, while the cart's own minimum still said 12.
+
+**What the shop must do:** nothing breaks meanwhile, because bags still go into the cart without a print method, as today. To offer bag printing:
+1. When `is_bag` is true, offer Embroidery, DTF and Screen print (no DTG) on one spot, Front, and send `locations: [{ "location": "FRONT" }]`.
+2. Price it with the table above. Embroidery and DTF share the numbers; screen print uses `SP_PRICES`, from 12 pieces.
+3. Show the $35 notice as on clothing. On SAGE bags (`supplier` "SAGE"), show "Customization included", as on other SAGE products.
 
 <a id="2026-11-25-print-locations"></a>
 ## 2026-11-25: print locations per garment; one sleeve (live since 25 Nov)

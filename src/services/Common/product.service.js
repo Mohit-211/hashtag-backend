@@ -37,7 +37,7 @@ const { buildPricingTiers, buildSellingTiers, netPriceTiers } = require("../../u
 const { parseQuantityPricing } = require("../../utils/pricing/pricingRows");
 const { sizeRange, groupColours, pickFrontImage } = require("../../utils/listingVariants");
 const { productHandlingFee } = require("./handlingFee.service");
-const { isDrinkwareProduct } = require("../../utils/productFamily");
+const { isDrinkwareProduct, isBagProduct } = require("../../utils/productFamily");
 const { DRINKWARE_SECOND_LOCATION_PRICE } = require("../../utils/pricing/buildPricingSnapshot");
 const {
   resolveTierProductIds,
@@ -2495,14 +2495,16 @@ const getProductsByBrand = async (query) => {
   }
 };
 
-// Drinkware by the server's rule (audit F04): a parent category with "drinkware" in its title, on
-// every supplier. The cart charges the second print location by the same rule, so the shop can
-// read these instead of matching category titles itself.
-const drinkwareFieldsOf = (categories, supplier) => {
+// Drinkware and bags by the server's rules (audit F04; bags 26 Nov): a parent category with
+// "drinkware", or "bag", in its title, on every supplier. The cart prices print options by the
+// same rules, so the shop can read these instead of matching category titles itself.
+const decorationFieldsOf = (categories, supplier) => {
   const isDrinkware = isDrinkwareProduct(categories);
 
   return {
     is_drinkware: isDrinkware,
+    // A bag takes embroidery, DTF or screen print on its front (free on SAGE, as all customization).
+    is_bag: isBagProduct(categories),
     // Customization is free on SAGE (25 Nov), the back print included.
     drinkware_second_location_price: isDrinkware
       ? supplier === "SAGE"
@@ -2578,7 +2580,7 @@ const getProductById = async (id, reqBody) => {
     // { amount, label } when this product adds the order handling fee (once per order), else null.
     data.order_handling_fee = await productHandlingFee(data.id);
 
-    Object.assign(data, drinkwareFieldsOf(data.categories, data.supplier));
+    Object.assign(data, decorationFieldsOf(data.categories, data.supplier));
 
     return data;
   } catch (error) {
@@ -2666,7 +2668,7 @@ const getVariantById = async (id) => {
 
     data.product.attachments = (data.product.attachments || []).sort(frontImageFirst);
 
-    Object.assign(data.product, drinkwareFieldsOf(data.product.categories, data.product.supplier));
+    Object.assign(data.product, decorationFieldsOf(data.product.categories, data.product.supplier));
   }
 
   data.title = decodeHtmlEntities(data.title);
@@ -2705,7 +2707,7 @@ const getGuestProductById = async (id) => {
     // { amount, label } when this product adds the order handling fee (once per order), else null.
     data.order_handling_fee = await productHandlingFee(data.id);
 
-    Object.assign(data, drinkwareFieldsOf(data.categories, data.supplier));
+    Object.assign(data, decorationFieldsOf(data.categories, data.supplier));
 
     return data;
   } catch (error) {

@@ -4,6 +4,9 @@
 // - the grand category "Apparel & Uniforms" means clothing: embroidery, DTF, screen print, DTG;
 // - a parent category with "drinkware" in its title means drinkware: Color Imprint or Laser
 //   Engraving, whatever the supplier (F04);
+// - a parent category with "bag" in its title means a bag: embroidery, DTF or screen print, on
+//   the front only (decided 26 Nov 2026; on the catalog of that day only "Bags", id 139, under
+//   Promo Products, with its subcategories Bags, Tote Bags and Duffel Bags);
 // - every other product (pre-made and other promo products) takes no print method.
 //
 // The website looks only at the first grand and the first parent category it finds, so its answer
@@ -22,6 +25,7 @@
 
 const APPAREL_PRINT_METHODS = ["EMBROIDERY", "DTF", "SCREEN_PRINT", "DTG"];
 const DRINKWARE_PRINT_METHODS = ["COLOR_IMPRINT", "LASER_ENGRAVING"];
+const BAG_PRINT_METHODS = ["EMBROIDERY", "DTF", "SCREEN_PRINT"];
 
 // Compared like the website's isGrandCategory: case and spacing don't matter.
 const normalizeTitle = (title) => String(title ?? "").trim().replace(/\s+/g, " ").toLowerCase();
@@ -37,9 +41,17 @@ const isApparelProduct = (categories) =>
 const isDrinkwareProduct = (categories) =>
   parentCategoriesOf(categories).some((parent) => normalizeTitle(parent?.title).includes("drinkware"));
 
+const isBagProduct = (categories) =>
+  parentCategoriesOf(categories).some((parent) => normalizeTitle(parent?.title).includes("bag"));
+
+// Each method once: a bag that is also clothing (the 50L Utility Duffel Bag, under Workwear too)
+// takes the four clothing methods.
 const printMethodsFor = (categories) => [
-  ...(isApparelProduct(categories) ? APPAREL_PRINT_METHODS : []),
-  ...(isDrinkwareProduct(categories) ? DRINKWARE_PRINT_METHODS : []),
+  ...new Set([
+    ...(isApparelProduct(categories) ? APPAREL_PRINT_METHODS : []),
+    ...(isBagProduct(categories) ? BAG_PRINT_METHODS : []),
+    ...(isDrinkwareProduct(categories) ? DRINKWARE_PRINT_METHODS : []),
+  ]),
 ];
 
 // The garment the shop shows a clothing product as, from a parent category's title (audit F08):
@@ -66,8 +78,10 @@ const garmentsFor = (categories) => [
 module.exports = {
   APPAREL_PRINT_METHODS,
   DRINKWARE_PRINT_METHODS,
+  BAG_PRINT_METHODS,
   isApparelProduct,
   isDrinkwareProduct,
+  isBagProduct,
   printMethodsFor,
   garmentOfParent,
   garmentsFor,

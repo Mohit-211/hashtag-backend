@@ -7,7 +7,8 @@ const { parseJson } = require("../orderFormat");
 const GRAPHIC_FEE = 35;
 const GRAPHIC_FEE_WAIVED_FROM = 12;
 
-// Clothing's print types. Promo products and pre-made products have no graphic fee.
+// Clothing's print types. Bags, printed with three of them, pay the fee as clothing does (decided
+// 26 Nov 2026). Other promo products and pre-made products have no graphic fee.
 const CLOTHING_PRINT_METHODS = ["EMBROIDERY", "DTF", "SCREEN_PRINT", "DTG"];
 
 // The graphics on a cart or order line: one for the whole line, one per location, or one per
@@ -24,9 +25,16 @@ const graphicIdsOf = (customization) => {
   return [...new Set(ids.filter((id) => id !== undefined && id !== null && id !== "").map(Number))];
 };
 
-const isClothingLine = (customization, pricingSnapshot) =>
-  CLOTHING_PRINT_METHODS.includes(customization?.print_method) &&
-  pricingSnapshot?.supplier !== "SAGE";
+// The method in any letter case: "embroidery" pays as "EMBROIDERY" does. Lines are saved in capitals
+// since 24 Nov (audit F05); one saved earlier may not be.
+const isClothingLine = (customization, pricingSnapshot) => {
+  const method = customization?.print_method;
+  return (
+    typeof method === "string" &&
+    CLOTHING_PRINT_METHODS.includes(method.trim().toUpperCase()) &&
+    pricingSnapshot?.supplier !== "SAGE"
+  );
+};
 
 // The fee on each cart line, as a Map of line id to amount. Graphics that look the same count
 // as one. `graphics` is a Map of graphic id to saved graphic.

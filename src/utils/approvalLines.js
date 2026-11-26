@@ -43,9 +43,27 @@ const canonical = (value) => {
   );
 };
 
+// The print options as codes in one letter case: "embroidery" and "EMBROIDERY", or "left chest"
+// and "LEFT_CHEST", are the same design (lines are saved in capitals since 24 Nov; an older one
+// may not be). Text the customer typed is left as it is.
+const codeOf = (value) => (typeof value === "string" ? value.trim().toUpperCase().replace(/[\s-]+/g, "_") : value);
+
+const printOptionsAsCodes = (design) => {
+  if (!isObject(design)) return design;
+  const codes = { ...design };
+  if (typeof codes.print_method === "string") codes.print_method = codeOf(codes.print_method);
+  if (typeof codes.dtg_style === "string") codes.dtg_style = codeOf(codes.dtg_style);
+  if (Array.isArray(codes.locations)) {
+    codes.locations = codes.locations.map((entry) =>
+      isObject(entry) && typeof entry.location === "string" ? { ...entry, location: codeOf(entry.location) } : entry,
+    );
+  }
+  return codes;
+};
+
 const designKey = (item) => {
   const design = isObject(item.config)
-    ? Object.fromEntries(Object.entries(item.config).filter(([key]) => !SIZE_KEYS.includes(key)))
+    ? printOptionsAsCodes(Object.fromEntries(Object.entries(item.config).filter(([key]) => !SIZE_KEYS.includes(key))))
     : item.config ?? null;
   const color = item.color ? String(item.color).trim().toLowerCase() : null;
   return JSON.stringify([Number(item.product_id) || null, color, canonical(design)]);
