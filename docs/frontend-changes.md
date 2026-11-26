@@ -6,7 +6,7 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
-| [2026-11-26: SAGE colours come from SAGE's stock list; stock per colour](#2026-11-26-sage-colours) | not deployed yet | None required. **Recommended:** show sold-out SAGE colours in the customizer (a colour at 0 is refused by the cart) |
+| [2026-11-26: SAGE colours come from SAGE's stock list; stock per colour](#2026-11-26-sage-colours) | `e204c30`, live since 26 Nov (SAGE sync run the same day) | None required. **Recommended:** show sold-out SAGE colours in the customizer (a colour at 0 is refused by the cart) |
 | [2026-11-25: print locations per garment; one sleeve](#2026-11-25-print-locations) | live since 25 Nov | **Required:** one Sleeve spot on T-shirts (decided 24 Nov). Everything the shop sends today is still accepted |
 | [2026-11-25: one add to cart adds all its lines or none](#2026-11-25-all-or-none) | live since 25 Nov | None required |
 | [2026-11-26: bags can be customized: embroidery, DTF or screen print on the front](#2026-11-26-bags) | live since 26 Nov | **To offer it:** a bag customizer, front only (below). Nothing breaks meanwhile |
@@ -89,11 +89,11 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 ---
 
 <a id="2026-11-26-sage-colours"></a>
-## 2026-11-26: SAGE colours come from SAGE's stock list; stock per colour (not deployed yet)
+## 2026-11-26: SAGE colours come from SAGE's stock list; stock per colour (live since 26 Nov)
 
 SAGE describes a product's colours twice. Its colour text is cut at 1,000 characters, so long lists come abbreviated ("Hot P" for Hot Pink) and cut mid-word ("Wh"); its stock list has every colour, spelled in full, with its own stock. The import used only the text. Example: 3/4" Ink Injected Wristbands (#94892) showed 69 colours, among them "Hot P", "Red/P Seg" and a colour called "Wh", and none of SAGE's swirl and glow bands. It now has SAGE's 119.
 
-**What changes in the API** (once the SAGE sync has run after the deploy; there are no new fields):
+**What changes in the API** (live since the SAGE sync of 26 Nov; there are no new fields):
 - **More colours:** about 595 new colour variants on SAGE products, and 41 that were removed come back. The five big wristband products go from 67–69 to 119–129 colours. New colours have higher variant ids, so they come after the existing ones.
 - **Renamed in place:** 21 abbreviated colours keep their `variant_id` and get the full name, with a new `sku` and `color_code`: "Hot P" becomes "Hot Pink", "Red/P Seg" becomes "Red/Pink Seg", "White/Lime Green Se" becomes "White/Lime Green Seg". Carts, wishlists, orders and `?variant_id=` links keep working.
 - **Removed (soft-deleted):** 26 variants that weren't real colours:

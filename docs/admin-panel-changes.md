@@ -4,7 +4,7 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
-| [2026-11-26: SAGE colours come from SAGE's stock list](#2026-11-26-sage-colours) | not deployed yet | Done in Hashtag-Billionaire-Admin (not deployed yet): the SAGE product page shows the colours the import keeps, with no "No longer offered" |
+| [2026-11-26: SAGE colours come from SAGE's stock list](#2026-11-26-sage-colours) | `e204c30`, live since 26 Nov | Done in Hashtag-Billionaire-Admin `6661791`, live since 26 Nov: the SAGE product page shows the colours the import keeps, with no "No longer offered" |
 | [2026-11-26: bags can be customized; decoration rows priced per location](#2026-11-26-bags) | live since 26 Nov | Done in Hashtag-Billionaire-Admin `f0d2a38`, live since 26 Nov: the Orders and Payments pages multiply DTF, screen print and DTG rows by their locations |
 | [2026-11-25: print locations per garment](#2026-11-25-print-locations) | live since 25 Nov | None required |
 | [2026-11-25: SAGE products are customized for free](#2026-11-25-sage-free) | `8b7b9fc`, live since 25 Nov | None required |
@@ -75,7 +75,7 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 2. **The 2 unpaid orders the panel doesn't show:** when a customer's cart changes, the backend soft-deletes their latest unpaid order (`invalidatePendingOrder` in `cartWishlist.service.js`), and orders are paranoid, so those two are hidden from every list. Nothing is missing on the panel's side; the behaviour itself is on the payments list (audit H8).
 
 <a id="2026-11-26-sage-colours"></a>
-## 2026-11-26: SAGE colours come from SAGE's stock list (not deployed yet)
+## 2026-11-26: SAGE colours come from SAGE's stock list (live since 26 Nov)
 
 SAGE's colour text is cut at 1,000 characters and abbreviates long lists, so the import now takes a SAGE product's colours from SAGE's stock list (`skus`, the attribute with typeId 10), each with its own stock. What this means for the shop: [frontend-changes.md](frontend-changes.md#2026-11-26-sage-colours).
 
@@ -95,14 +95,14 @@ SAGE's colour text is cut at 1,000 characters and abbreviates long lists, so the
 
 `GET sage/supplier-truth/:prodEId` lists the same colours, with `stock`, `trackInventory` and `status`.
 
-**What changes for stored variants** (after the sync), as seen on Products, Variants and the SAGE page's Imported tab:
+**What changed for stored variants** (SAGE sync of 26 Nov: 567 products, 478 updated, none failed), as seen on Products, Variants and the SAGE page's Imported tab:
 - **Renames:** 21 abbreviated colours are renamed in place, keeping their id ("Hot P" → "Hot Pink"). Their `sku` changes too, so a search for the old sku finds nothing. Past orders keep the old sku in `order_items.sku`.
 - **New and returning colours:** about 595 new colours, and 41 removed ones come back.
 - **Retirements:** 26 non-colours are retired as discontinued: cut-off "Wh", "Unavailable", repeated napkin colours.
 - **Stock:** per colour. A colour SAGE reports at 0 shows "Out of stock".
 - **Sync lock:** products locked by an edit on the panel (27 SAGE products) keep their colours. The sync skips them.
 
-**Done in the panel** (not deployed yet):
+**Done in the panel** (`6661791`, live since 26 Nov):
 - **Colour table:** the SAGE product page's "Variant Data — Color & Stock" table shows `sageColors`, in order: the colours the import keeps, then the entries it leaves out with the reason. The header counts the kept colours.
 - **Spellings:** a colour shows a muted second line when SAGE spells it differently: `In colour text as "Hot P"` or `In stock list as "Blue/Grey Seg"`.
 - **Labels:** "In SAGE's stock list", "Only in colour text", "Cut off — not imported", "Duplicate — not imported", "Not a colour — not imported", "Part or shape — not imported", "Other size or model — not imported". "No longer offered" is gone; it came from comparing the two lists' spellings letter for letter.
