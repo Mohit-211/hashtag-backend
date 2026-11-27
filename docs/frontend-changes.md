@@ -6,7 +6,7 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
-| [2026-11-27: customizations without values (text or artwork only)](#2026-11-27-valueless-customizations) | not deployed yet | **To offer them:** show a customization that has no values with its text and image inputs, and send it without a value (below). Until then they simply don't show |
+| [2026-11-27: customizations without values (text or artwork only)](#2026-11-27-valueless-customizations) | `6b8dcf3`, live since 27 Nov | **To offer them:** show a customization that has no values with its text and image inputs, and send it without a value (below). Until then they simply don't show |
 | [2026-11-26: SAGE colours come from SAGE's stock list; stock per colour](#2026-11-26-sage-colours) | `e204c30`, live since 26 Nov (SAGE sync run the same day) | None required. **Recommended:** show sold-out SAGE colours in the customizer (a colour at 0 is refused by the cart) |
 | [2026-11-25: print locations per garment; one sleeve](#2026-11-25-print-locations) | live since 25 Nov | **Required:** one Sleeve spot on T-shirts (decided 24 Nov). Everything the shop sends today is still accepted |
 | [2026-11-25: one add to cart adds all its lines or none](#2026-11-25-all-or-none) | live since 25 Nov | None required |
@@ -90,7 +90,7 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 ---
 
 <a id="2026-11-27-valueless-customizations"></a>
-## 2026-11-27: customizations without values (text or artwork only) (not deployed yet)
+## 2026-11-27: customizations without values (text or artwork only) (live since 27 Nov)
 
 The admin can now add a customization to a pre-made product without picking any values, e.g. "Business card information": the customer only types text or uploads artwork. `GET customization-option/product/:productId/customizations` returns it as usual, with `values: []` (and the option's `allow_text_input` / `allow_image_upload`).
 

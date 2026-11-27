@@ -4,7 +4,7 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
-| [2026-11-27: a customization can be added to a product without values](#2026-11-27-valueless-customizations) | not deployed yet | Done in Hashtag-Billionaire-Admin (not deployed yet): the product's Customizations step lets you tick a customization that has no values |
+| [2026-11-27: a customization can be added to a product without values](#2026-11-27-valueless-customizations) | `6b8dcf3`, live since 27 Nov | Done in Hashtag-Billionaire-Admin `71bf43f`, live since 27 Nov: the product's Customizations step lets you tick a customization that has no values |
 | [2026-11-27: the Products list says how many the website shows](#2026-11-27-website-total) | `c393c12`, live since 27 Nov | Done in Hashtag-Billionaire-Admin `d85a7af`, live since 27 Nov: "239 products found · 238 shown on the website" and a "Not on website: out of stock" badge |
 | [2026-11-26: SAGE colours come from SAGE's stock list](#2026-11-26-sage-colours) | `e204c30`, live since 26 Nov | Done in Hashtag-Billionaire-Admin `6661791`, live since 26 Nov: the SAGE product page shows the colours the import keeps, with no "No longer offered" |
 | [2026-11-26: bags can be customized; decoration rows priced per location](#2026-11-26-bags) | live since 26 Nov | Done in Hashtag-Billionaire-Admin `f0d2a38`, live since 26 Nov: the Orders and Payments pages multiply DTF, screen print and DTG rows by their locations |
@@ -77,7 +77,7 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 2. **The 2 unpaid orders the panel doesn't show:** when a customer's cart changes, the backend soft-deletes their latest unpaid order (`invalidatePendingOrder` in `cartWishlist.service.js`), and orders are paranoid, so those two are hidden from every list. Nothing is missing on the panel's side; the behaviour itself is on the payments list (audit H8).
 
 <a id="2026-11-27-valueless-customizations"></a>
-## 2026-11-27: a customization can be added to a product without values (not deployed yet)
+## 2026-11-27: a customization can be added to a product without values (live since 27 Nov)
 
 A customization such as "Business card information" can have no values at all: the customer only types text or uploads an image. The product's Customizations step used to grey it out ("No values yet. Add them on the Customizations page.") and wouldn't save a ticked customization without a value.
 
