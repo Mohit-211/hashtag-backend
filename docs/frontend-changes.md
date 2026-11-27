@@ -6,6 +6,7 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
+| [2026-11-27: customizations without values (text or artwork only)](#2026-11-27-valueless-customizations) | not deployed yet | **To offer them:** show a customization that has no values with its text and image inputs, and send it without a value (below). Until then they simply don't show |
 | [2026-11-26: SAGE colours come from SAGE's stock list; stock per colour](#2026-11-26-sage-colours) | `e204c30`, live since 26 Nov (SAGE sync run the same day) | None required. **Recommended:** show sold-out SAGE colours in the customizer (a colour at 0 is refused by the cart) |
 | [2026-11-25: print locations per garment; one sleeve](#2026-11-25-print-locations) | live since 25 Nov | **Required:** one Sleeve spot on T-shirts (decided 24 Nov). Everything the shop sends today is still accepted |
 | [2026-11-25: one add to cart adds all its lines or none](#2026-11-25-all-or-none) | live since 25 Nov | None required |
@@ -87,6 +88,18 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 **Waiting on the client:** A8, DTG with several locations (Q8, reworded); which font settings besides the font list (Q23). **Later, by the client's choice:** A24 pre-made products from suppliers (Q26), A42 price filter (Q54), A46 Back button (Q57), policy pages editable in the admin (Q61).
 
 ---
+
+<a id="2026-11-27-valueless-customizations"></a>
+## 2026-11-27: customizations without values (text or artwork only) (not deployed yet)
+
+The admin can now add a customization to a pre-made product without picking any values, e.g. "Business card information": the customer only types text or uploads artwork. `GET customization-option/product/:productId/customizations` returns it as usual, with `values: []` (and the option's `allow_text_input` / `allow_image_upload`).
+
+**What the API accepts:** in `POST product/cart`, a customization line for such an option carries no `customization_option_value_id`: `{ "customization_option_id": 12, "text": "ACME Inc, 555-0100" }`, and `image_index` or `graphic_id` for artwork, as today. It costs nothing extra. An option that has values on the product still needs `customization_option_value_id` (400 "customization_option_id and customization_option_value_id are required").
+
+**What the shop must do** to offer them (nothing breaks meanwhile: they just don't show):
+- **Stop hiding it:** `ManualCustomizationPage.tsx:237` drops every customization with no values (`.filter((g) => g.values.length > 0)`). Keep those whose option has `allow_text_input` or `allow_image_upload`.
+- **Show the inputs straight away:** for such a customization, show its text box and/or image upload directly. Today they appear only after a value is picked (`selectedValue && …`, line 614). There's no price.
+- **Send it without a value:** in `manualCartPayload.ts`, send its line without `customization_option_value_id` (today every line has `valueId: number`), only when the customer typed text or added a file.
 
 <a id="2026-11-26-sage-colours"></a>
 ## 2026-11-26: SAGE colours come from SAGE's stock list; stock per colour (live since 26 Nov)

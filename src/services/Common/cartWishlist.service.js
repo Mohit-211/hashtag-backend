@@ -587,7 +587,7 @@ const buildManualPricingSnapshot = async ({
         item.customization_option_value_id,
       );
 
-      if (!optionId || !valueId) {
+      if (!optionId) {
         throw new ApiError(
           httpStatus.BAD_REQUEST,
           "customization_option_id and customization_option_value_id are required",
@@ -630,6 +630,62 @@ const buildManualPricingSnapshot = async ({
           httpStatus.BAD_REQUEST,
           `Customization option ${optionId} is not available for this product`,
         );
+      }
+
+      /*
+       * A customization the product offers WITHOUT values (since 27 Nov): the customer only
+       * types text or uploads artwork, e.g. "Business card information". There's nothing to
+       * price, so it costs nothing extra; the text and artwork stay in the line's config.
+       * Only when the product has no values for it: one with values still needs a value
+       * picked, so a priced option can't be skipped. An existing cart line keeps working
+       * (allowInactiveCustomization) even if values were added since.
+       */
+
+      if (!valueId) {
+        const offeredValues = allowInactiveCustomization
+          ? 0
+          : await ProductCustomizationValue.count({
+              where: {
+                product_customization_id: productCustomizations.map(
+                  (mapping) => mapping.id,
+                ),
+                is_active: true,
+              },
+            });
+
+        if (offeredValues) {
+          throw new ApiError(
+            httpStatus.BAD_REQUEST,
+            "customization_option_id and customization_option_value_id are required",
+          );
+        }
+
+        const valuelessOption = await CustomizationOption.findOne({
+          where: {
+            id: optionId,
+            ...(allowInactiveCustomization ? {} : { is_active: true }),
+          },
+        });
+
+        if (!valuelessOption) {
+          throw new ApiError(
+            httpStatus.BAD_REQUEST,
+            `Customization option ${optionId} not found`,
+          );
+        }
+
+        customizationItems.push({
+          customization_option_id: valuelessOption.id,
+          option_name: valuelessOption.name,
+          customization_option_value_id: null,
+          value_name: null,
+          pricing_type: null,
+          unit_price: 0,
+          quantity: finalQty,
+          total: 0,
+        });
+
+        continue;
       }
 
       /*

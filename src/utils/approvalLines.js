@@ -95,11 +95,14 @@ const printMethodsOf = (item) => {
   }
 
   const chosen = Array.isArray(config.customization) ? config.customization : [];
+  // A customization offered without values (only text or artwork) has no value id: missing,
+  // null and 0 all mean "none".
+  const idOf = (id) => Number(id) || null;
   const textOf = (optionId, valueId) => {
     const entry = chosen.find(
       (option) =>
-        Number(option?.customization_option_id) === Number(optionId) &&
-        Number(option?.customization_option_value_id) === Number(valueId),
+        idOf(option?.customization_option_id) === idOf(optionId) &&
+        idOf(option?.customization_option_value_id) === idOf(valueId),
     );
     return hasText(entry?.text) ? ` "${entry.text.trim()}"` : "";
   };
