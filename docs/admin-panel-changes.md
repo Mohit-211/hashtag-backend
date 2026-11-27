@@ -4,7 +4,7 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
-| [2026-11-27: a client's previous orders from a CSV file](#2026-11-27-order-import) | `b28261e`, not deployed yet (needs its migration first) | Done in Hashtag-Billionaire-Admin `e88efd7` (not deployed yet): a client's page › Import previous orders; "Imported" badge on such orders |
+| [2026-11-27: a client's previous orders from a CSV file](#2026-11-27-order-import) | `b28261e`, live since 27 Nov (migration run first) | Done in Hashtag-Billionaire-Admin `e88efd7`, live since 27 Nov (Deploy run 24): a client's page › Import previous orders; "Imported" badge on such orders |
 | [2026-11-27: orders whose payment failed are no longer removed](frontend-changes.md#2026-11-27-failed-orders) | `d5d7604`, live since 27 Nov | None: they stay on the Orders page (Payment: Failed), as they were before the customer's next cart change. Delete still hides one |
 | [2026-11-27: clients get a password to share; clients from a CSV file; a client's orders](#2026-11-27-clients) | `56d96e1`, live since 27 Nov (Deploy run 56) | Done in Hashtag-Billionaire-Admin `f5b0b6e` and `388ac0c`, live since 27 Nov (Deploy run 23): Users › Import CSV, Add User shows the password, the client page (Users › View) |
 | [2026-11-27: a deleted customization's name can be used again](#2026-11-27-customization-names) | `bce1a15`, live since 27 Nov | Done in Hashtag-Billionaire-Admin `e99f2c1`, live since 27 Nov: an optional price on "Add a text or upload field". And `9e929e6`, live since 27 Nov: the Customizations page shows 100 per page |
@@ -81,9 +81,14 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 2. **The 2 unpaid orders the panel doesn't show:** when a customer's cart changes, the backend soft-deletes their latest unpaid order (`invalidatePendingOrder` in `cartWishlist.service.js`), and orders are paranoid, so those two are hidden from every list. Nothing is missing on the panel's side; the behaviour itself is on the payments list (audit H8).
 
 <a id="2026-11-27-order-import"></a>
-## 2026-11-27: a client's previous orders from a CSV file (not deployed yet)
+## 2026-11-27: a client's previous orders from a CSV file (live since 27 Nov)
 
 The client wants each client's orders from before the website in one place. On a client's page, the team imports them from a spreadsheet. They then show on that page and in the client's My Orders on the website.
+
+**Live since 27 Nov:**
+- The migration ran first, after a full backup (`/root/backups/data-before-order-import-20261127.sql.gz`).
+- Then `b3522e4` was deployed with `--migrations-done`.
+- A read-only check on the server ran the preview with the sample file (`sample-previous-orders.csv`, beside the repos) for client 6: 3 orders, 6 lines, $3,205.22, no problems. Every line matched its product and SKU.
 
 **Before deploying,** run `migrations/2026-11-27_order_import_before_deploy.sql`. It does three things to orders:
 - adds `imported_at` (set only on imported orders);
