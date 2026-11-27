@@ -41,6 +41,103 @@ const parseBoolean = (value, defaultValue = false) => {
   return value === true || value === "true" || value === 1 || value === "1";
 };
 
+// ============================================================
+// NAMES AND SLUGS
+// ============================================================
+// Only a live customization takes a name. A deleted one is only hidden: old carts and orders
+// still point at it, and a cart line repriced later reads its name, so it keeps its name and
+// its slug. Slugs are unique but nothing reads them, so a customization whose slug is taken
+// gets the next free one ("test-2"). Until 27 Nov a deleted "Test" kept the name taken
+// ("Customization option already exists", with no Test in the list).
+
+// Leaves room for "-<n>" in the slug column's 255.
+const SLUG_BASE_MAX = 240;
+
+const nameTaken = (name) =>
+  new ApiError(
+    httpStatus.BAD_REQUEST,
+    `A customization called "${name}" already exists`,
+  );
+
+const notThis = (exceptId) => (exceptId ? { id: { [Op.ne]: exceptId } } : {});
+
+/** Refuses `name` when a live customization has it (the database ignores capitals). */
+const assertNameFree = async (name, exceptId) => {
+  const live = await CustomizationOption.findOne({
+    where: { name, is_active: true, ...notThis(exceptId) },
+    attributes: ["id", "name"],
+  });
+
+  if (live) throw nameTaken(live.name);
+};
+
+/** The name's slug, or the next free "<slug>-<n>" when any other customization has it. */
+const freeSlugFor = async (name, exceptId) => {
+  const base = (CustomizationOption.slugFor(name) || "customization").slice(
+    0,
+    SLUG_BASE_MAX,
+  );
+
+  const rows = await CustomizationOption.findAll({
+    where: {
+      [Op.or]: [{ slug: base }, { slug: { [Op.like]: `${base}-%` } }],
+      ...notThis(exceptId),
+    },
+    attributes: ["slug"],
+    paranoid: false,
+    raw: true,
+  });
+
+  const taken = new Set(rows.map((row) => String(row.slug).toLowerCase()));
+  if (!taken.has(base)) return base;
+
+  let n = 2;
+  while (taken.has(`${base}-${n}`)) n += 1;
+
+  return `${base}-${n}`;
+};
+
+/**
+ * Creates or renames a customization as `name`; save(slug) does the create or the update.
+ * A clash while saving (two saves at once, or a table that also keeps names unique, which
+ * the model doesn't) gets one more look: a live customization with the name refuses it;
+ * otherwise the deleted ones give the name up, as "<name> (deleted #<id>)", and the save is
+ * tried again.
+ */
+const saveUnderName = async (name, exceptId, save) => {
+  await assertNameFree(name, exceptId);
+
+  try {
+    return await save(await freeSlugFor(name, exceptId));
+  } catch (error) {
+    if (error?.name !== "SequelizeUniqueConstraintError") throw error;
+  }
+
+  await assertNameFree(name, exceptId);
+
+  const deleted = await CustomizationOption.findAll({
+    where: { name, ...notThis(exceptId) },
+    attributes: ["id", "name"],
+    paranoid: false,
+  });
+
+  for (const old of deleted) {
+    const suffix = ` (deleted #${old.id})`;
+
+    await CustomizationOption.update(
+      { name: `${String(old.name).slice(0, 255 - suffix.length)}${suffix}` },
+      { where: { id: old.id }, paranoid: false },
+    );
+  }
+
+  try {
+    return await save(await freeSlugFor(name, exceptId));
+  } catch (error) {
+    if (error?.name === "SequelizeUniqueConstraintError") throw nameTaken(name);
+    throw error;
+  }
+};
+
 const createCustomizationOption = async (body) => {
   try {
     const { name, description, allow_text_input, allow_image_upload } = body;
@@ -56,36 +153,24 @@ const createCustomizationOption = async (body) => {
     const optionName = String(name).trim();
 
     /*
-     * Check duplicate
+     * Create option. Only a live customization with the same name stops it; a deleted
+     * one doesn't (see saveUnderName).
      */
 
-    const existing = await CustomizationOption.findOne({
-      where: {
+    const option = await saveUnderName(optionName, null, (slug) =>
+      CustomizationOption.create({
         name: optionName,
-      },
-    });
 
-    if (existing) {
-      throw new ApiError(
-        httpStatus.BAD_REQUEST,
-        "Customization option already exists",
-      );
-    }
+        slug,
 
-    /*
-     * Create option
-     */
+        description:
+          description !== undefined && description !== "" ? description : null,
 
-    const option = await CustomizationOption.create({
-      name: optionName,
+        allow_text_input: parseBoolean(allow_text_input, false),
 
-      description:
-        description !== undefined && description !== "" ? description : null,
-
-      allow_text_input: parseBoolean(allow_text_input, false),
-
-      allow_image_upload: parseBoolean(allow_image_upload, false),
-    });
+        allow_image_upload: parseBoolean(allow_image_upload, false),
+      }),
+    );
 
     return option;
   } catch (error) {
@@ -315,7 +400,15 @@ const updateCustomizationOption = async (id, body) => {
       updateData.allow_image_upload = parseBoolean(allow_image_upload);
     }
 
-    await option.update(updateData);
+    // A new name (capitals only, too) must be free of live customizations, and gets a
+    // slug of its own: the hooks' slug isn't saved by an update that doesn't list it.
+    if (updateData.name !== undefined && updateData.name !== option.name) {
+      await saveUnderName(updateData.name, option.id, (slug) =>
+        option.update({ ...updateData, slug }),
+      );
+    } else {
+      await option.update(updateData);
+    }
 
     return await getCustomizationOptionById(id);
   } catch (error) {
@@ -352,10 +445,13 @@ const deleteCustomizationOption = async (id) => {
      * We only make them unavailable for future product selection.
      */
 
-    // 1. Deactivate the customization option itself
+    // 1. Deactivate the customization option itself. It keeps its name (old carts and
+    //    orders read it) and gives its slug up, so the name can be used again.
+    const deletedSuffix = `-deleted-${option.id}`;
+
     await option.update({
       is_active: false,
-      slug: `${option.slug}-deleted-${option.id}`,
+      slug: `${String(option.slug).slice(0, 255 - deletedSuffix.length)}${deletedSuffix}`,
     });
 
     // 2. Deactivate all product assignments for this option
