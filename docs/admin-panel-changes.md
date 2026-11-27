@@ -4,7 +4,7 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
-| [2026-11-27: clients get a password to share; clients from a CSV file; a client's orders](#2026-11-27-clients) | `56d96e1`, not deployed yet | Done in Hashtag-Billionaire-Admin `f5b0b6e` (not deployed yet): Users › Import CSV, Add User shows the password, the client page (Users › View) |
+| [2026-11-27: clients get a password to share; clients from a CSV file; a client's orders](#2026-11-27-clients) | `56d96e1`, not deployed yet | Done in Hashtag-Billionaire-Admin `f5b0b6e` and `388ac0c` (not deployed yet): Users › Import CSV, Add User shows the password, the client page (Users › View). Deploy the backend first |
 | [2026-11-27: a deleted customization's name can be used again](#2026-11-27-customization-names) | `bce1a15`, live since 27 Nov | Done in Hashtag-Billionaire-Admin `e99f2c1`, live since 27 Nov: an optional price on "Add a text or upload field". And `9e929e6`, live since 27 Nov: the Customizations page shows 100 per page |
 | [2026-11-27: a customization can be added to a product without values](#2026-11-27-valueless-customizations) | `6b8dcf3`, live since 27 Nov | Done in Hashtag-Billionaire-Admin `71bf43f`, live since 27 Nov: the product's Customizations step lets you tick a customization that has no values |
 | [2026-11-27: the Products list says how many the website shows](#2026-11-27-website-total) | `c393c12`, live since 27 Nov | Done in Hashtag-Billionaire-Admin `d85a7af`, live since 27 Nov: "239 products found · 238 shown on the website" and a "Not on website: out of stock" badge |
@@ -109,7 +109,7 @@ The client wants to add their existing clients, one at a time or from a CSV file
 
 **Changed: `GET admin/user/getUserById?id=`** answers `404` `Client not found.` for an unknown id. It used to answer `500`.
 
-**Done in the panel `f5b0b6e`:**
+**Done in the panel `f5b0b6e`** (and `388ac0c`, below):
 - **Users:** an **Import CSV** button beside **Add User**, and a **View** button on each row.
 - **Add User:** an optional Mobile field. After **Create User** the page shows the email and password with Copy buttons, plus:
   - **Email login details**;
@@ -123,6 +123,11 @@ The client wants to add their existing clients, one at a time or from a CSV file
   - The client's email, mobile, account status and join date, and **Set password**.
   - Their orders, with the Orders page's own list and order window. Every payment status shows at first; "No orders placed yet." when there are none.
 - **Set password** (Users and the client page) can email the new password: **Email it to them**.
+
+**With the backend before this release** (panel `388ac0c`): deploy the backend first. If the panel goes out first, nothing breaks:
+- Add User falls back to the old emailed set-password link, and says so.
+- The client page keeps only that client's orders (the old backend ignores `user_id`).
+- The import page says the backend update is needed.
 
 **The website:** no change. Clients sign in at `/login` with the emailed details.
 
