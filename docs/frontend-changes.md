@@ -101,6 +101,8 @@ The admin can now add a customization to a pre-made product without picking any 
 - **Show the inputs straight away:** for such a customization, show its text box and/or image upload directly. Today they appear only after a value is picked (`selectedValue && …`, line 614). There's no price.
 - **Send it without a value:** in `manualCartPayload.ts`, send its line without `customization_option_value_id` (today every line has `valueId: number`), only when the customer typed text or added a file.
 
+**A text or upload field with a price** (admin, not deployed yet) needs nothing new: it's an ordinary customization with one value, "Yes", priced per piece (`FIXED`) or as one total (`FIXED_QUANTITY`). The shop already shows it: the customer picks "Yes", then types or uploads.
+
 <a id="2026-11-26-sage-colours"></a>
 ## 2026-11-26: SAGE colours come from SAGE's stock list; stock per colour (live since 26 Nov)
 

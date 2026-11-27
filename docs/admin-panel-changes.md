@@ -4,6 +4,7 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
+| [2026-11-27: a deleted customization's name can be used again](#2026-11-27-customization-names) | `bce1a15`, not deployed yet | Done in Hashtag-Billionaire-Admin `e99f2c1` (not deployed yet): an optional price on "Add a text or upload field". And `9e929e6`, live since 27 Nov: the Customizations page shows 100 per page |
 | [2026-11-27: a customization can be added to a product without values](#2026-11-27-valueless-customizations) | `6b8dcf3`, live since 27 Nov | Done in Hashtag-Billionaire-Admin `71bf43f`, live since 27 Nov: the product's Customizations step lets you tick a customization that has no values |
 | [2026-11-27: the Products list says how many the website shows](#2026-11-27-website-total) | `c393c12`, live since 27 Nov | Done in Hashtag-Billionaire-Admin `d85a7af`, live since 27 Nov: "239 products found · 238 shown on the website" and a "Not on website: out of stock" badge |
 | [2026-11-26: SAGE colours come from SAGE's stock list](#2026-11-26-sage-colours) | `e204c30`, live since 26 Nov | Done in Hashtag-Billionaire-Admin `6661791`, live since 26 Nov: the SAGE product page shows the colours the import keeps, with no "No longer offered" |
@@ -76,6 +77,25 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 1. **`payment_status=ALL`:** coming in the next release: `GET order/admin?payment_status=ALL` lists orders of every payment status. Without the parameter it still lists paid orders only.
 2. **The 2 unpaid orders the panel doesn't show:** when a customer's cart changes, the backend soft-deletes their latest unpaid order (`invalidatePendingOrder` in `cartWishlist.service.js`), and orders are paranoid, so those two are hidden from every list. Nothing is missing on the panel's side; the behaviour itself is on the payments list (audit H8).
 
+<a id="2026-11-27-customization-names"></a>
+## 2026-11-27: a deleted customization's name can be used again (not deployed yet)
+
+Deleting a customization only hides it: old carts and orders still point at it. Until now its name stayed taken, so making one with the same name failed with "Customization option already exists", though the Customizations list didn't show it (27 Nov: "Test" on product 105889).
+
+**Backend `bce1a15`:** only live customizations take a name.
+- A name that a deleted customization has can be used again. The deleted one keeps its name, so old carts and orders still read it.
+- Capitals and spaces at the end still don't count. The message is now `A customization called "Test" already exists`.
+- Renaming onto another live customization's name is refused with the same message. It used to go through and leave two customizations with one name.
+- Slugs stay unique, but nothing reads them. A taken slug now gets the next free one (`test-2`), and a deleted customization's slug is set aside (`test-deleted-57`). A taken slug used to fail with "Validation error": the model rebuilt the slug on every save, so a deleted customization kept its slug and a renamed one kept its old one.
+
+**Panel `e99f2c1`:** **Add a text or upload field** takes an optional price, charged per piece (One price) or as one total (Fixed quantity).
+- With a price, the field gets one value, "Yes", at that price, ticked for the product. On the website customers pick "Yes" to add the field and pay, then type or upload; the website needs no change for this.
+- The price is shared by every product with the field. It's changed on the Customizations page.
+- Without a price the field is free with no values, as before.
+- An existing name with a price typed is refused ("… already exists with its own prices"), so a shared customization isn't changed from one product.
+
+**Panel `9e929e6`, live since 27 Nov:** the Customizations page shows 100 per page (was 20), the most the backend sends.
+
 <a id="2026-11-27-valueless-customizations"></a>
 ## 2026-11-27: a customization can be added to a product without values (live since 27 Nov)
 
@@ -83,7 +103,7 @@ A customization such as "Business card information" can have no values at all: t
 
 **Done in the panel:** such a customization can be ticked. It reads "No values: customers type text or upload an image", saves with no value, and costs nothing extra. A customization that has values still needs at least one picked, as before.
 
-**Also in the panel** (asked by the client, not deployed yet): the product's Customizations step has **Add a text or upload field**. Type a name (e.g. "Business card information"), choose "Customer types text" and/or "Customer uploads a file", then **Add to this product**. It creates that customization (no values; it's in the Customizations library afterwards, for other products too) and ticks it for this product, so there's no need to leave the product. A name that already exists is ticked instead of created twice.
+**Also in the panel** (asked by the client; `8cd38d6`, live since 27 Nov): the product's Customizations step has **Add a text or upload field**. Type a name (e.g. "Business card information"), choose "Customer types text" and/or "Customer uploads a file", then **Add to this product**. It creates that customization (no values; it's in the Customizations library afterwards, for other products too) and ticks it for this product, so there's no need to leave the product. A name that already exists is ticked instead of created twice.
 
 **Backend:** `POST customization-option/product/:productId/customizations` already accepted `value_ids: []`. The cart now accepts a line for such a customization with no `customization_option_value_id` (no extra charge; the text or artwork stays in the line). One that has values on the product still needs a value. The artwork approval page shows the typed text for it.
 
