@@ -16,6 +16,7 @@ const {
 
 const { SquareClient, SquareEnvironment } = require("square");
 const decodeHtmlEntities = require("../../utils/decodeHtmlEntities");
+const { isClosedOrder, CLOSED_ORDER_MESSAGE } = require("../../utils/closedOrder");
 const {
   parseJson,
   getCustomizationArtwork,
@@ -100,8 +101,14 @@ const orderGone = async (user, orderId) => {
   });
 
   return removed
-    ? new ApiError(httpStatus.CONFLICT, "Your cart changed after this order was made, so it can't be paid. Please go back and check out again.")
+    ? new ApiError(httpStatus.CONFLICT, CLOSED_ORDER_MESSAGE)
     : new ApiError(httpStatus.NOT_FOUND, "Order not found.");
+};
+
+// Closed by a cart change after its payment failed: it stays in the customer's history, but only
+// the order for the cart as it is now can be paid (audit F10).
+const refuseClosed = (order) => {
+  if (isClosedOrder(order)) throw new ApiError(httpStatus.CONFLICT, CLOSED_ORDER_MESSAGE);
 };
 
 const squareErrorOf = (error) => error?.errors?.[0] || error?.body?.errors?.[0] || null;
@@ -246,6 +253,7 @@ const createPayment = async (body) => {
 
   const found = await Order.findOne({ where: { id: order_id, user_id: user.id } });
   if (!found) throw await orderGone(user, order_id);
+  refuseClosed(found);
 
   // An earlier charge that hasn't settled is checked with Square first.
   if (await settlePendingSquarePayments(found)) {
@@ -267,11 +275,12 @@ const createPayment = async (body) => {
       lock: transaction.LOCK.UPDATE,
     });
 
-    // Removed by a cart change (in another tab) while this request waited for the lock: nothing
-    // has been charged.
+    // Removed or closed by a cart change (in another tab) while this request waited for the
+    // lock: nothing has been charged.
     if (!order) {
       throw await orderGone(user, order_id);
     }
+    refuseClosed(order);
 
     if (order.payment_status === "SUCCESS") {
       throw new ApiError(httpStatus.CONFLICT, "This order is already paid.");
@@ -1137,6 +1146,8 @@ const createPayPalOrder = async (body) => {
     throw new ApiError(httpStatus.CONFLICT, "This order was cancelled. Please place a new order.");
   }
 
+  refuseClosed(order);
+
   const amount = Number(order.total_amount);
 
   if (!(amount > 0)) {
@@ -1226,6 +1237,8 @@ const capturePayPalOrder = async (body) => {
     throw new ApiError(httpStatus.CONFLICT, "This order was cancelled, so the PayPal payment wasn't taken.");
   }
 
+  refuseClosed(order);
+
   // One payment at a time (audit F10): a Cash App or Google Pay charge still going through is
   // checked with Square first. If it has just paid the order, PayPal takes nothing.
   try {
@@ -1259,6 +1272,8 @@ const capturePayPalOrder = async (body) => {
     if (locked.status === orderStatusTypes.CANCELLED) {
       throw new ApiError(httpStatus.CONFLICT, "This order was cancelled, so the PayPal payment wasn't taken.");
     }
+
+    refuseClosed(locked);
 
     if (await Payment.findOne({ where: unsettledPayments(locked.id), attributes: ["id"], transaction })) {
       throw new ApiError(httpStatus.CONFLICT, ALREADY_GOING_THROUGH);

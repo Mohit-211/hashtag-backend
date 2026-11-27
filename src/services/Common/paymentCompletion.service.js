@@ -7,6 +7,7 @@ const sequelize = require("../../config/central.db");
 const logger = require("../../config/logger");
 const { Order, OrderItem, Payment, ProductVariant, Cart } = require("../../models");
 const ApiError = require("../../utils/ApiError");
+const { isClosedOrder } = require("../../utils/closedOrder");
 const httpStatus = require("http-status");
 const { markGraphicsOrdered } = require("./graphic.service");
 const { shipPaidOrder } = require("./shipment.service");
@@ -68,6 +69,10 @@ const completeOrderPayment = async ({
       restored = true;
     }
 
+    // Closed by a cart change after an earlier payment failed (unpaidOrders.service.js): like a
+    // removed one, it isn't what's in the cart now. Paid, it opens again.
+    const closed = isClosedOrder(order);
+
     let payment = await Payment.findOne({
       where: { transaction_id: transactionId, payment_provider: provider },
       transaction,
@@ -116,6 +121,10 @@ const completeOrderPayment = async ({
     if (restored) {
       notes.push(
         `This order was removed while it was being paid (the cart changed during the payment) and was brought back when the ${providerName(provider)} payment arrived. Its label wasn't bought automatically: check with the customer before shipping, as they may have ordered again.`,
+      );
+    } else if (closed) {
+      notes.push(
+        `This order was closed after an earlier payment failed and the cart changed, then a ${providerName(provider)} payment arrived for it. Its label wasn't bought automatically: check with the customer before shipping, as they may have ordered again.`,
       );
     }
 
@@ -166,6 +175,7 @@ const completeOrderPayment = async ({
         payment_status: "SUCCESS",
         status: "CONFIRMED",
         payment_method: mode,
+        ...(closed && { is_active: true }),
         // A label is only ever bought after payment, so a paid order starts without one.
         shipment_status: order.label_id ? "LABEL_CREATED" : order.shipment_status === "FAILED" ? "FAILED" : "PENDING",
         ...(notes.length && { attention_note: addNote(order.attention_note, notes.join(" ")) }),
@@ -175,7 +185,8 @@ const completeOrderPayment = async ({
 
     if (notes.length) logger.error(`Order ${order.order_number} needs attention: ${notes.join(" ")}`);
 
-    outcome = { order, newlyPaid: true, restored };
+    // A closed order, like a restored one, isn't the cart as it is now.
+    outcome = { order, newlyPaid: true, restored: restored || closed };
   });
 
   if (outcome.newlyPaid) {
