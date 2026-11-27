@@ -4,7 +4,8 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
-| [2026-11-27: a deleted customization's name can be used again](#2026-11-27-customization-names) | `bce1a15`, not deployed yet | Done in Hashtag-Billionaire-Admin `e99f2c1` (not deployed yet): an optional price on "Add a text or upload field". And `9e929e6`, live since 27 Nov: the Customizations page shows 100 per page |
+| [2026-11-27: clients get a password to share; clients from a CSV file; a client's orders](#2026-11-27-clients) | `56d96e1`, not deployed yet | Done in Hashtag-Billionaire-Admin `f5b0b6e` (not deployed yet): Users › Import CSV, Add User shows the password, the client page (Users › View) |
+| [2026-11-27: a deleted customization's name can be used again](#2026-11-27-customization-names) | `bce1a15`, live since 27 Nov | Done in Hashtag-Billionaire-Admin `e99f2c1`, live since 27 Nov: an optional price on "Add a text or upload field". And `9e929e6`, live since 27 Nov: the Customizations page shows 100 per page |
 | [2026-11-27: a customization can be added to a product without values](#2026-11-27-valueless-customizations) | `6b8dcf3`, live since 27 Nov | Done in Hashtag-Billionaire-Admin `71bf43f`, live since 27 Nov: the product's Customizations step lets you tick a customization that has no values |
 | [2026-11-27: the Products list says how many the website shows](#2026-11-27-website-total) | `c393c12`, live since 27 Nov | Done in Hashtag-Billionaire-Admin `d85a7af`, live since 27 Nov: "239 products found · 238 shown on the website" and a "Not on website: out of stock" badge |
 | [2026-11-26: SAGE colours come from SAGE's stock list](#2026-11-26-sage-colours) | `e204c30`, live since 26 Nov | Done in Hashtag-Billionaire-Admin `6661791`, live since 26 Nov: the SAGE product page shows the colours the import keeps, with no "No longer offered" |
@@ -77,8 +78,56 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 1. **`payment_status=ALL`:** coming in the next release: `GET order/admin?payment_status=ALL` lists orders of every payment status. Without the parameter it still lists paid orders only.
 2. **The 2 unpaid orders the panel doesn't show:** when a customer's cart changes, the backend soft-deletes their latest unpaid order (`invalidatePendingOrder` in `cartWishlist.service.js`), and orders are paranoid, so those two are hidden from every list. Nothing is missing on the panel's side; the behaviour itself is on the payments list (audit H8).
 
+<a id="2026-11-27-clients"></a>
+## 2026-11-27: clients get a password to share; clients from a CSV file; a client's orders (not deployed yet)
+
+The client wants to add their existing clients, one at a time or from a CSV file, so their old orders can be uploaded next (a later release, from the client page). Each client gets their login details by email, or from the team by hand.
+
+**Changed: `POST admin/user/createUser`** `{ name, email, mobile? }`
+- Creates the account with a generated password and answers `201` `{ client: { id, name, email, mobile }, password, sign_in_url }`. The password follows the password rule (14 characters, no look-alike letters). It's returned this once: it's stored one-way.
+- Nothing is emailed any more. It used to email a 72-hour "set your password" link (Q45); the client now wants passwords they can send.
+- `mobile` is optional: a US number in any format, saved as its 10 digits, as sign-up saves it.
+- `400` for a missing name, a bad email or mobile, or `x@y.com already has an account (Name).` An email whose account was deleted can be added again.
+- The account counts as verified, as before, and `created_by` is the admin.
+
+**New: `POST admin/user/sendLoginDetails/:id`** `{ password }`
+- Emails the client, from support@, their email, that password and a link to the website's sign-in page. It suggests changing the password under My Account › Change Password.
+- The password must be the account's current one. Otherwise `409`, and nothing is sent: it was changed since, or the account can't sign in (email not verified, blocked).
+- `502` `The mail server didn't send it: …` with the mail server's reason. `503` when the website address or the mail server isn't set up (Settings).
+- It has its own limit of 600 an hour, so an import of 500 can email them all.
+
+**New: clients from a CSV file**, like the other imports: `GET admin/user/import/format`, then `POST admin/user/import/preview` and `POST admin/user/import` (multipart, field `file`, up to 2 MB).
+- **Columns:** Name and Email are needed; Mobile is optional. Other headers read as these: Full name, Client name, Customer name; E-mail, Email address; Phone, Phone number, Cell. First name and Last name are joined when there's no Name column. Other columns are skipped with a warning.
+- **Limit:** up to 500 clients per file. Each password takes about 50 ms to hash, and Cloudflare waits 100 s for an answer.
+- **Problems, by spreadsheet row:** a missing name, a bad email or mobile, an email twice in the file, and an address at example.com (the example file's).
+- **Existing accounts:** an email that already has one isn't a problem. It's listed in `already_clients` (`row, name, email, user_id, account_name, verified`) and left as it is.
+- **Import:** creates every new client in one transaction, or none. `422` with the report when the file has problems; `409` when one of its emails got an account after the check.
+- **Answer:** `201` `{ clients: [{ id, row, name, email, mobile, password }], already_clients, summary: { created, already_clients }, warnings, sign_in_url }`.
+- **Emails:** the import sends none. The panel emails each client through `sendLoginDetails`.
+
+**Changed: `GET order/admin`** takes `user_id`: that client's orders. Add `payment_status=ALL` for every one of them.
+
+**Changed: `GET admin/user/getUserById?id=`** answers `404` `Client not found.` for an unknown id. It used to answer `500`.
+
+**Done in the panel `f5b0b6e`:**
+- **Users:** an **Import CSV** button beside **Add User**, and a **View** button on each row.
+- **Add User:** an optional Mobile field. After **Create User** the page shows the email and password with Copy buttons, plus:
+  - **Email login details**;
+  - **Copy for a message**: the sign-in link, email and password, ready to paste in a chat;
+  - then **View client** or **Add another**.
+- **Import clients from CSV** (`/users/import`):
+  - Before: download the empty template or the example, read the rules and columns, then check the file. The check lists problems by row, the clients to add and those that already have an account.
+  - "Email each new client their login details" is on by default.
+  - After: every password with Copy, and each client's email status (Sent, or Not sent with the reason and Try again). **Copy all login details** copies everything. The passwords are shown only on that page.
+- **Client page** (`/users/:id`):
+  - The client's email, mobile, account status and join date, and **Set password**.
+  - Their orders, with the Orders page's own list and order window. Every payment status shows at first; "No orders placed yet." when there are none.
+- **Set password** (Users and the client page) can email the new password: **Email it to them**.
+
+**The website:** no change. Clients sign in at `/login` with the emailed details.
+
 <a id="2026-11-27-customization-names"></a>
-## 2026-11-27: a deleted customization's name can be used again (not deployed yet)
+## 2026-11-27: a deleted customization's name can be used again (live since 27 Nov)
 
 Deleting a customization only hides it: old carts and orders still point at it. Until now its name stayed taken, so making one with the same name failed with "Customization option already exists", though the Customizations list didn't show it (27 Nov: "Test" on product 105889).
 

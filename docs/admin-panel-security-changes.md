@@ -120,6 +120,7 @@ POST /admin/auth/forgot-password
 **New customer** (`POST /admin/user/createUser`, body `{ name, email }`):
 - The customer gets a "Set your password" email with a link to the customer website's `/reset-password` page.
 - No password is generated or emailed. The account counts as verified.
+- *Changed 27 Nov 2026 (`56d96e1`):* the account now gets a generated password, which the admin copies or emails. See [admin-panel-changes.md](admin-panel-changes.md#2026-11-27-clients).
 
 **Customer details** (`GET /admin/user/getUserById`): no longer includes the password hash.
 

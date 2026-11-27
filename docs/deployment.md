@@ -91,7 +91,7 @@ Every email goes out through the one mail account on the Settings page (Email se
 | From | Emails |
 |---|---|
 | order@hashtagbillionaire.com | Order confirmed (when it's paid), order cancelled by the team (paid orders, with the amount to be refunded), order shipped (with the tracking link), order delivered; artwork approval: artwork ready to review, updated artwork, reminders ([below](#artwork-approval)) |
-| support@hashtagbillionaire.com | Sign-up verification, forgot password, "your password was changed" (after a reset or a change), account set up by an admin, admin password reset; the contact form's reply for support questions: Order Issue, Customization Help, Shipping & Delivery, Payment Issue |
+| support@hashtagbillionaire.com | Sign-up verification, forgot password, "your password was changed" (after a reset or a change), a new admin's set-password link, a client's login details (sent from the admin panel's Users pages), admin password reset; the contact form's reply for support questions: Order Issue, Customization Help, Shipping & Delivery, Payment Issue |
 | info@hashtagbillionaire.com | The contact form's reply for a General Inquiry |
 | quotes@hashtagbillionaire.com | Sourcing requests ("can't find it"): received, and each status change |
 | The Sender (`EMAIL_FROM`) | The team's copies of contact-form messages and sourcing requests, to the Team inbox, as before; replying answers the customer. A support question's subject now says so: "New support question: Order Issue" |

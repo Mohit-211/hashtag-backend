@@ -80,6 +80,8 @@ POST /user/auth/forgot-password
 
 The same `/reset-password` page also serves customers whose account was created by an admin. They get a "Set your password" email with the same kind of link, valid 72 hours. One page covers both cases.
 
+*Changed 27 Nov 2026:* a customer added by an admin now gets their email and a password instead, and signs in at `/login`. Links sent before then keep working until they expire. See [admin-panel-changes.md](admin-panel-changes.md#2026-11-27-clients).
+
 **Password rule enforced by the backend:** at least 8 characters, at least 2 digits, no spaces. The website's stricter rule (uppercase, number, special) is fine, since any password that passes it also passes the backend's, but the client hasn't confirmed the final rule yet.
 
 ## 3. Signed-in sessions
