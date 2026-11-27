@@ -83,6 +83,8 @@ A customization such as "Business card information" can have no values at all: t
 
 **Done in the panel:** such a customization can be ticked. It reads "No values: customers type text or upload an image", saves with no value, and costs nothing extra. A customization that has values still needs at least one picked, as before.
 
+**Also in the panel** (asked by the client, not deployed yet): the product's Customizations step has **Add a text or upload field**. Type a name (e.g. "Business card information"), choose "Customer types text" and/or "Customer uploads a file", then **Add to this product**. It creates that customization (no values; it's in the Customizations library afterwards, for other products too) and ticks it for this product, so there's no need to leave the product. A name that already exists is ticked instead of created twice.
+
 **Backend:** `POST customization-option/product/:productId/customizations` already accepted `value_ids: []`. The cart now accepts a line for such a customization with no `customization_option_value_id` (no extra charge; the text or artwork stays in the line). One that has values on the product still needs a value. The artwork approval page shows the typed text for it.
 
 <a id="2026-11-27-website-total"></a>
