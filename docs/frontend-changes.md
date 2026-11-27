@@ -6,7 +6,7 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
-| [2026-11-27: orders whose payment failed stay in My Orders and Payment History](#2026-11-27-failed-orders) | `d5d7604`, not deployed yet | None: same responses. Failed orders simply stop disappearing |
+| [2026-11-27: orders whose payment failed stay in My Orders and Payment History](#2026-11-27-failed-orders) | `d5d7604`, live since 27 Nov (Deploy run 56) | None: same responses. Failed orders simply stop disappearing |
 | [2026-11-27: customizations without values (text or artwork only)](#2026-11-27-valueless-customizations) | `6b8dcf3`, live since 27 Nov | **To offer them:** show a customization that has no values with its text and image inputs, and send it without a value (below). Until then they simply don't show |
 | [2026-11-26: SAGE colours come from SAGE's stock list; stock per colour](#2026-11-26-sage-colours) | `e204c30`, live since 26 Nov (SAGE sync run the same day) | None required. **Recommended:** show sold-out SAGE colours in the customizer (a colour at 0 is refused by the cart) |
 | [2026-11-25: print locations per garment; one sleeve](#2026-11-25-print-locations) | live since 25 Nov | **Required:** one Sleeve spot on T-shirts (decided 24 Nov). Everything the shop sends today is still accepted |
@@ -91,7 +91,7 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 ---
 
 <a id="2026-11-27-failed-orders"></a>
-## 2026-11-27: orders whose payment failed stay in My Orders and Payment History (not deployed yet)
+## 2026-11-27: orders whose payment failed stay in My Orders and Payment History (live since 27 Nov)
 
 **Before:** only the order for the cart as it is now may be paid (audit F10). So every cart change (add, update, remove, move to the wishlist) and every new checkout removed the customer's unpaid orders, including those whose payment had failed. A declined order showed in My Orders as "Payment failed" until the customer's next cart change, then vanished. In Payment History its payment stayed, with `order: null` ("Order details unavailable for transaction …"). Bhavya's test account had four such payments on 27 Nov (ids 26 to 29).
 
@@ -103,6 +103,10 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 - A declined order can still be paid again, with another card or PayPal, as long as the cart hasn't changed.
 
 **The shop:** no change. The responses are the same; failed orders just stop disappearing.
+
+**Checked live on 27 Nov** with Bhavya's account (user 4):
+- Her failed order ORD-1795776329633 (payment 30) was in My Orders and Payment History.
+- A cart change (line 113 set to its own quantity, which runs the cleanup) kept it, with its item and $29.47 total, on the API and on hashtagbillionaire.com. Before this release that change removed it.
 
 **Orders removed before this release** stay removed until the team brings them back. Run this in the database **after** deploying: before that, the old code would remove them again, and they could be paid.
 

@@ -4,8 +4,8 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
-| [2026-11-27: orders whose payment failed are no longer removed](frontend-changes.md#2026-11-27-failed-orders) | `d5d7604`, not deployed yet | None: they stay on the Orders page (Payment: Failed), as they were before the customer's next cart change. Delete still hides one |
-| [2026-11-27: clients get a password to share; clients from a CSV file; a client's orders](#2026-11-27-clients) | `56d96e1`, not deployed yet | Done in Hashtag-Billionaire-Admin `f5b0b6e` and `388ac0c` (not deployed yet): Users › Import CSV, Add User shows the password, the client page (Users › View). Deploy the backend first |
+| [2026-11-27: orders whose payment failed are no longer removed](frontend-changes.md#2026-11-27-failed-orders) | `d5d7604`, live since 27 Nov | None: they stay on the Orders page (Payment: Failed), as they were before the customer's next cart change. Delete still hides one |
+| [2026-11-27: clients get a password to share; clients from a CSV file; a client's orders](#2026-11-27-clients) | `56d96e1`, live since 27 Nov (Deploy run 56) | Done in Hashtag-Billionaire-Admin `f5b0b6e` and `388ac0c`, live since 27 Nov (Deploy run 23): Users › Import CSV, Add User shows the password, the client page (Users › View) |
 | [2026-11-27: a deleted customization's name can be used again](#2026-11-27-customization-names) | `bce1a15`, live since 27 Nov | Done in Hashtag-Billionaire-Admin `e99f2c1`, live since 27 Nov: an optional price on "Add a text or upload field". And `9e929e6`, live since 27 Nov: the Customizations page shows 100 per page |
 | [2026-11-27: a customization can be added to a product without values](#2026-11-27-valueless-customizations) | `6b8dcf3`, live since 27 Nov | Done in Hashtag-Billionaire-Admin `71bf43f`, live since 27 Nov: the product's Customizations step lets you tick a customization that has no values |
 | [2026-11-27: the Products list says how many the website shows](#2026-11-27-website-total) | `c393c12`, live since 27 Nov | Done in Hashtag-Billionaire-Admin `d85a7af`, live since 27 Nov: "239 products found · 238 shown on the website" and a "Not on website: out of stock" badge |
@@ -80,7 +80,7 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 2. **The 2 unpaid orders the panel doesn't show:** when a customer's cart changes, the backend soft-deletes their latest unpaid order (`invalidatePendingOrder` in `cartWishlist.service.js`), and orders are paranoid, so those two are hidden from every list. Nothing is missing on the panel's side; the behaviour itself is on the payments list (audit H8).
 
 <a id="2026-11-27-clients"></a>
-## 2026-11-27: clients get a password to share; clients from a CSV file; a client's orders (not deployed yet)
+## 2026-11-27: clients get a password to share; clients from a CSV file; a client's orders (live since 27 Nov)
 
 The client wants to add their existing clients, one at a time or from a CSV file, so their old orders can be uploaded next (a later release, from the client page). Each client gets their login details by email, or from the team by hand.
 
