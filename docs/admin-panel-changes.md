@@ -4,6 +4,7 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
+| [2026-11-27: a client's previous orders from a CSV file](#2026-11-27-order-import) | `b28261e`, not deployed yet (needs its migration first) | Done in Hashtag-Billionaire-Admin `e88efd7` (not deployed yet): a client's page › Import previous orders; "Imported" badge on such orders |
 | [2026-11-27: orders whose payment failed are no longer removed](frontend-changes.md#2026-11-27-failed-orders) | `d5d7604`, live since 27 Nov | None: they stay on the Orders page (Payment: Failed), as they were before the customer's next cart change. Delete still hides one |
 | [2026-11-27: clients get a password to share; clients from a CSV file; a client's orders](#2026-11-27-clients) | `56d96e1`, live since 27 Nov (Deploy run 56) | Done in Hashtag-Billionaire-Admin `f5b0b6e` and `388ac0c`, live since 27 Nov (Deploy run 23): Users › Import CSV, Add User shows the password, the client page (Users › View) |
 | [2026-11-27: a deleted customization's name can be used again](#2026-11-27-customization-names) | `bce1a15`, live since 27 Nov | Done in Hashtag-Billionaire-Admin `e99f2c1`, live since 27 Nov: an optional price on "Add a text or upload field". And `9e929e6`, live since 27 Nov: the Customizations page shows 100 per page |
@@ -78,6 +79,72 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 
 1. **`payment_status=ALL`:** coming in the next release: `GET order/admin?payment_status=ALL` lists orders of every payment status. Without the parameter it still lists paid orders only.
 2. **The 2 unpaid orders the panel doesn't show:** when a customer's cart changes, the backend soft-deletes their latest unpaid order (`invalidatePendingOrder` in `cartWishlist.service.js`), and orders are paranoid, so those two are hidden from every list. Nothing is missing on the panel's side; the behaviour itself is on the payments list (audit H8).
+
+<a id="2026-11-27-order-import"></a>
+## 2026-11-27: a client's previous orders from a CSV file (not deployed yet)
+
+The client wants each client's orders from before the website in one place. On a client's page, the team imports them from a spreadsheet. They then show on that page and in the client's My Orders on the website.
+
+**Before deploying,** run `migrations/2026-11-27_order_import_before_deploy.sql`. It does three things to orders:
+- adds `imported_at` (set only on imported orders);
+- adds `import_batch_id` (the import that made the order, so it can be undone);
+- lets `address_id` be empty, since imported orders have no saved address.
+
+It only adds columns and relaxes one, so the code from before keeps working with it.
+
+**New, admin only.** The upload is multipart (field `file`, up to 2 MB, up to 2,000 rows).
+- `GET admin/user/:id/orders/import/format`: the client, the 25 columns, the statuses and limits, an example built from one of your own products, and an empty template.
+- `POST admin/user/:id/orders/import/preview`: checks the file. Saves nothing.
+- `POST admin/user/:id/orders/import`: saves every order, or none.
+  - `201` `{ batch_id, client, orders, already_imported, summary, warnings }`.
+  - `422` with the same report as the preview when the file has problems.
+  - `409` when one of its order numbers was used meanwhile.
+- `DELETE admin/user/:id/orders/import/:batchId`: removes that import's orders and their lines for good. `404` when nothing is left of it.
+
+**The file.** One row per product ordered; rows with the same Order number are one order (a leading `#` is dropped).
+- **Needed:** Order number, Order date, Product name, Quantity, and Unit price (or Line total).
+- **Optional:** Color, Size, SKU, Line total, Decoration, Status, Payment method, Shipping, Tax, Order total, Tracking number, Ship to name, Address, Address 2, City, State, ZIP, Country, Phone, Product ID. Common other headers are read too: Qty, Item, Price, Order #, Shopify's Lineitem columns.
+- **Product name** must be one of our products, as stored or as the site shows it. Capitals, ™/®/© and extra spaces don't count, and deleted products aren't ours.
+  - An unknown name is a problem, with up to 3 closest names suggested.
+  - Two products with one name need the Product ID column.
+- **Colour and size:** Color and Size as the product lists them, or the SKU. A product that comes one way needs neither.
+  - A problem lists the product's colours, or that colour's sizes.
+  - Discontinued variants count: old orders can be for old colours. But if only one of several matches is on sale now, that one is used.
+- **Order-level columns** go once per order (on its first row), or the same on every row. "15" and "15.00", or "Delivered" and "delivered", count as the same.
+  - Order date: YYYY-MM-DD or MM/DD/YYYY (US), with an optional time; not in the future, not before 2000.
+  - Status: Delivered (when empty), Shipped, Confirmed or Cancelled; common other words are read.
+  - Payment method: free text, stored like CREDIT_CARD; empty means IMPORTED.
+  - Shipping and Tax: default 0.
+  - Order total, when given, must equal the lines plus shipping and tax.
+- **Order numbers** are unique across all orders.
+  - One already imported for this client is listed and skipped, so a file can be imported again after adding to it.
+  - Any other use, including a deleted order, is a problem, with a prefix suggested.
+
+**What an imported order is:** a record, nothing more.
+- Its `created_at` is the order's own date, and it's `payment_status` SUCCESS.
+- Status and shipment status follow Status:
+  - Delivered: DELIVERED / DELIVERED;
+  - Shipped: SHIPPED / IN_TRANSIT;
+  - Confirmed: CONFIRMED / PENDING;
+  - Cancelled: CANCELLED / CANCELLED, with `cancelled_at` and a reason.
+- `imported_at` and `import_batch_id` are set. There's no `address_id`; the file's address is in `ship_to_*`.
+- `tax_rate` is exactly tax ÷ subtotal, so the panel's tax check agrees.
+- Lines are stored like checkout's: variant, SKU as the name, supplier, unit price, quantity and total. A Decoration goes in `customization_config` as `{ imported: true, decoration, print_method }`.
+  - The print method is EMBROIDERY, SCREEN_PRINT, DTF, DTG or LASER_ENGRAVING when the text says so.
+  - Otherwise it's the text itself, so the website's pill isn't empty.
+- No stock is taken, no label is bought, no email is sent, and no payment row is made.
+
+**Elsewhere:**
+- **`GET order/admin`:** each order has `imported_at` and `import_batch_id`. An imported order's `actions` allow Delete only.
+- **Refusals:** cancel (`400`), buying a label (`400`) and starting artwork approval (`409`) refuse an imported order, with a message.
+- **Delete:** Delete removes an imported order for good (lines included), so its number can be imported again. It isn't refused for being paid.
+- **Dashboard:** every sales figure and the orders-by-status counts leave imported orders out.
+- **Website:** imported orders show in the client's My Orders like any paid order, with the same fields; nothing new is sent. See [frontend-changes.md](frontend-changes.md#2026-11-27-order-import).
+
+**Done in the panel `e88efd7`:**
+- **Client page:** "Import previous orders" beside the order count.
+- **Import page** (`/users/:id/import-orders`), built like the other imports: the example, the template, the rules and all columns; then the check, with each order's lines, colour/size, decoration and totals, the problems by row, and the orders imported before. Import asks first; the result can be undone.
+- **Imported orders:** an "Imported" badge in the order list and in the order window. The window says the order is a record and offers only Delete, with no artwork approval button or tag.
 
 <a id="2026-11-27-clients"></a>
 ## 2026-11-27: clients get a password to share; clients from a CSV file; a client's orders (live since 27 Nov)

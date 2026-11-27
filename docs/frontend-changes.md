@@ -6,6 +6,7 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
+| [2026-11-27: a client's previous orders, imported by the team](#2026-11-27-order-import) | `b28261e`, not deployed yet | None: they come back from `GET order` like any paid order |
 | [2026-11-27: orders whose payment failed stay in My Orders and Payment History](#2026-11-27-failed-orders) | `d5d7604`, live since 27 Nov (Deploy run 56) | None: same responses. Failed orders simply stop disappearing |
 | [2026-11-27: customizations without values (text or artwork only)](#2026-11-27-valueless-customizations) | `6b8dcf3`, live since 27 Nov | **To offer them:** show a customization that has no values with its text and image inputs, and send it without a value (below). Until then they simply don't show |
 | [2026-11-26: SAGE colours come from SAGE's stock list; stock per colour](#2026-11-26-sage-colours) | `e204c30`, live since 26 Nov (SAGE sync run the same day) | None required. **Recommended:** show sold-out SAGE colours in the customizer (a colour at 0 is refused by the cart) |
@@ -89,6 +90,19 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 **Waiting on the client:** A8, DTG with several locations (Q8, reworded); which font settings besides the font list (Q23). **Later, by the client's choice:** A24 pre-made products from suppliers (Q26), A42 price filter (Q54), A46 Back button (Q57), policy pages editable in the admin (Q61).
 
 ---
+
+<a id="2026-11-27-order-import"></a>
+## 2026-11-27: a client's previous orders, imported by the team (not deployed yet)
+
+The team can import a client's orders from before the website (admin panel: the client's page › Import previous orders). Details: [admin-panel-changes.md](admin-panel-changes.md#2026-11-27-order-import).
+
+**For the shop:** nothing to do. An imported order comes back from `GET order` and `GET order/:id` like any paid order, with the same fields: no new field is sent.
+- Its date is its own, and it's paid.
+- Its status is Delivered, Shipped, Confirmed or Cancelled.
+- Its items show with their colour, size and quantity, and a decoration pill (EMBROIDERY, or the text from the file).
+- Its totals come from the file, with a tracking number when the file gives one.
+
+It has no payment, so it doesn't show in Payment History. Checked on 27 Nov by running the shop's own My Orders page locally against these routes.
 
 <a id="2026-11-27-failed-orders"></a>
 ## 2026-11-27: orders whose payment failed stay in My Orders and Payment History (live since 27 Nov)
