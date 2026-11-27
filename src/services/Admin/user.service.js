@@ -1,19 +1,25 @@
 /** @format */
 
 const httpStatus = require("http-status");
-const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 
 const { User, Profile } = require("../../models");
 const ApiError = require("../../utils/ApiError");
-const config = require("../../config/config");
+const logger = require("../../config/logger");
 const validatePassword = require("../../helpers/validatePassword");
 const { PASSWORD_RULES } = require("../../helpers/validatePassword");
-const { sendAccountSetupEmail } = require("../Common/email.service");
-const { issueToken, revokeTokens } = require("../Common/accountToken.service");
+const { sendLoginDetailsEmail } = require("../Common/email.service");
+const { revokeTokens } = require("../Common/accountToken.service");
 const { revokeUserTokens } = require("../Common/token.service");
 const { accountTypes, accountTokenPurposes, userStatusTypes } = require("../../config/types");
-const { ACCOUNT_SETUP_HOURS, links } = require("../../config/accountPolicy");
+const { links } = require("../../config/accountPolicy");
+const {
+  checkClientDetails,
+  findClientByEmail,
+  newCredentials,
+  createClientAccount,
+  signInUrl,
+} = require("./clientAccounts");
 
 const sequelize = require("../../config/central.db");
 
@@ -65,7 +71,12 @@ const getAllUsers = async (param, query) => {
   }
 };
 
+// One client, for the panel's client page (Users › View).
 const getUserById = async (id) => {
+  if (!/^\d+$/.test(String(id ?? ""))) {
+    throw new ApiError(httpStatus.NOT_FOUND, "Client not found.");
+  }
+
   const userDoc = await User.findOne({
     where: { id: id, is_active: true },
     include: [
@@ -83,11 +94,7 @@ const getUserById = async (id) => {
     ],
   });
 
-  if (!userDoc)
-    throw new ApiError(
-      httpStatus.INTERNAL_SERVER_ERROR,
-      "Failed to Get This User",
-    );
+  if (!userDoc) throw new ApiError(httpStatus.NOT_FOUND, "Client not found.");
   return userDoc;
 };
 
@@ -144,63 +151,80 @@ const deleteUser = async (body) => {
   }
 };
 
-// The customer gets an email link to choose their own password; no password is
-// generated or emailed. Admin-created accounts count as verified.
-const adminAddUser = async (reqBody) => {
-  try {
-    const { name, email } = reqBody;
+// Adds a client (Users › Add User) with a generated password, returned once: the panel shows it
+// to copy, and "Email login details" sends it (sendLoginDetails). Nothing is emailed until then.
+// Answers { client: { id, name, email, mobile }, password, sign_in_url }.
+const adminAddUser = async (reqBody, { adminId = null } = {}) => {
+  const { values, problems } = checkClientDetails(reqBody ?? {});
+  const problem = problems.name || problems.email || problems.mobile;
+  if (problem) {
+    throw new ApiError(httpStatus.BAD_REQUEST, problem);
+  }
 
-    // ✅ Check if user already exists
-    const existingUser = await User.findOne({
-      where: { email: reqBody.email },
-    });
-    if (existingUser) {
-      throw new ApiError(httpStatus.BAD_REQUEST, "Email already exists");
-    }
+  const existing = await findClientByEmail(values.email);
+  if (existing) {
+    const who = existing.user_profile?.name ? ` (${existing.user_profile.name})` : "";
+    throw new ApiError(httpStatus.BAD_REQUEST, `${values.email} already has an account${who}.`);
+  }
 
-    // ✅ Create user; the password is unusable until set from the emailed link
-    const user = await User.create({
-      email,
-      password: bcrypt.hashSync(crypto.randomBytes(32).toString("hex"), 10),
-      role_id: config.USR_ROLE_ID,
-      status: userStatusTypes.ACCEPTED,
-    });
+  const { password, hash } = await newCredentials();
+  const client = await sequelize.transaction((transaction) =>
+    createClientAccount(values, { hash, adminId, transaction }),
+  );
 
-    // ✅ Create profile
-    const userProfile = await Profile.create({
-      email,
-      name,
-      user_id: user.id,
-    });
+  return { client, password, sign_in_url: signInUrl() };
+};
 
-    if (!userProfile) {
-      throw new ApiError(
-        httpStatus.INTERNAL_SERVER_ERROR,
-        "Failed to create profile",
-      );
-    }
+// Emails a client their email and password, with a link to sign in ("Email login details" on Add
+// User, the CSV import and Set password). The password must be the account's current one, the one
+// the admin was just shown, so the email always works and nothing else can be sent this way.
+const sendLoginDetails = async (id, reqBody, { adminId = null } = {}) => {
+  const password = typeof reqBody?.password === "string" ? reqBody.password : "";
+  if (!password) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Send the password to email.");
+  }
+  if (!/^\d+$/.test(String(id))) {
+    throw new ApiError(httpStatus.NOT_FOUND, "Client not found.");
+  }
 
-    // ✅ Email a "set your password" link
-    const token = await issueToken({
-      accountType: accountTypes.USER,
-      accountId: user.id,
-      purpose: accountTokenPurposes.ACCOUNT_SETUP,
-      expiresAt: new Date(Date.now() + ACCOUNT_SETUP_HOURS * 60 * 60 * 1000),
-    });
-
-    await sendAccountSetupEmail(email, {
-      name,
-      link: links.resetPassword(token),
-      hours: ACCOUNT_SETUP_HOURS,
-      isAdmin: false,
-    });
-  } catch (error) {
-    console.error("Error in adminAddUser:", error);
+  const user = await User.scope("withPassword").findOne({
+    where: { id, is_active: true },
+    include: [{ model: Profile, as: "user_profile", attributes: ["name"] }],
+  });
+  if (!user) {
+    throw new ApiError(httpStatus.NOT_FOUND, "Client not found.");
+  }
+  if (user.status !== userStatusTypes.ACCEPTED) {
     throw new ApiError(
-      error.statusCode || httpStatus.INTERNAL_SERVER_ERROR,
-      error.message || "Internal Server Error",
+      httpStatus.CONFLICT,
+      user.status === userStatusTypes.PENDING
+        ? "This client hasn't verified their email yet, so they can't sign in. Nothing was sent."
+        : "This account can't sign in. Nothing was sent.",
     );
   }
+
+  const matches = Boolean(user.password) && (await bcrypt.compare(password, user.password));
+  if (!matches) {
+    throw new ApiError(
+      httpStatus.CONFLICT,
+      "That isn't the client's password any more, so nothing was sent. Set a new password, then email that one.",
+    );
+  }
+
+  try {
+    await sendLoginDetailsEmail(user.email, {
+      name: user.user_profile?.name,
+      password,
+      link: links.signIn(),
+    });
+  } catch (error) {
+    // 503: the website address or the mail server isn't set up (Settings).
+    if (error.statusCode === httpStatus.SERVICE_UNAVAILABLE) throw error;
+    throw new ApiError(httpStatus.BAD_GATEWAY, `The mail server didn't send it: ${error.message}`);
+  }
+  logger.info(`Admin ${adminId ?? "?"} emailed login details to user ${user.id}`);
+
+  return { email: user.email };
 };
 
 // Sets a customer's password, for the admin to share by hand. Passwords are stored one-way,
@@ -249,5 +273,6 @@ module.exports = {
   getUserById,
   deleteUser,
   adminAddUser,
+  sendLoginDetails,
   setUserPassword,
 };

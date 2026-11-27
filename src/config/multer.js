@@ -328,7 +328,7 @@ const UPLOADS = {
   galleryImage: fieldsUpload([adminImages(1, "Send one image per gallery photo.")]),
 };
 
-// POST /product/import, /pricing-template/import and their /preview: one CSV file, read in memory and never
+// POST /product/import, /pricing-template/import, /admin/user/import and their /preview: one CSV file, read in memory and never
 // written to disk.
 const CSV_FIELD = "file";
 const csvLimits = { fileSize: 2 * 1024 * 1024, files: 1, fields: 20, fieldSize: 1024 * 1024 };

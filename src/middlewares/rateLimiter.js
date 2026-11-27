@@ -25,6 +25,10 @@ const emailLimiter = limiter(60, 5, 'Too many requests. Please try again later.'
 // use up the office IP's emailLimiter (sign-up, forgot password) for the website.
 const testEmailLimiter = limiter(60, 20, 'Too many test emails. Please try again later.');
 
+// "Email login details" in the admin panel: one email per client, so an import of up to 500
+// clients can email them all. Its own count, like testEmailLimiter.
+const loginDetailsLimiter = limiter(60, 600, 'Too many login emails. Please try again later.');
+
 // Submitting a token from an emailed link.
 const tokenLimiter = limiter(15, 20, 'Too many attempts. Please try again in 15 minutes.');
 
@@ -54,6 +58,7 @@ module.exports = {
   loginLimiter,
   emailLimiter,
   testEmailLimiter,
+  loginDetailsLimiter,
   tokenLimiter,
   approvalLimiter,
   approvalUploadLimiter,

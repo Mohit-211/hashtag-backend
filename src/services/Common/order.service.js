@@ -935,6 +935,7 @@ const getAdminOrders = async ({
   status,
   payment_status,
   order_id,
+  user_id,
 }) => {
   page = parseInt(page) || 1;
   limit = parseInt(limit) || 10;
@@ -972,6 +973,11 @@ const getAdminOrders = async ({
     delete where.payment_status;
     delete where.status;
     where.id = order_id;
+  }
+
+  // One client's orders (the panel's client page). Not a whole number: no orders, rather than all.
+  if (user_id !== undefined && user_id !== "") {
+    where.user_id = /^\d+$/.test(String(user_id)) ? user_id : -1;
   }
 
   /*

@@ -7,6 +7,7 @@ const {
     verificationEmail,
     passwordResetEmail,
     accountSetupEmail,
+    loginDetailsEmail,
     passwordChangedEmail,
     contactUsConfirmationTemplate,
     adminContactUsNotificationTemplate,
@@ -111,6 +112,10 @@ const sendPasswordResetEmail = (to, { link, minutes }) =>
 const sendAccountSetupEmail = (to, { name, link, hours, isAdmin }) =>
     sendAs('support', to, accountSetupEmail({ name, link, hours, isAdmin, contact: senderFor('support').contact }));
 
+// A client the team added, with the password the team generated (admin panel: Users).
+const sendLoginDetailsEmail = (to, { name, password, link }) =>
+    sendAs('support', to, loginDetailsEmail({ name, email: to, password, link, contact: senderFor('support').contact }));
+
 const sendPasswordChangedEmail = (to, { name } = {}) =>
     sendAs('support', to, passwordChangedEmail({ name, contact: senderFor('support').contact }));
 
@@ -188,6 +193,7 @@ module.exports = {
     sendVerificationEmail,
     sendPasswordResetEmail,
     sendAccountSetupEmail,
+    sendLoginDetailsEmail,
     sendPasswordChangedEmail,
     sendContactUsConfirmation,
     sendAdminContactUsNotification,

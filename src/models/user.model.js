@@ -93,9 +93,11 @@ User.init({
     },
 });
 
-User.afterCreate(async (user) => {
+// Inside the creating transaction when there is one: the CSV client import creates many users in
+// one, and a save outside it would wait on the new row's lock.
+User.afterCreate(async (user, options) => {
     user.user_name = transformEmail(user.email);
-    await user.save();
+    await user.save({ transaction: options?.transaction });
 });
 
 function generateRandomNumber() {

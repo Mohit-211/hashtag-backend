@@ -15,6 +15,8 @@ module.exports = {
   LINK_RESEND_SECONDS: 60,
 
   links: {
+    // The website's sign-in page, in the email a client added by the team gets.
+    signIn: () => `${settings.getRequired("FRONTEND_URL")}/login`,
     verifyEmail: (token) => `${settings.getRequired("FRONTEND_URL")}/verify-email?token=${token}`,
     resetPassword: (token) => `${settings.getRequired("FRONTEND_URL")}/reset-password?token=${token}`,
     adminResetPassword: (token) => `${settings.getRequired("ADMIN_FRONTEND_URL")}/reset-password?token=${token}`,

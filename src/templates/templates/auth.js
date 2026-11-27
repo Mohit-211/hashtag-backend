@@ -55,6 +55,29 @@ const accountSetupEmail = ({ name, link, hours, isAdmin, contact }) => {
   };
 };
 
+// A client added by the team (admin panel: Add User, or Import clients from CSV): their email and
+// the password the team generated, sent when an admin presses "Email login details".
+const loginDetailsEmail = ({ name, email, password, link, contact }) => {
+  const intro = `we've created an account for you on ${brandName()}. Sign in to see your orders, follow them and place new ones.`;
+  const note = `For your security, change this password after you sign in: My Account › Change Password. If you forget it, use "Forgot password" on the sign-in page.`;
+
+  return {
+    subject: `Your ${brandName()} account is ready`,
+    text: `${greeting(name)}\n\n${intro.charAt(0).toUpperCase()}${intro.slice(1)}\n\nEmail: ${email}\nPassword: ${password}\n\nSign in here:\n${link}\n\n${note}`,
+    html: renderEmail({
+      heading: "Your account is ready",
+      paragraphs: [`${greeting(name)} ${intro}`],
+      details: [
+        ["Email", email],
+        ["Password", password],
+      ],
+      button: { text: "Sign in", link },
+      note,
+      contact,
+    }),
+  };
+};
+
 // After a password is changed: signed in from the account page, or from a reset link. Tells the
 // owner it happened, so someone else changing it doesn't go unnoticed.
 const passwordChangedEmail = ({ name, contact }) => {
@@ -78,5 +101,6 @@ module.exports = {
   verificationEmail,
   passwordResetEmail,
   accountSetupEmail,
+  loginDetailsEmail,
   passwordChangedEmail,
 };
