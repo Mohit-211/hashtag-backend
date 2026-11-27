@@ -4,6 +4,7 @@ What each backend release changes for the admin panel, and what the panel has to
 
 | Release | Backend commit | Panel action |
 |---|---|---|
+| [2026-11-27: orders whose payment failed are no longer removed](frontend-changes.md#2026-11-27-failed-orders) | `d5d7604`, not deployed yet | None: they stay on the Orders page (Payment: Failed), as they were before the customer's next cart change. Delete still hides one |
 | [2026-11-27: clients get a password to share; clients from a CSV file; a client's orders](#2026-11-27-clients) | `56d96e1`, not deployed yet | Done in Hashtag-Billionaire-Admin `f5b0b6e` and `388ac0c` (not deployed yet): Users › Import CSV, Add User shows the password, the client page (Users › View). Deploy the backend first |
 | [2026-11-27: a deleted customization's name can be used again](#2026-11-27-customization-names) | `bce1a15`, live since 27 Nov | Done in Hashtag-Billionaire-Admin `e99f2c1`, live since 27 Nov: an optional price on "Add a text or upload field". And `9e929e6`, live since 27 Nov: the Customizations page shows 100 per page |
 | [2026-11-27: a customization can be added to a product without values](#2026-11-27-valueless-customizations) | `6b8dcf3`, live since 27 Nov | Done in Hashtag-Billionaire-Admin `71bf43f`, live since 27 Nov: the product's Customizations step lets you tick a customization that has no values |

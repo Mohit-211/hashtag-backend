@@ -6,6 +6,7 @@ The client's answers of 26 and 27 October, and what they mean for the shop, are 
 
 | Release | Backend commit | Shop action |
 |---|---|---|
+| [2026-11-27: orders whose payment failed stay in My Orders and Payment History](#2026-11-27-failed-orders) | `d5d7604`, not deployed yet | None: same responses. Failed orders simply stop disappearing |
 | [2026-11-27: customizations without values (text or artwork only)](#2026-11-27-valueless-customizations) | `6b8dcf3`, live since 27 Nov | **To offer them:** show a customization that has no values with its text and image inputs, and send it without a value (below). Until then they simply don't show |
 | [2026-11-26: SAGE colours come from SAGE's stock list; stock per colour](#2026-11-26-sage-colours) | `e204c30`, live since 26 Nov (SAGE sync run the same day) | None required. **Recommended:** show sold-out SAGE colours in the customizer (a colour at 0 is refused by the cart) |
 | [2026-11-25: print locations per garment; one sleeve](#2026-11-25-print-locations) | live since 25 Nov | **Required:** one Sleeve spot on T-shirts (decided 24 Nov). Everything the shop sends today is still accepted |
@@ -88,6 +89,47 @@ These go with the backend changes listed under [2026-10-26](#2026-10-26).
 **Waiting on the client:** A8, DTG with several locations (Q8, reworded); which font settings besides the font list (Q23). **Later, by the client's choice:** A24 pre-made products from suppliers (Q26), A42 price filter (Q54), A46 Back button (Q57), policy pages editable in the admin (Q61).
 
 ---
+
+<a id="2026-11-27-failed-orders"></a>
+## 2026-11-27: orders whose payment failed stay in My Orders and Payment History (not deployed yet)
+
+**Before:** only the order for the cart as it is now may be paid (audit F10). So every cart change (add, update, remove, move to the wishlist) and every new checkout removed the customer's unpaid orders, including those whose payment had failed. A declined order showed in My Orders as "Payment failed" until the customer's next cart change, then vanished. In Payment History its payment stayed, with `order: null` ("Order details unavailable for transaction …"). Bhavya's test account had four such payments on 27 Nov (ids 26 to 29).
+
+**Now:** an unpaid order with a failed payment, or any payment attempt, is kept with its items.
+- Nothing about it changes: `status` FAILED, `payment_status` REJECTED, so it reads "Payment failed" in both places, with its items and totals.
+- It's closed instead (the order's `is_active` is false, which no response shows), so it can't be paid any more. Paying it answers `409` "Your cart changed after this order was made, so it can't be paid. Please go back and check out again.": the same answer a removed order gave.
+- As before, the customer checks out again from the cart, which makes a new order.
+- An order nobody tried to pay (made at checkout, then the customer went back) is still removed, as before. No history ever showed it.
+- A declined order can still be paid again, with another card or PayPal, as long as the cart hasn't changed.
+
+**The shop:** no change. The responses are the same; failed orders just stop disappearing.
+
+**Orders removed before this release** stay removed until the team brings them back. Run this in the database **after** deploying: before that, the old code would remove them again, and they could be paid.
+
+```sql
+-- 1. Look first: unpaid orders that were removed although someone tried to pay them.
+--    An order the team deleted on purpose (admin panel, Delete) shows here too: leave it out of step 2.
+SELECT o.id, o.order_number, o.user_id, o.status, o.payment_status, o.total_amount, o.created_at, o.deleted_at
+  FROM orders o
+ WHERE o.deleted_at IS NOT NULL AND o.payment_status <> 'SUCCESS'
+   AND (o.payment_status = 'REJECTED'
+        OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND p.deleted_at IS NULL))
+ ORDER BY o.deleted_at DESC;
+
+-- 2. Bring them back closed, with the items removed with them (add AND o.id IN (...) to pick).
+UPDATE order_items i JOIN orders o ON o.id = i.order_id
+   SET i.deleted_at = NULL
+ WHERE o.deleted_at IS NOT NULL AND o.payment_status <> 'SUCCESS'
+   AND (o.payment_status = 'REJECTED'
+        OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND p.deleted_at IS NULL))
+   AND i.deleted_at IS NOT NULL AND ABS(TIMESTAMPDIFF(SECOND, i.deleted_at, o.deleted_at)) <= 5;
+
+UPDATE orders o
+   SET o.deleted_at = NULL, o.is_active = 0
+ WHERE o.deleted_at IS NOT NULL AND o.payment_status <> 'SUCCESS'
+   AND (o.payment_status = 'REJECTED'
+        OR EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND p.deleted_at IS NULL));
+```
 
 <a id="2026-11-27-valueless-customizations"></a>
 ## 2026-11-27: customizations without values (text or artwork only) (live since 27 Nov)
