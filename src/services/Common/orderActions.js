@@ -40,6 +40,12 @@ const orderActions = (order, { paymentInProgress = false, hasApproval = false } 
   const withCarrier = isWithCarrier(order);
   const busy = labelBeingBought(order);
 
+  // A client's previous order imported from a CSV file is a record: no label, no cancelling (which
+  // emails the customer), no artwork approval. Delete removes it for good.
+  if (order.imported_at) {
+    return { can_buy_label: false, can_cancel: false, can_delete: true, can_open_approval: hasApproval };
+  }
+
   return {
     // Paid, not cancelled, no label yet: automatic labels are off, or buying it failed.
     can_buy_label:

@@ -1272,6 +1272,11 @@ const getAdminOrders = async ({
 
       cancel_reason: data.cancel_reason || null,
 
+      // A client's previous order imported from a CSV file (the client's page), and the import.
+      imported_at: data.imported_at || null,
+
+      import_batch_id: data.import_batch_id || null,
+
       // The buttons the admin panel shows; the endpoints behind them check the same rules.
       actions: orderActions(data, {
         paymentInProgress: paymentInProgress.has(Number(data.id)),

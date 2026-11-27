@@ -25,6 +25,7 @@ const findOrder = async (orderId) => {
 
 // Why an order can't be cancelled, in the admin's words.
 const whyNotCancellable = (order) => {
+  if (order.imported_at) return "This is a previous order imported from a CSV file, kept as a record: it can't be cancelled. If it's wrong, delete it.";
   if (order.status === "CANCELLED") return "This order is already cancelled.";
   if (["SHIPPED", "DELIVERED"].includes(order.status) || ["IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED", "RETURNED", "EXCEPTION"].includes(order.shipment_status)) {
     return "The carrier already has this parcel, so the order can't be cancelled here.";
@@ -174,14 +175,17 @@ const adminDeleteOrder = async (orderId, { adminId } = {}) => {
   await sequelize.transaction(async (transaction) => {
     const current = await Order.findByPk(order.id, { transaction, lock: transaction.LOCK.UPDATE });
 
-    // Paid while the admin was looking: refuse rather than hide a paid order.
-    if (current.payment_status === "SUCCESS" && current.status !== "CANCELLED") {
+    // Paid while the admin was looking: refuse rather than hide a paid order. An imported previous
+    // order is a record marked paid, and can be deleted.
+    if (current.payment_status === "SUCCESS" && current.status !== "CANCELLED" && !current.imported_at) {
       throw new ApiError(httpStatus.BAD_REQUEST, "This order has just been paid, so it can't be deleted. Refresh the page.");
     }
 
     await releaseOrderGraphics(current, transaction);
-    await OrderItem.destroy({ where: { order_id: current.id }, transaction });
-    await current.destroy({ transaction });
+    // An imported previous order goes for good, so its number can be imported again.
+    const force = Boolean(current.imported_at);
+    await OrderItem.destroy({ where: { order_id: current.id }, transaction, force });
+    await current.destroy({ transaction, force });
   });
 
   logger.info(`Admin ${adminId} deleted order ${order.order_number}`);

@@ -142,8 +142,9 @@ const span = (fromDay, toDay) => ({
 const select = (sql, replacements = {}) => sequelize.query(sql, { replacements, type: QueryTypes.SELECT });
 
 // A sale: paid, not cancelled. `alias` is the orders table.
+// A sale on the website: paid, not cancelled, and not a previous order imported from a CSV file.
 const sale = (alias) =>
-  `${alias}.deleted_at IS NULL AND ${alias}.payment_status = 'SUCCESS' AND ${alias}.status <> 'CANCELLED'`;
+  `${alias}.deleted_at IS NULL AND ${alias}.payment_status = 'SUCCESS' AND ${alias}.status <> 'CANCELLED' AND ${alias}.imported_at IS NULL`;
 const SALE = sale("o");
 const placed = (column) => `${column} >= :start AND ${column} < :end`;
 
@@ -243,7 +244,7 @@ const getOverview = async (query) => {
               COALESCE(SUM(o.total_amount), 0) AS amount,
               SUM(o.payment_status = 'SUCCESS') AS paid
          FROM orders o
-        WHERE o.deleted_at IS NULL AND ${placed("o.created_at")}
+        WHERE o.deleted_at IS NULL AND o.imported_at IS NULL AND ${placed("o.created_at")}
         GROUP BY 1`,
       current,
     ),
@@ -260,7 +261,7 @@ const getOverview = async (query) => {
     select(
       `SELECT COUNT(*) AS orders, COALESCE(SUM(o.total_amount), 0) AS amount
          FROM orders o
-        WHERE o.deleted_at IS NULL AND o.payment_status = 'SUCCESS' AND o.status = 'CANCELLED'
+        WHERE o.deleted_at IS NULL AND o.imported_at IS NULL AND o.payment_status = 'SUCCESS' AND o.status = 'CANCELLED'
           AND ${placed("o.created_at")}`,
       current,
     ),

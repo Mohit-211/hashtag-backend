@@ -25,9 +25,10 @@ Order.init(
       allowNull: false,
     },
 
+    // Empty on an order imported from a CSV file (it has no saved address).
     address_id: {
       type: DataTypes.BIGINT.UNSIGNED,
-      allowNull: false,
+      allowNull: true,
     },
 
     // Where the order ships: a copy of the saved address its shipping was priced for, made by
@@ -242,6 +243,17 @@ Order.init(
     is_active: {
       type: DataTypes.BOOLEAN,
       defaultValue: true,
+    },
+
+    // A client's previous order, imported from a CSV file (Admin/orderImport.service.js): when, and
+    // by which import (import_batches.id). Empty for every order placed on the website.
+    imported_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    import_batch_id: {
+      type: DataTypes.CHAR(36),
+      allowNull: true,
     },
 
     created_at: {

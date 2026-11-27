@@ -184,6 +184,10 @@ const retryOrderShipment = async (orderId, { confirm = false, adminId = null } =
 
   if (!order) throw new ApiError(httpStatus.NOT_FOUND, "Order not found");
 
+  if (order.imported_at) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "This is a previous order imported from a CSV file, kept as a record: no label is bought for it.");
+  }
+
   if (order.payment_status !== "SUCCESS") {
     throw new ApiError(httpStatus.BAD_REQUEST, "This order hasn't been paid");
   }

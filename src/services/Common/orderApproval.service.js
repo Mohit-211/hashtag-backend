@@ -289,6 +289,10 @@ const startApproval = async (orderId, admin) => {
     let approval = found;
     if (approval && (await OrderApprovalLine.count({ where: { approval_id: approval.id }, transaction }))) return false;
 
+    if (order.imported_at) {
+      throw new ApiError(httpStatus.CONFLICT, "This is a previous order imported from a CSV file, kept as a record: it has no artwork approval.");
+    }
+
     if (order.payment_status !== "SUCCESS" || order.status === "CANCELLED") {
       throw new ApiError(httpStatus.CONFLICT, "Only a paid order that isn't cancelled can have artwork approval.");
     }

@@ -47,6 +47,7 @@ const FILE_ROUTES = [
   { method: "POST", path: /^\/product\/import(\/preview)?\/?$/, auth: requireAdmin, upload: csvUpload },
   { method: "POST", path: /^\/pricing-template\/import(\/preview)?\/?$/, auth: requireAdmin, upload: csvUpload },
   { method: "POST", path: /^\/admin\/user\/import(\/preview)?\/?$/, auth: requireAdmin, upload: csvUpload },
+  { method: "POST", path: /^\/admin\/user\/\d+\/orders\/import(\/preview)?\/?$/, auth: requireAdmin, upload: csvUpload },
   { method: "POST", path: /^\/product\/add-product-variants\/?$/, auth: requireAdmin, upload: UPLOADS.variantImages },
   { method: "PUT", path: /^\/product\/manual\/full\/?$/, auth: requireAdmin, upload: UPLOADS.productAndVariantImages },
   { method: "POST", path: /^\/product\/update\/?$/, auth: requireAdmin, upload: UPLOADS.productAndVariantImages },

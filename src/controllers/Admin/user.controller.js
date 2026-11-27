@@ -2,7 +2,7 @@
 
 const httpStatus = require("http-status");
 const catchAsync = require("../../utils/catchAsync");
-const { userService, userImportService } = require("../../services");
+const { userService, userImportService, orderImportService } = require("../../services");
 const responseWrapper = require("../../config/responseWrapper");
 const pick = require("../../utils/pick");
 const settings = require("../../config/settings");
@@ -85,6 +85,44 @@ const importClients = catchAsync(async (req, res) => {
 	return responseWrapper(res, result, `Imported ${created} client${created === 1 ? "" : "s"}.`, httpStatus.CREATED);
 });
 
+// A client's previous orders from a CSV file (the client's page › Import previous orders).
+
+// GET /admin/user/:id/orders/import/format: the columns, the limits and an example file.
+const getOrderImportFormat = catchAsync(async (req, res) => {
+	const format = await orderImportService.getImportFormat(req.params.id);
+	return responseWrapper(res, format, "", httpStatus.OK);
+});
+
+// POST /admin/user/:id/orders/import/preview (multipart: file): checks the file, saves nothing.
+const previewOrderImport = catchAsync(async (req, res) => {
+	const report = await orderImportService.previewImport(req.params.id, req.file);
+	return responseWrapper(res, report, "", httpStatus.OK);
+});
+
+// POST /admin/user/:id/orders/import (multipart: file): creates every order in the file, or none.
+// A file with problems answers 422 with the same report the preview gives.
+const importOrders = catchAsync(async (req, res) => {
+	const result = await orderImportService.importOrders(req.params.id, req.file, { adminId: req.admin?.id ?? null });
+
+	if (!result.imported) {
+		return res.status(httpStatus.UNPROCESSABLE_ENTITY).json({
+			success: false,
+			status: httpStatus.UNPROCESSABLE_ENTITY,
+			message: "Nothing was imported. Fix the problems listed, then upload the file again.",
+			data: result.report,
+		});
+	}
+
+	const { orders } = result.summary;
+	return responseWrapper(res, result, `Imported ${orders} previous order${orders === 1 ? "" : "s"}.`, httpStatus.CREATED);
+});
+
+// DELETE /admin/user/:id/orders/import/:batchId: removes every order of that import.
+const undoOrderImport = catchAsync(async (req, res) => {
+	const result = await orderImportService.undoImport(req.params.id, req.params.batchId, { adminId: req.admin?.id ?? null });
+	return responseWrapper(res, result, `Removed ${result.removed} imported order${result.removed === 1 ? "" : "s"}.`, httpStatus.OK);
+});
+
 const setUserPassword = catchAsync(async (req, res) => {
 	await userService.setUserPassword(req.params.id, pick(req.body, ["password", "confirm_password"]));
 	return responseWrapper(res, "", "Password set. Share it with the customer; they can change it after signing in.", httpStatus.OK);
@@ -101,4 +139,8 @@ module.exports = {
 	getClientImportFormat,
 	previewClientImport,
 	importClients,
+	getOrderImportFormat,
+	previewOrderImport,
+	importOrders,
+	undoOrderImport,
 };

@@ -13,6 +13,12 @@ router.get('/import/format', userController.getClientImportFormat);
 router.post('/import/preview', userController.previewClientImport);
 router.post('/import', userController.importClients);
 
+// A client's previous orders from a CSV file (the client's page › Import previous orders).
+router.get('/:id/orders/import/format', userController.getOrderImportFormat);
+router.post('/:id/orders/import/preview', userController.previewOrderImport);
+router.post('/:id/orders/import', userController.importOrders);
+router.delete('/:id/orders/import/:batchId', userController.undoOrderImport);
+
 router.get('/getAllUsers', userController.getAllUsers);
 router.get('/getUserById', userController.getUserById);
 router.post('/deleteUser', userController.deleteUser);
