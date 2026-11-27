@@ -4692,6 +4692,12 @@ const getAllProductsAdmin = async (query) => {
     // query.
     const count = await Product.count({ where });
 
+    // The panel lists every active product, also ones with nothing in stock; the website hides
+    // those (client decision Q49, utils/stock.js). So the panel can say how many of these the
+    // website shows, and which ones it hides (e.g. T Shirts: 239 here, 238 on the website).
+    const shownOnWebsite = { ...where, [Op.and]: [...(where[Op.and] || []), productInStock()] };
+    const websiteCount = await Product.count({ where: shownOnWebsite });
+
     const rows = await Product.findAll({
       where,
       limit: limitNum,
@@ -4732,15 +4738,35 @@ const getAllProductsAdmin = async (query) => {
       order: [["created_at", "DESC"]],
     });
 
+    const rowIds = rows.map((product) => product.id);
+    const shownIds = rowIds.length
+      ? new Set(
+          (
+            await Product.findAll({
+              where: { id: { [Op.in]: rowIds }, [Op.and]: [productInStock()] },
+              attributes: ["id"],
+              raw: true,
+            })
+          ).map((product) => Number(product.id)),
+        )
+      : new Set();
+
     const formattedProducts = rows.map((product) => {
       const data = product.toJSON();
       data.attachments = (data.attachments || []).sort(frontImageFirst);
-      return { ...data, name: decodeHtmlEntities(data.name) };
+      return {
+        ...data,
+        name: decodeHtmlEntities(data.name),
+        // false: no variant in stock, so the website doesn't list it.
+        shown_on_website: shownIds.has(Number(data.id)),
+      };
     });
 
     return {
       data: formattedProducts,
       total: count,
+      // How many of `total` the website lists (the rest have nothing in stock).
+      website_total: websiteCount,
       page: pageNum,
       totalPages: Math.ceil(count / limitNum),
     };
